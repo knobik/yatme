@@ -70,6 +70,7 @@ class ChunkCache {
     // If already cached, remove old entry first
     const existing = this.cache.get(key)
     if (existing) {
+      if (existing.isCachedAsTexture) existing.cacheAsTexture(false)
       existing.removeChildren()
       existing.destroy()
       this.cache.delete(key)
@@ -84,6 +85,7 @@ class ChunkCache {
 
   clear(): void {
     for (const container of this.cache.values()) {
+      if (container.isCachedAsTexture) container.cacheAsTexture(false)
       container.removeChildren()
       container.destroy()
     }
@@ -94,6 +96,7 @@ class ChunkCache {
     while (this.cache.size > this.maxSize) {
       const firstKey = this.cache.keys().next().value!
       const container = this.cache.get(firstKey)!
+      if (container.isCachedAsTexture) container.cacheAsTexture(false)
       container.removeChildren()
       container.destroy()
       this.cache.delete(firstKey)
@@ -202,10 +205,18 @@ export class MapRenderer {
   private activeChunks = new Map<string, Container>() // currently on-screen
   private chunkCache = new ChunkCache(CHUNK_CACHE_SIZE) // off-screen LRU cache
   private buildQueue: string[] = [] // chunks waiting to be built
+  private buildQueueReadIdx = 0 // read pointer for build queue (avoids O(n) shift)
   private buildQueueSet = new Set<string>() // fast lookup for queue membership
 
   // Floor container management
   private floorContainers = new Map<number, Container>()
+  private _lastVisibleFloors: number[] = []
+
+  // Dirty tracking — skip expensive chunk management when nothing changed
+  private _lastRangeKey = ''
+  // Reusable per-frame collections (avoid GC pressure)
+  private _allVisibleKeys = new Set<string>()
+  private _allPrefetchKeys = new Set<string>()
 
   // Callbacks for HUD updates
   onCameraChange?: (x: number, y: number, zoom: number, floor: number, floorViewMode: FloorViewMode) => void
@@ -383,6 +394,20 @@ export class MapRenderer {
 
   /** Ensure floor containers exist for visible floors with correct positions and alpha. */
   private updateFloorContainers(visibleFloors: number[]): void {
+    // Fast path: if the floor set hasn't changed, just update positions and alpha
+    const floorsChanged = !this.arraysEqual(this._lastVisibleFloors, visibleFloors)
+
+    if (!floorsChanged) {
+      for (const z of visibleFloors) {
+        const container = this.floorContainers.get(z)!
+        const offset = this.getFloorOffset(z)
+        container.position.set(-offset, -offset)
+        container.alpha = z < this._floor ? FLOOR_ABOVE_ALPHA : 1.0
+      }
+      return
+    }
+
+    // Slow path: floors changed, rebuild the container hierarchy
     const visibleSet = new Set(visibleFloors)
 
     // Remove floor containers no longer visible
@@ -404,17 +429,10 @@ export class MapRenderer {
 
       const offset = this.getFloorOffset(z)
       container.position.set(-offset, -offset)
-
-      // Alpha: current floor and below = 1.0, floor above = transparent
-      if (z < this._floor) {
-        container.alpha = FLOOR_ABOVE_ALPHA
-      } else {
-        container.alpha = 1.0
-      }
+      container.alpha = z < this._floor ? FLOOR_ABOVE_ALPHA : 1.0
     }
 
     // Re-add to mapContainer in correct Z-order (back-to-front)
-    // Remove all first, then re-add in order
     for (const container of this.floorContainers.values()) {
       if (container.parent === this.mapContainer) {
         this.mapContainer.removeChild(container)
@@ -424,9 +442,39 @@ export class MapRenderer {
       const container = this.floorContainers.get(z)!
       this.mapContainer.addChild(container)
     }
+
+    this._lastVisibleFloors = visibleFloors.slice()
+  }
+
+  private arraysEqual(a: number[], b: number[]): boolean {
+    if (a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false
+    }
+    return true
   }
 
   // ── Update loop ─────────────────────────────────────────────────
+
+  /** Build a range key string for dirty checking. */
+  private computeRangeKey(visibleFloors: number[]): string {
+    const screenW = this.app.screen.width
+    const screenH = this.app.screen.height
+    // Compute the bounding chunk range across all visible floors
+    let minSX = Infinity, minSY = Infinity, maxEX = -Infinity, maxEY = -Infinity
+    for (const z of visibleFloors) {
+      const offset = this.getFloorOffset(z)
+      const sx = Math.floor((this.cameraX + offset) / CHUNK_PX) - 1
+      const sy = Math.floor((this.cameraY + offset) / CHUNK_PX) - 1
+      const ex = Math.floor((this.cameraX + offset + screenW / this._zoom) / CHUNK_PX) + 1
+      const ey = Math.floor((this.cameraY + offset + screenH / this._zoom) / CHUNK_PX) + 1
+      if (sx < minSX) minSX = sx
+      if (sy < minSY) minSY = sy
+      if (ex > maxEX) maxEX = ex
+      if (ey > maxEY) maxEY = ey
+    }
+    return `${minSX},${minSY},${maxEX},${maxEY},${this._floor},${this._floorViewMode}`
+  }
 
   private update(): void {
     // Apply camera transform — round to avoid sub-pixel gaps between tiles
@@ -441,36 +489,51 @@ export class MapRenderer {
     // Update floor containers (positions, alpha, z-order)
     this.updateFloorContainers(visibleFloors)
 
-    // Collect all visible chunk keys across all floors
-    const allVisibleKeys = new Set<string>()
-    const allPrefetchKeys = new Set<string>()
+    // Dirty check: only rebuild visible/prefetch key sets and move off-screen
+    // chunks when the chunk range changes. The build loop always runs because
+    // budget exhaustion may leave visible chunks unbuilt from a prior frame.
+    const rangeKey = this.computeRangeKey(visibleFloors)
+    const rangeChanged = rangeKey !== this._lastRangeKey
 
-    for (const z of visibleFloors) {
-      const offset = this.getFloorOffset(z)
-      const { startX, startY, endX, endY } = this.getVisibleRangeForFloor(offset)
+    if (rangeChanged) {
+      this._lastRangeKey = rangeKey
 
-      for (let cy = startY - PREFETCH_RING; cy <= endY + PREFETCH_RING; cy++) {
-        for (let cx = startX - PREFETCH_RING; cx <= endX + PREFETCH_RING; cx++) {
-          const key = chunkKeyStr(cx, cy, z)
-          if (cy >= startY && cy <= endY && cx >= startX && cx <= endX) {
-            allVisibleKeys.add(key)
-          } else {
-            allPrefetchKeys.add(key)
+      // Reuse per-frame collections
+      const allVisibleKeys = this._allVisibleKeys
+      allVisibleKeys.clear()
+
+      const allPrefetchKeys = this._allPrefetchKeys
+      allPrefetchKeys.clear()
+
+      for (const z of visibleFloors) {
+        const offset = this.getFloorOffset(z)
+        const { startX, startY, endX, endY } = this.getVisibleRangeForFloor(offset)
+
+        for (let cy = startY - PREFETCH_RING; cy <= endY + PREFETCH_RING; cy++) {
+          for (let cx = startX - PREFETCH_RING; cx <= endX + PREFETCH_RING; cx++) {
+            const key = chunkKeyStr(cx, cy, z)
+            if (cy >= startY && cy <= endY && cx >= startX && cx <= endX) {
+              allVisibleKeys.add(key)
+            } else {
+              allPrefetchKeys.add(key)
+            }
           }
+        }
+      }
+
+      // Move off-screen chunks to LRU cache
+      for (const [key, container] of this.activeChunks) {
+        if (!allVisibleKeys.has(key)) {
+          container.cacheAsTexture(false)
+          container.parent?.removeChild(container)
+          this.chunkCache.set(key, container)
+          this.activeChunks.delete(key)
         }
       }
     }
 
-    // Move off-screen chunks to LRU cache
-    for (const [key, container] of this.activeChunks) {
-      if (!allVisibleKeys.has(key)) {
-        container.parent?.removeChild(container)
-        this.chunkCache.set(key, container)
-        this.activeChunks.delete(key)
-      }
-    }
-
-    // Build/restore visible chunks per floor
+    // Build/restore visible chunks per floor (always runs — cheap early-continue
+    // when chunks already exist, but necessary to finish budget-deferred builds)
     const frameStart = performance.now()
     let budgetExhausted = false
 
@@ -489,6 +552,7 @@ export class MapRenderer {
           // Restore from cache
           const cached = this.chunkCache.take(key)
           if (cached) {
+            cached.cacheAsTexture({ scaleMode: 'nearest', antialias: false })
             floorContainer.addChild(cached)
             this.activeChunks.set(key, cached)
             continue
@@ -500,9 +564,10 @@ export class MapRenderer {
 
           const container = new Container()
           this.buildChunkSync(container, tiles)
+          container.cacheAsTexture({ scaleMode: 'nearest', antialias: false })
           floorContainer.addChild(container)
           this.activeChunks.set(key, container)
-          this.preloadAndRebuild(container, tiles, floorContainer)
+          this.preloadAndRebuild(container, tiles)
 
           if (performance.now() - frameStart > CHUNK_BUILD_BUDGET_MS) {
             budgetExhausted = true
@@ -512,13 +577,15 @@ export class MapRenderer {
       }
     }
 
-    // Queue prefetch chunks
-    for (const key of allPrefetchKeys) {
-      if (this.activeChunks.has(key) || this.chunkCache.has(key) || this.buildQueueSet.has(key)) continue
-      const tiles = this.chunkIndex.get(key)
-      if (tiles && tiles.length > 0) {
-        this.buildQueue.push(key)
-        this.buildQueueSet.add(key)
+    // Queue prefetch chunks and process build queue only when range changed
+    if (rangeChanged) {
+      for (const key of this._allPrefetchKeys) {
+        if (this.activeChunks.has(key) || this.chunkCache.has(key) || this.buildQueueSet.has(key)) continue
+        const tiles = this.chunkIndex.get(key)
+        if (tiles && tiles.length > 0) {
+          this.buildQueue.push(key)
+          this.buildQueueSet.add(key)
+        }
       }
     }
 
@@ -527,10 +594,10 @@ export class MapRenderer {
   }
 
   private processBuildQueue(frameStart: number): void {
-    while (this.buildQueue.length > 0) {
+    while (this.buildQueueReadIdx < this.buildQueue.length) {
       if (performance.now() - frameStart > CHUNK_BUILD_BUDGET_MS) break
 
-      const key = this.buildQueue.shift()!
+      const key = this.buildQueue[this.buildQueueReadIdx++]
       this.buildQueueSet.delete(key)
 
       // Skip if already active/cached
@@ -541,16 +608,23 @@ export class MapRenderer {
       // Pre-build into cache (not on screen yet)
       const container = new Container()
       this.buildChunkSync(container, tiles)
-      this.preloadAndRebuild(container, tiles, null)
+      this.preloadAndRebuild(container, tiles)
 
       // Store in cache for instant retrieval later
       this.chunkCache.set(key, container)
+    }
+
+    // Compact when fully drained
+    if (this.buildQueueReadIdx >= this.buildQueue.length) {
+      this.buildQueue.length = 0
+      this.buildQueueReadIdx = 0
     }
   }
 
   recycleAllChunks(): void {
     // Remove active chunks
     for (const [_key, container] of this.activeChunks) {
+      container.cacheAsTexture(false)
       container.parent?.removeChild(container)
       container.removeChildren()
       container.destroy()
@@ -558,6 +632,7 @@ export class MapRenderer {
     this.activeChunks.clear()
     this.chunkCache.clear()
     this.buildQueue.length = 0
+    this.buildQueueReadIdx = 0
     this.buildQueueSet.clear()
 
     // Destroy floor containers
@@ -566,6 +641,8 @@ export class MapRenderer {
       container.destroy()
     }
     this.floorContainers.clear()
+    this._lastVisibleFloors = []
+    this._lastRangeKey = ''
   }
 
   // ── Chunk building ──────────────────────────────────────────────
@@ -578,7 +655,7 @@ export class MapRenderer {
     }
   }
 
-  private preloadAndRebuild(container: Container, tiles: OtbmTile[], floorContainer: Container | null): void {
+  private preloadAndRebuild(container: Container, tiles: OtbmTile[]): void {
     const spriteIds: number[] = []
     for (const tile of tiles) {
       for (const item of tile.items) {
@@ -593,6 +670,10 @@ export class MapRenderer {
       preloadSheets(spriteIds).then(() => {
         container.removeChildren()
         this.buildChunkSync(container, tiles)
+        // Update the cached texture with newly loaded sprites
+        if (container.isCachedAsTexture) {
+          container.updateCacheTexture()
+        }
       })
     }
   }
