@@ -2,6 +2,11 @@ import { type OtbmMap, type OtbmTile, type OtbmItem, deepCloneItem } from './otb
 import type { AppearanceData } from './appearances'
 import { CHUNK_SIZE } from './constants'
 import { chunkKeyForTile } from './ChunkManager'
+import type { GroundBrush } from './brushes/BrushTypes'
+import type { WallBrush } from './brushes/WallTypes'
+import type { BrushRegistry } from './brushes/BrushRegistry'
+import { computeBorders } from './brushes/BorderSystem'
+import { doWalls } from './brushes/WallSystem'
 const MAX_UNDO = 200
 
 function tileKey(x: number, y: number, z: number): string {
@@ -44,6 +49,7 @@ export class MapMutator {
   private appearances: AppearanceData
   private undoStack: MutationBatch[] = []
   private redoStack: MutationBatch[] = []
+  private _brushRegistry: BrushRegistry | null = null
 
   // Current batch being built (between beginBatch/commitBatch)
   private currentBatch: MutationBatch | null = null
@@ -56,6 +62,14 @@ export class MapMutator {
   constructor(mapData: OtbmMap, appearances: AppearanceData) {
     this.mapData = mapData
     this.appearances = appearances
+  }
+
+  set brushRegistry(registry: BrushRegistry | null) {
+    this._brushRegistry = registry
+  }
+
+  get brushRegistry(): BrushRegistry | null {
+    return this._brushRegistry
   }
 
   // --- Batch management ---
@@ -278,6 +292,209 @@ export class MapMutator {
         break
       }
     }
+  }
+
+  // --- Ground brush painting ---
+
+  paintGround(x: number, y: number, z: number, brush: GroundBrush, registry: BrushRegistry): void {
+    this.autoBatch('Paint ground', () => {
+      // 1. Pick random ground item from brush
+      const groundItemId = registry.pickRandomItem(brush)
+      if (!groundItemId) return
+
+      // 2. Replace ground item on center tile
+      const tile = this.getOrCreateTile(x, y, z)
+      const oldItems = deepCloneItems(tile.items)
+
+      // Remove existing ground item
+      const groundIdx = tile.items.findIndex(
+        it => classifyItem(it.id, this.appearances) === 'ground'
+      )
+      if (groundIdx >= 0) {
+        tile.items.splice(groundIdx, 1)
+      }
+      // Insert new ground at position 0
+      tile.items.splice(0, 0, { id: groundItemId })
+
+      // 3. Remove old border items from center tile
+      this.removeBorderItems(tile, registry)
+
+      // 4. Recompute borders for center tile
+      const centerBorders = computeBorders(x, y, z, this.mapData, registry)
+      this.insertBorderItems(tile, centerBorders)
+
+      // Record as setTileItems for clean undo
+      this.recordAction({
+        type: 'setTileItems', x, y, z,
+        oldItems,
+        newItems: deepCloneItems(tile.items),
+      })
+      this.onTileChanged?.(x, y, z)
+
+      // 5. Recompute borders for 8 neighbors
+      const neighborOffsets: [number, number][] = [
+        [-1, -1], [0, -1], [1, -1],
+        [-1, 0],           [1, 0],
+        [-1, 1],  [0, 1],  [1, 1],
+      ]
+      for (const [dx, dy] of neighborOffsets) {
+        const nx = x + dx
+        const ny = y + dy
+        if (nx < 0 || ny < 0) continue
+
+        const neighborTile = this.mapData.tiles.get(`${nx},${ny},${z}`)
+        if (!neighborTile) continue
+
+        const neighborOld = deepCloneItems(neighborTile.items)
+
+        // Remove old border items
+        this.removeBorderItems(neighborTile, registry)
+
+        // Recompute borders
+        const newBorders = computeBorders(nx, ny, z, this.mapData, registry)
+        this.insertBorderItems(neighborTile, newBorders)
+
+        // Only record if items actually changed
+        if (!this.itemsEqual(neighborOld, neighborTile.items)) {
+          this.recordAction({
+            type: 'setTileItems', x: nx, y: ny, z,
+            oldItems: neighborOld,
+            newItems: deepCloneItems(neighborTile.items),
+          })
+          this.onTileChanged?.(nx, ny, z)
+        }
+      }
+    })
+  }
+
+  // --- Wall brush painting ---
+
+  paintWall(x: number, y: number, z: number, brush: WallBrush, registry: BrushRegistry): void {
+    this.autoBatch('Paint wall', () => {
+      const tile = this.getOrCreateTile(x, y, z)
+      const oldItems = deepCloneItems(tile.items)
+
+      // Remove existing wall items from the SAME brush on this tile
+      for (let i = tile.items.length - 1; i >= 0; i--) {
+        const wb = registry.getWallBrushForItem(tile.items[i].id)
+        if (wb && wb.id === brush.id) {
+          tile.items.splice(i, 1)
+        }
+      }
+
+      // Add a placeholder wall item (pole/first available) — doWalls() will fix alignment
+      let placeholderId = 0
+      for (const node of brush.wallItems) {
+        if (node.items.length > 0) {
+          placeholderId = node.items[0].id
+          break
+        }
+      }
+      if (!placeholderId) return // brush has no items
+
+      // Insert at correct layer position (walls go in 'bottom' or 'common' layer)
+      const layer = classifyItem(placeholderId, this.appearances)
+      const index = this.findInsertIndex(tile, layer)
+      tile.items.splice(index, 0, { id: placeholderId })
+
+      // Run doWalls() on center tile to get correctly aligned wall items
+      const alignedWalls = doWalls(x, y, z, this.mapData, registry)
+
+      // Replace wall items on this tile with aligned ones
+      this.replaceWallItems(tile, alignedWalls, registry)
+
+      // Record the change
+      this.recordAction({
+        type: 'setTileItems', x, y, z,
+        oldItems,
+        newItems: deepCloneItems(tile.items),
+      })
+      this.onTileChanged?.(x, y, z)
+
+      // Update 4 cardinal neighbors
+      const neighborOffsets: [number, number][] = [
+        [0, -1], [-1, 0], [1, 0], [0, 1],
+      ]
+      for (const [dx, dy] of neighborOffsets) {
+        const nx = x + dx
+        const ny = y + dy
+        if (nx < 0 || ny < 0) continue
+
+        const neighborTile = this.mapData.tiles.get(`${nx},${ny},${z}`)
+        if (!neighborTile) continue
+
+        // Check if neighbor has any wall items
+        const hasWalls = neighborTile.items.some(item => registry.isWallItem(item.id))
+        if (!hasWalls) continue
+
+        const neighborOld = deepCloneItems(neighborTile.items)
+
+        // Run doWalls() on neighbor
+        const neighborWalls = doWalls(nx, ny, z, this.mapData, registry)
+        this.replaceWallItems(neighborTile, neighborWalls, registry)
+
+        // Only record if items actually changed
+        if (!this.itemsEqual(neighborOld, neighborTile.items)) {
+          this.recordAction({
+            type: 'setTileItems', x: nx, y: ny, z,
+            oldItems: neighborOld,
+            newItems: deepCloneItems(neighborTile.items),
+          })
+          this.onTileChanged?.(nx, ny, z)
+        }
+      }
+    })
+  }
+
+  // Replace wall items on a tile with new aligned ones, preserving non-wall items
+  private replaceWallItems(tile: OtbmTile, newWalls: OtbmItem[], registry: BrushRegistry): void {
+    // Remove all existing wall items
+    for (let i = tile.items.length - 1; i >= 0; i--) {
+      if (registry.isWallItem(tile.items[i].id)) {
+        tile.items.splice(i, 1)
+      }
+    }
+
+    // Insert new wall items at correct layer positions
+    for (const wall of newWalls) {
+      const layer = classifyItem(wall.id, this.appearances)
+      const index = this.findInsertIndex(tile, layer)
+      tile.items.splice(index, 0, wall)
+    }
+  }
+
+  private removeBorderItems(tile: OtbmTile, registry: BrushRegistry): void {
+    // Remove items in the 'bottom' layer that are border items
+    // Border items sit after ground but before common items
+    for (let i = tile.items.length - 1; i >= 0; i--) {
+      const item = tile.items[i]
+      if (registry.isBorderItem(item.id)) {
+        tile.items.splice(i, 1)
+      }
+    }
+  }
+
+  private insertBorderItems(tile: OtbmTile, borders: OtbmItem[]): void {
+    if (borders.length === 0) return
+    // Insert border items after ground but before other items.
+    // Find where ground ends.
+    let insertAt = 0
+    for (let i = 0; i < tile.items.length; i++) {
+      if (classifyItem(tile.items[i].id, this.appearances) === 'ground') {
+        insertAt = i + 1
+      } else {
+        break
+      }
+    }
+    tile.items.splice(insertAt, 0, ...borders)
+  }
+
+  private itemsEqual(a: OtbmItem[], b: OtbmItem[]): boolean {
+    if (a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+      if (a[i].id !== b[i].id) return false
+    }
+    return true
   }
 
   // --- Helpers ---

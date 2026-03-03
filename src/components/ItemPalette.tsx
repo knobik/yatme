@@ -1,13 +1,17 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import type { ItemRegistry } from '../lib/items'
 import type { AppearanceData } from '../lib/appearances'
+import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
 import { getItemDisplayName } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
 import { itemCategory } from '../proto/appearances'
 
+type SmartBrushType = 'ground' | 'wall' | null
+
 interface ItemPaletteProps {
   registry: ItemRegistry
   appearances: AppearanceData
+  brushRegistry?: BrushRegistry | null
   onClose: () => void
   selectedItemId?: number | null
   onItemSelect?: (itemId: number) => void
@@ -69,7 +73,7 @@ function getItemCategory(id: number, appearances: AppearanceData, registry: Item
   return 'OTHER'
 }
 
-export function ItemPalette({ registry, appearances, onClose, selectedItemId, onItemSelect }: ItemPaletteProps) {
+export function ItemPalette({ registry, appearances, brushRegistry, onClose, selectedItemId, onItemSelect }: ItemPaletteProps) {
   const [activeCategory, setActiveCategory] = useState<Category>('ALL')
   const [search, setSearch] = useState('')
   const [scrollTop, setScrollTop] = useState(0)
@@ -88,7 +92,7 @@ export function ItemPalette({ registry, appearances, onClose, selectedItemId, on
 
   // Build the full item list with category assignments (cached)
   const allItems = useMemo(() => {
-    const items: { id: number; name: string; category: Category }[] = []
+    const items: { id: number; name: string; category: Category; brush: SmartBrushType }[] = []
     // Use appearance objects as the source of truth — they define what items exist
     for (const [id] of appearances.objects) {
       // Skip items with no sprite
@@ -98,11 +102,16 @@ export function ItemPalette({ registry, appearances, onClose, selectedItemId, on
 
       const name = getItemDisplayName(id, registry, appearances)
       const category = getItemCategory(id, appearances, registry)
-      items.push({ id, name, category })
+      let brush: SmartBrushType = null
+      if (brushRegistry) {
+        if (brushRegistry.getBrushForItem(id)) brush = 'ground'
+        else if (brushRegistry.getWallBrushForItem(id)) brush = 'wall'
+      }
+      items.push({ id, name, category, brush })
     }
     items.sort((a, b) => a.id - b.id)
     return items
-  }, [appearances, registry])
+  }, [appearances, registry, brushRegistry])
 
   // Filter items by category and search
   const filteredItems = useMemo(() => {
@@ -232,7 +241,22 @@ export function ItemPalette({ registry, appearances, onClose, selectedItemId, on
                 }}
                 title={`${item.name} (ID: ${item.id})`}
               >
-                <ItemSprite itemId={item.id} appearances={appearances} size={36} />
+                <div style={{ position: 'relative' }}>
+                  <ItemSprite itemId={item.id} appearances={appearances} size={36} />
+                  {item.brush && (
+                    <span className={`brush-badge brush-badge-${item.brush}`} title={`Smart brush: ${item.brush}`}>
+                      {item.brush === 'ground' ? (
+                        <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
+                          <path d="M15.2 0.8a2.7 2.7 0 0 0-3.8 0L4 8.2l-.2.6L2.4 13a.5.5 0 0 0 .6.6l4.2-1.4.6-.2L15.2 4.6a2.7 2.7 0 0 0 0-3.8zM5.4 9L11 3.4l1.6 1.6L7 11 5.4 9z"/>
+                        </svg>
+                      ) : (
+                        <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
+                          <path d="M1 1h6v4H1V1zm8 0h6v4H9V1zM1 7h4v4H1V7zm6 0h4v4H7V7zm6 0h2v4h-2V7zM1 13h6v2H1v-2zm8 0h6v2H9v-2z"/>
+                        </svg>
+                      )}
+                    </span>
+                  )}
+                </div>
                 <span className="item-name">{item.name}</span>
               </div>
             ))}

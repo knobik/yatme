@@ -2,8 +2,23 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import type { MapRenderer } from '../lib/MapRenderer'
 import type { MapMutator } from '../lib/MapMutator'
 import { type OtbmMap, type OtbmItem, deepCloneItem } from '../lib/otbm'
+import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
 
 export type EditorTool = 'select' | 'draw' | 'erase'
+export type BrushShape = 'square' | 'circle'
+
+function getTilesInBrush(cx: number, cy: number, size: number, shape: BrushShape): { x: number; y: number }[] {
+  if (size === 0) return [{ x: cx, y: cy }]
+  const tiles: { x: number; y: number }[] = []
+  for (let dy = -size; dy <= size; dy++) {
+    for (let dx = -size; dx <= size; dx++) {
+      if (shape === 'square' || Math.sqrt(dx * dx + dy * dy) < size + 0.005) {
+        tiles.push({ x: cx + dx, y: cy + dy })
+      }
+    }
+  }
+  return tiles
+}
 
 export interface ClipboardData {
   originX: number
@@ -28,12 +43,17 @@ export interface EditorToolsState {
   paste: () => void
   deleteSelection: () => void
   selectTiles: (tiles: { x: number; y: number; z: number }[]) => void
+  brushSize: number
+  setBrushSize: (size: number) => void
+  brushShape: BrushShape
+  setBrushShape: (shape: BrushShape) => void
 }
 
 export function useEditorTools(
   renderer: MapRenderer | null,
   mutator: MapMutator | null,
   mapData: OtbmMap | null,
+  brushRegistry: BrushRegistry | null = null,
 ): EditorToolsState {
   const [activeTool, setActiveTool] = useState<EditorTool>('select')
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null)
@@ -41,14 +61,22 @@ export function useEditorTools(
   const [clipboard, setClipboard] = useState<ClipboardData | null>(null)
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
+  const [brushSize, setBrushSize] = useState(0)
+  const [brushShape, setBrushShape] = useState<BrushShape>('square')
 
   // Refs for pointer handling (avoid stale closures)
   const activeToolRef = useRef(activeTool)
   const selectedItemIdRef = useRef(selectedItemId)
   const selectionRef = useRef(selection)
+  const brushSizeRef = useRef(brushSize)
+  const brushShapeRef = useRef(brushShape)
+  const brushRegistryRef = useRef(brushRegistry)
   activeToolRef.current = activeTool
   selectedItemIdRef.current = selectedItemId
   selectionRef.current = selection
+  brushSizeRef.current = brushSize
+  brushShapeRef.current = brushShape
+  brushRegistryRef.current = brushRegistry
 
   // Drag state for tools
   const paintedTilesRef = useRef(new Set<string>())
@@ -76,17 +104,32 @@ export function useEditorTools(
         const itemId = selectedItemIdRef.current
         if (itemId == null) return
         paintedTilesRef.current.clear()
-        mutator.beginBatch('Draw items')
-        const key = `${pos.x},${pos.y}`
-        paintedTilesRef.current.add(key)
-        mutator.addItem(pos.x, pos.y, pos.z, { id: itemId })
+        const registry = brushRegistryRef.current
+        const groundBrush = registry?.getBrushForItem(itemId) ?? null
+        const wallBrush = !groundBrush ? registry?.getWallBrushForItem(itemId) ?? null : null
+        mutator.beginBatch(groundBrush ? 'Paint ground' : wallBrush ? 'Paint wall' : 'Draw items')
+        const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
+        for (const t of tiles) {
+          const key = `${t.x},${t.y}`
+          paintedTilesRef.current.add(key)
+          if (groundBrush && registry) {
+            mutator.paintGround(t.x, t.y, pos.z, groundBrush, registry)
+          } else if (wallBrush && registry) {
+            mutator.paintWall(t.x, t.y, pos.z, wallBrush, registry)
+          } else {
+            mutator.addItem(t.x, t.y, pos.z, { id: itemId })
+          }
+        }
         mutator.flushChunkUpdates()
       } else if (tool === 'erase') {
         paintedTilesRef.current.clear()
         mutator.beginBatch('Erase items')
-        const key = `${pos.x},${pos.y}`
-        paintedTilesRef.current.add(key)
-        mutator.removeTopItem(pos.x, pos.y, pos.z)
+        const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
+        for (const t of tiles) {
+          const key = `${t.x},${t.y}`
+          paintedTilesRef.current.add(key)
+          mutator.removeTopItem(t.x, t.y, pos.z)
+        }
         mutator.flushChunkUpdates()
       } else if (tool === 'select') {
         selectStartRef.current = pos
@@ -100,17 +143,36 @@ export function useEditorTools(
       if (tool === 'draw') {
         const itemId = selectedItemIdRef.current
         if (itemId == null) return
-        const key = `${pos.x},${pos.y}`
-        if (paintedTilesRef.current.has(key)) return
-        paintedTilesRef.current.add(key)
-        mutator.addItem(pos.x, pos.y, pos.z, { id: itemId })
-        mutator.flushChunkUpdates()
+        const registry = brushRegistryRef.current
+        const groundBrush = registry?.getBrushForItem(itemId) ?? null
+        const wallBrush = !groundBrush ? registry?.getWallBrushForItem(itemId) ?? null : null
+        const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
+        let any = false
+        for (const t of tiles) {
+          const key = `${t.x},${t.y}`
+          if (paintedTilesRef.current.has(key)) continue
+          paintedTilesRef.current.add(key)
+          if (groundBrush && registry) {
+            mutator.paintGround(t.x, t.y, pos.z, groundBrush, registry)
+          } else if (wallBrush && registry) {
+            mutator.paintWall(t.x, t.y, pos.z, wallBrush, registry)
+          } else {
+            mutator.addItem(t.x, t.y, pos.z, { id: itemId })
+          }
+          any = true
+        }
+        if (any) mutator.flushChunkUpdates()
       } else if (tool === 'erase') {
-        const key = `${pos.x},${pos.y}`
-        if (paintedTilesRef.current.has(key)) return
-        paintedTilesRef.current.add(key)
-        mutator.removeTopItem(pos.x, pos.y, pos.z)
-        mutator.flushChunkUpdates()
+        const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
+        let any = false
+        for (const t of tiles) {
+          const key = `${t.x},${t.y}`
+          if (paintedTilesRef.current.has(key)) continue
+          paintedTilesRef.current.add(key)
+          mutator.removeTopItem(t.x, t.y, pos.z)
+          any = true
+        }
+        if (any) mutator.flushChunkUpdates()
       } else if (tool === 'select') {
         const start = selectStartRef.current
         if (!start) return
@@ -155,7 +217,7 @@ export function useEditorTools(
       renderer.onTilePointerMove = undefined
       renderer.onTilePointerUp = undefined
     }
-  }, [renderer, mutator, mapData])
+  }, [renderer, mutator, mapData, brushRegistry])
 
   // Update cursor when tool changes
   useEffect(() => {
@@ -251,5 +313,9 @@ export function useEditorTools(
     paste,
     deleteSelection,
     selectTiles,
+    brushSize,
+    setBrushSize,
+    brushShape,
+    setBrushShape,
   }
 }

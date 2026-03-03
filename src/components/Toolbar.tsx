@@ -1,4 +1,4 @@
-import type { EditorTool } from '../hooks/useEditorTools'
+import type { EditorTool, BrushShape } from '../hooks/useEditorTools'
 import type { AppearanceData } from '../lib/appearances'
 import type { ItemRegistry } from '../lib/items'
 import { getItemDisplayName } from '../lib/items'
@@ -27,7 +27,21 @@ interface ToolbarProps {
   onZoomIn: () => void
   onZoomOut: () => void
   onResetZoom: () => void
+  brushSize: number
+  onBrushSizeChange: (size: number) => void
+  brushShape: BrushShape
+  onBrushShapeChange: (shape: BrushShape) => void
 }
+
+const BRUSH_SIZES = [
+  { value: 0, label: '1' },
+  { value: 1, label: '3' },
+  { value: 2, label: '5' },
+  { value: 3, label: '7' },
+  { value: 4, label: '9' },
+  { value: 5, label: '11' },
+  { value: 6, label: '13' },
+]
 
 const TOOLS: { id: EditorTool; label: string; shortcut: string; icon: JSX.Element }[] = [
   {
@@ -85,6 +99,10 @@ export function Toolbar({
   onZoomIn,
   onZoomOut,
   onResetZoom,
+  brushSize,
+  onBrushSizeChange,
+  brushShape,
+  onBrushShapeChange,
 }: ToolbarProps) {
   const itemName = selectedItemId != null && registry && appearances
     ? getItemDisplayName(selectedItemId, registry, appearances)
@@ -172,6 +190,56 @@ export function Toolbar({
           </svg>
         </button>
       </div>
+
+      {/* Brush size — only for draw/erase */}
+      {(activeTool === 'draw' || activeTool === 'erase') && (
+        <>
+          <div className="separator-v" style={{ height: 22, flexShrink: 0 }} />
+          <div className="tool-group">
+            <span className="label" style={{ fontSize: 'var(--text-xs)', alignSelf: 'center', marginRight: 'var(--space-1)' }}>SIZE</span>
+            {BRUSH_SIZES.map(({ value, label }) => (
+              <button
+                key={value}
+                className={`btn btn-icon${brushSize === value ? ' tool-active' : ''}`}
+                onClick={() => onBrushSizeChange(value)}
+                title={`Brush size ${label}`}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 'var(--text-xs)',
+                  minWidth: 24,
+                  padding: '2px 4px',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="tool-group" style={{ marginLeft: 'var(--space-1)' }}>
+            <button
+              className={`btn btn-icon${brushShape === 'square' ? ' tool-active' : ''}`}
+              onClick={() => onBrushShapeChange('square')}
+              title="Square brush"
+              style={{ border: 'none', background: 'transparent' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="2.5" y="2.5" width="11" height="11" stroke="currentColor" strokeWidth="1.4" />
+              </svg>
+            </button>
+            <button
+              className={`btn btn-icon${brushShape === 'circle' ? ' tool-active' : ''}`}
+              onClick={() => onBrushShapeChange('circle')}
+              title="Circle brush"
+              style={{ border: 'none', background: 'transparent' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.4" />
+              </svg>
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Selected item indicator */}
       {selectedItemId != null && appearances && (

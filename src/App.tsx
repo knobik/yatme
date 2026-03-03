@@ -7,6 +7,9 @@ import { MapRenderer, type FloorViewMode } from './lib/MapRenderer'
 import { MapMutator } from './lib/MapMutator'
 import { loadItems, type ItemRegistry } from './lib/items'
 import { useEditorTools } from './hooks/useEditorTools'
+import { loadBrushData } from './lib/brushes/BrushLoader'
+import { parseWallBrushesXml } from './lib/brushes/WallLoader'
+import { BrushRegistry } from './lib/brushes/BrushRegistry'
 import { Inspector } from './components/Inspector'
 import { ItemPalette } from './components/ItemPalette'
 import { Toolbar } from './components/Toolbar'
@@ -47,6 +50,7 @@ function App() {
   const [mutatorReady, setMutatorReady] = useState<MapMutator | null>(null)
 
   const [showGoToDialog, setShowGoToDialog] = useState(false)
+  const [brushRegistryState, setBrushRegistryState] = useState<BrushRegistry | null>(null)
 
   const [contextMenu, setContextMenu] = useState<{
     x: number; y: number
@@ -54,7 +58,7 @@ function App() {
     tile: OtbmTile | null
   } | null>(null)
 
-  const tools = useEditorTools(rendererReady, mutatorReady, mapData)
+  const tools = useEditorTools(rendererReady, mutatorReady, mapData, brushRegistryState)
   const toolsRef = useRef(tools)
   toolsRef.current = tools
 
@@ -157,6 +161,25 @@ function App() {
         towns: mapData.towns.map((t) => t.name),
       })
 
+      setLoadingStatus('Loading brush data...')
+      let brushRegistry: BrushRegistry | null = null
+      try {
+        const brushData = await loadBrushData()
+        const nextId = { value: brushData.brushes.length + 1 }
+
+        // Load wall brushes
+        const wallsXml = await fetch('/materials/brushs/walls.xml').then(r => r.text())
+        const wallBrushes = parseWallBrushesXml(wallsXml, nextId)
+        console.log(`[WallLoader] Loaded ${wallBrushes.length} wall brushes`)
+
+        brushRegistry = new BrushRegistry(brushData.brushes, brushData.borders, wallBrushes)
+        ;(window as any).__brushRegistry = brushRegistry
+        if (!destroyed) setBrushRegistryState(brushRegistry)
+      } catch (e) {
+        console.warn('[App] Failed to load brush data, smart brushes disabled:', e)
+      }
+      if (destroyed) return
+
       setLoadingStatus('Building renderer...')
       const renderer = new MapRenderer(app, appearances, mapData)
       rendererRef.current = renderer
@@ -164,6 +187,7 @@ function App() {
 
       // Create mutator and wire chunk invalidation
       const mutator = new MapMutator(mapData, appearances)
+      mutator.brushRegistry = brushRegistry
       mutatorRef.current = mutator
       mutator.onChunksInvalidated = (keys) => {
         renderer.invalidateChunks(keys)
@@ -315,6 +339,14 @@ function App() {
       } else if (e.key === 'e' && !e.ctrlKey) {
         e.preventDefault()
         toolsRef.current.setActiveTool('erase')
+      } else if (e.key === ']') {
+        e.preventDefault()
+        const cur = toolsRef.current.brushSize
+        if (cur < 6) toolsRef.current.setBrushSize(cur + 1)
+      } else if (e.key === '[') {
+        e.preventDefault()
+        const cur = toolsRef.current.brushSize
+        if (cur > 0) toolsRef.current.setBrushSize(cur - 1)
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -511,6 +543,10 @@ function App() {
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onResetZoom={handleResetZoom}
+          brushSize={tools.brushSize}
+          onBrushSizeChange={tools.setBrushSize}
+          brushShape={tools.brushShape}
+          onBrushShapeChange={tools.setBrushShape}
         />
       )}
 
@@ -540,6 +576,7 @@ function App() {
         <ItemPalette
           registry={itemRegistry}
           appearances={appearancesData}
+          brushRegistry={brushRegistryState}
           onClose={handleClosePalette}
           selectedItemId={tools.selectedItemId}
           onItemSelect={(id) => {
