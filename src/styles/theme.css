@@ -1,0 +1,289 @@
+/*
+ * Tibia Map Editor — Design System
+ *
+ * Aesthetic: "Dark Forge"
+ * A precision instrument shell. Dark steel frame, warm amber highlights.
+ * The map viewport is king — UI stays compact and out of the way.
+ * Frosted glass panels let the map bleed through, grounding overlays in context.
+ *
+ * Principles:
+ *  1. Content-first — maximize viewport, minimize chrome
+ *  2. Information-dense — pack data tight with clear hierarchy
+ *  3. Warm on cold — amber accents on cool dark surfaces (torchlight on stone)
+ *  4. Crisp precision — no soft rounding, pixel-aligned edges
+ *  5. Layered depth — glass surfaces, subtle shadows, elevation through opacity
+ */
+
+/* ── Fonts ─────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* ── Typography ────────────────────────────────────────────────── */
+  --font-ui: 'Barlow', system-ui, -apple-system, sans-serif;
+  --font-display: 'Barlow Condensed', 'Barlow', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+
+  --text-xs: 10px;
+  --text-sm: 11px;
+  --text-base: 12px;
+  --text-md: 13px;
+  --text-lg: 15px;
+  --text-xl: 18px;
+  --text-2xl: 22px;
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.45;
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0.01em;
+  --tracking-wide: 0.06em;
+
+  /* ── Colors — Dark Forge palette ───────────────────────────────── */
+
+  /* Backgrounds: cool dark with slight warmth in surfaces */
+  --bg-void: #07070a;
+  --bg-base: #0b0b0f;
+  --bg-surface: #111116;
+  --bg-elevated: #18181e;
+  --bg-hover: #1f1f27;
+  --bg-active: #26262f;
+
+  /* Glass: frosted panel overlays */
+  --glass-bg: rgba(14, 14, 20, 0.82);
+  --glass-bg-solid: #0e0e14;
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-blur: 12px;
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.04);
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-focus: var(--accent);
+
+  /* Text */
+  --text-primary: #e4e2de;
+  --text-secondary: #908d85;
+  --text-tertiary: #5c5a54;
+  --text-disabled: #3a3935;
+  --text-inverse: #0b0b0f;
+
+  /* Accent — warm amber/gold (Tibia torchlight) */
+  --accent: #d4a549;
+  --accent-hover: #e0b860;
+  --accent-pressed: #c49438;
+  --accent-subtle: rgba(212, 165, 73, 0.12);
+  --accent-muted: rgba(212, 165, 73, 0.06);
+  --accent-text: #e8c36a;
+
+  /* Semantic */
+  --danger: #c44040;
+  --danger-subtle: rgba(196, 64, 64, 0.12);
+  --success: #4a9e6a;
+  --success-subtle: rgba(74, 158, 106, 0.12);
+  --info: #5b9fd4;
+  --info-subtle: rgba(91, 159, 212, 0.12);
+  --warning: var(--accent);
+
+  /* ── Spacing ───────────────────────────────────────────────────── */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-8: 16px;
+  --space-10: 20px;
+  --space-12: 24px;
+
+  /* ── Radii — crisp, not bubbly ─────────────────────────────────── */
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 7px;
+
+  /* ── Shadows — layered depth ───────────────────────────────────── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--border-subtle);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border-subtle);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-subtle);
+  --shadow-glow: 0 0 12px rgba(212, 165, 73, 0.15);
+
+  /* ── Transitions ───────────────────────────────────────────────── */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-fast: 100ms;
+  --duration-normal: 180ms;
+  --duration-slow: 300ms;
+}
+
+/* ── Base resets ──────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  letter-spacing: var(--tracking-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar styling ───────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* ── Selection ───────────────────────────────────────────────────── */
+
+::selection {
+  background: var(--accent-subtle);
+  color: var(--accent-text);
+}
+
+/* ── Glass panel base ────────────────────────────────────────────── */
+
+.panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+/* ── Button base ─────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.btn:active {
+  background: var(--bg-active);
+  transform: translateY(1px);
+}
+
+.btn.active {
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.btn-icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: var(--text-md);
+}
+
+/* ── Label / badge ───────────────────────────────────────────────── */
+
+.label {
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--text-primary);
+  letter-spacing: 0;
+}
+
+.value-accent {
+  color: var(--accent-text);
+}
+
+/* ── Separator ───────────────────────────────────────────────────── */
+
+.separator {
+  width: 100%;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+.separator-v {
+  width: 1px;
+  height: 100%;
+  background: var(--border-subtle);
+}
+
+/* ── Tooltip hint ────────────────────────────────────────────────── */
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--text-tertiary);
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: 2px;
+}
+
+/* ── Loading overlay ─────────────────────────────────────────────── */
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}

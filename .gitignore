@@ -1,0 +1,16 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+
+# IDE
+.vscode
+.idea
+
+# OS
+.DS_Store
+
+# Tibia data (large binaries)
+vendor/
+tibia-versions/
