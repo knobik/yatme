@@ -1,4 +1,4 @@
-import { Application, Container, Sprite } from 'pixi.js'
+import { Application, Container, Graphics, Sprite } from 'pixi.js'
 import { getTextureSync, preloadSheets } from './TextureManager'
 import type { AppearanceData } from './appearances'
 import type { Appearance, SpriteInfo, SpriteAnimation } from '../proto/appearances'
@@ -335,8 +335,17 @@ export class MapRenderer {
   private _animatedChunkKeys: Set<string> // precomputed: which chunk keys have animations
   private _chunkAnimSprites = new Map<string, AnimatedSpriteRef[]>() // active animated sprite refs
 
-  // Callbacks for HUD updates
+  // Tile selection
+  private _selectedTileX = -1
+  private _selectedTileY = -1
+  private _selectedTileZ = -1
+  private _highlightGraphics: Graphics
+  private _highlightContainer: Container
+  private _dragDist = 0
+
+  // Callbacks
   onCameraChange?: (x: number, y: number, zoom: number, floor: number, floorViewMode: FloorViewMode, showTransparentUpper: boolean) => void
+  onTileClick?: (tile: OtbmTile | null, worldX: number, worldY: number) => void
 
   constructor(app: Application, appearances: AppearanceData, mapData: OtbmMap) {
     this.app = app
@@ -350,6 +359,13 @@ export class MapRenderer {
 
     this.mapContainer = new Container()
     this.app.stage.addChild(this.mapContainer)
+
+    // Highlight overlay for selected tile (rendered above all floor containers)
+    this._highlightContainer = new Container()
+    this._highlightGraphics = new Graphics()
+    this._highlightGraphics.visible = false
+    this._highlightContainer.addChild(this._highlightGraphics)
+    this.mapContainer.addChild(this._highlightContainer)
 
     this.setupInput()
 
@@ -374,6 +390,7 @@ export class MapRenderer {
   setFloor(z: number): void {
     if (z < 0 || z > 15) return
     this._floor = z
+    this.deselectTile()
     this.recycleAllChunks()
     this.notifyCamera()
   }
@@ -398,6 +415,44 @@ export class MapRenderer {
     this.cameraX = x * TILE_SIZE - this.app.screen.width / (2 * this._zoom)
     this.cameraY = y * TILE_SIZE - this.app.screen.height / (2 * this._zoom)
     this.notifyCamera()
+  }
+
+  // ── Tile selection ──────────────────────────────────────────────
+
+  getTileAt(screenX: number, screenY: number): { x: number; y: number; z: number } {
+    const offset = this.getFloorOffset(this._floor)
+    const worldX = Math.floor((this.cameraX + offset + screenX / this._zoom) / TILE_SIZE)
+    const worldY = Math.floor((this.cameraY + offset + screenY / this._zoom) / TILE_SIZE)
+    return { x: worldX, y: worldY, z: this._floor }
+  }
+
+  deselectTile(): void {
+    this._selectedTileX = -1
+    this._selectedTileY = -1
+    this._selectedTileZ = -1
+    this._highlightGraphics.visible = false
+    this.onTileClick?.(null, -1, -1)
+  }
+
+  private updateHighlight(): void {
+    if (this._selectedTileX < 0 || this._selectedTileZ !== this._floor) {
+      this._highlightGraphics.visible = false
+      return
+    }
+
+    const g = this._highlightGraphics
+    g.clear()
+    const px = this._selectedTileX * TILE_SIZE
+    const py = this._selectedTileY * TILE_SIZE
+    g.rect(px, py, TILE_SIZE, TILE_SIZE)
+    g.stroke({ color: 0xd4a549, width: 1.5, alpha: 0.9 })
+    g.rect(px + 1, py + 1, TILE_SIZE - 2, TILE_SIZE - 2)
+    g.fill({ color: 0xd4a549, alpha: 0.1 })
+    g.visible = true
+
+    // Position highlight container with the same floor offset
+    const offset = this.getFloorOffset(this._floor)
+    this._highlightContainer.position.set(-offset, -offset)
   }
 
   // ── Floor helpers ────────────────────────────────────────────────
@@ -444,6 +499,7 @@ export class MapRenderer {
     canvas.addEventListener('pointerdown', (e) => {
       if (e.button === 0 || e.button === 1) {
         this.dragging = true
+        this._dragDist = 0
         this.dragStartX = e.clientX
         this.dragStartY = e.clientY
         this.cameraStartX = this.cameraX
@@ -456,6 +512,7 @@ export class MapRenderer {
       if (!this.dragging) return
       const dx = e.clientX - this.dragStartX
       const dy = e.clientY - this.dragStartY
+      this._dragDist = Math.sqrt(dx * dx + dy * dy)
       this.cameraX = this.cameraStartX - dx / this._zoom
       this.cameraY = this.cameraStartY - dy / this._zoom
       this.notifyCamera()
@@ -463,8 +520,23 @@ export class MapRenderer {
 
     canvas.addEventListener('pointerup', (e) => {
       if (this.dragging) {
+        const wasClick = this._dragDist < 4
         this.dragging = false
         canvas.releasePointerCapture(e.pointerId)
+
+        if (wasClick && e.button === 0) {
+          const rect = canvas.getBoundingClientRect()
+          const screenX = e.clientX - rect.left
+          const screenY = e.clientY - rect.top
+          const pos = this.getTileAt(screenX, screenY)
+          const key = `${pos.x},${pos.y},${pos.z}`
+          const tile = this.mapData.tiles.get(key) ?? null
+          this._selectedTileX = pos.x
+          this._selectedTileY = pos.y
+          this._selectedTileZ = pos.z
+          this.updateHighlight()
+          this.onTileClick?.(tile, pos.x, pos.y)
+        }
       }
     })
 
@@ -566,10 +638,15 @@ export class MapRenderer {
         this.mapContainer.removeChild(container)
       }
     }
+    if (this._highlightContainer.parent === this.mapContainer) {
+      this.mapContainer.removeChild(this._highlightContainer)
+    }
     for (const z of visibleFloors) {
       const container = this.floorContainers.get(z)!
       this.mapContainer.addChild(container)
     }
+    // Highlight always on top
+    this.mapContainer.addChild(this._highlightContainer)
 
     this._lastVisibleFloors = visibleFloors.slice()
   }
@@ -704,6 +781,9 @@ export class MapRenderer {
         }
       }
     }
+
+    // Update selected tile highlight position
+    this.updateHighlight()
 
     // Update animated sprite textures in-place, then re-render affected chunk caches
     this.updateAnimatedSprites()
@@ -934,6 +1014,8 @@ export class MapRenderer {
   destroy(): void {
     this.app.ticker.remove(this.update, this)
     this.recycleAllChunks()
+    this._highlightGraphics.destroy()
+    this._highlightContainer.destroy()
     this.mapContainer.destroy({ children: true })
   }
 }

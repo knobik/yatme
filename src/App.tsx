@@ -2,8 +2,11 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { Application } from 'pixi.js'
 import { loadAppearances, type AppearanceData } from './lib/appearances'
 import { loadSpriteCatalog } from './lib/sprites'
-import { loadOtbm, type OtbmMap } from './lib/otbm'
+import { loadOtbm, type OtbmMap, type OtbmTile } from './lib/otbm'
 import { MapRenderer, type FloorViewMode } from './lib/MapRenderer'
+import { loadItems, type ItemRegistry } from './lib/items'
+import { Inspector } from './components/Inspector'
+import { ItemPalette } from './components/ItemPalette'
 
 interface CameraState {
   x: number
@@ -24,6 +27,12 @@ function App() {
   const [camera, setCamera] = useState<CameraState>({ x: 0, y: 0, zoom: 1, floor: 7, floorViewMode: 'single', showTransparentUpper: false })
   const [mapInfo, setMapInfo] = useState<{ tiles: number; towns: string[] } | null>(null)
 
+  // Phase 6 state
+  const [selectedTile, setSelectedTile] = useState<OtbmTile | null>(null)
+  const [itemRegistry, setItemRegistry] = useState<ItemRegistry | null>(null)
+  const [appearancesData, setAppearancesData] = useState<AppearanceData | null>(null)
+  const [showPalette, setShowPalette] = useState(false)
+
   const handleFloorChange = useCallback((delta: number) => {
     if (rendererRef.current) {
       rendererRef.current.setFloor(rendererRef.current.floor + delta)
@@ -40,6 +49,15 @@ function App() {
     if (rendererRef.current) {
       rendererRef.current.setShowTransparentUpper(!rendererRef.current.showTransparentUpper)
     }
+  }, [])
+
+  const handleCloseInspector = useCallback(() => {
+    setSelectedTile(null)
+    rendererRef.current?.deselectTile()
+  }, [])
+
+  const handleClosePalette = useCallback(() => {
+    setShowPalette(false)
   }, [])
 
   useEffect(() => {
@@ -71,6 +89,7 @@ function App() {
       setLoadingStatus('Loading appearances...')
       const appearances = await loadAppearances()
       if (destroyed) return
+      setAppearancesData(appearances)
 
       setLoadingStatus('Loading sprite catalog...')
       await loadSpriteCatalog()
@@ -79,6 +98,11 @@ function App() {
       setLoadingStatus('Parsing map data...')
       const mapData = await loadOtbm()
       if (destroyed) return
+
+      setLoadingStatus('Loading item data...')
+      const registry = await loadItems()
+      if (destroyed) return
+      setItemRegistry(registry)
 
       setMapInfo({
         tiles: mapData.tiles.size,
@@ -92,6 +116,10 @@ function App() {
 
       renderer.onCameraChange = (x, y, zoom, floor, floorViewMode, showTransparentUpper) => {
         setCamera({ x, y, zoom, floor, floorViewMode, showTransparentUpper })
+      }
+
+      renderer.onTileClick = (tile) => {
+        setSelectedTile(tile)
       }
 
       setCamera({
@@ -122,20 +150,34 @@ function App() {
     }
   }, [])
 
-  // Keyboard floor switching
+  // Keyboard shortcuts
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      // Don't handle shortcuts when typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+
       if (e.key === 'PageUp') {
         e.preventDefault()
         handleFloorChange(-1)
       } else if (e.key === 'PageDown') {
         e.preventDefault()
         handleFloorChange(1)
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        if (showPalette) {
+          setShowPalette(false)
+        } else if (selectedTile) {
+          setSelectedTile(null)
+          rendererRef.current?.deselectTile()
+        }
+      } else if (e.key === 'p' || e.key === 'P') {
+        e.preventDefault()
+        setShowPalette(prev => !prev)
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [handleFloorChange])
+  }, [handleFloorChange, showPalette, selectedTile])
 
   if (error) {
     return (
@@ -181,18 +223,45 @@ function App() {
       {/* Loading overlay */}
       {loading && <LoadingOverlay status={loadingStatus} />}
 
+      {/* Item palette — left side */}
+      {!loading && showPalette && itemRegistry && appearancesData && (
+        <ItemPalette
+          registry={itemRegistry}
+          appearances={appearancesData}
+          onClose={handleClosePalette}
+        />
+      )}
+
+      {/* Inspector panel — left side (offset right when palette is open) */}
+      {!loading && selectedTile && itemRegistry && appearancesData && (
+        <Inspector
+          tile={selectedTile}
+          registry={itemRegistry}
+          appearances={appearancesData}
+          onClose={handleCloseInspector}
+          offset={showPalette}
+        />
+      )}
+
       {/* HUD — bottom left status bar */}
       {!loading && (
         <div className="panel" style={{
           position: 'absolute',
           bottom: 'var(--space-4)',
-          left: 'var(--space-4)',
+          left: showPalette && selectedTile
+            ? 'calc(var(--space-4) + 320px + var(--space-3) + 300px + var(--space-3))'
+            : showPalette
+              ? 'calc(var(--space-4) + 320px + var(--space-3))'
+              : selectedTile
+                ? 'calc(var(--space-4) + 300px + var(--space-3))'
+                : 'var(--space-4)',
           display: 'flex',
           alignItems: 'center',
           gap: 'var(--space-6)',
           padding: 'var(--space-3) var(--space-5)',
-          pointerEvents: 'none',
+          pointerEvents: 'auto',
           userSelect: 'none',
+          transition: 'left var(--duration-normal) var(--ease-out)',
         }}>
           <HudField label="POS" value={`${camera.x}, ${camera.y}`} />
           <div className="separator-v" style={{ height: 16, flexShrink: 0 }} />
@@ -203,6 +272,26 @@ function App() {
               <HudField label="TILES" value={mapInfo.tiles.toLocaleString()} />
             </>
           )}
+          <div className="separator-v" style={{ height: 16, flexShrink: 0 }} />
+          {/* Palette toggle button */}
+          <button
+            className="btn btn-icon"
+            onClick={() => setShowPalette(prev => !prev)}
+            title="Item palette (P)"
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: showPalette ? 'var(--accent)' : undefined,
+              pointerEvents: 'auto',
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+              <rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+              <rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+              <rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+            </svg>
+          </button>
         </div>
       )}
 
