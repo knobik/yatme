@@ -11,6 +11,7 @@ interface CameraState {
   zoom: number
   floor: number
   floorViewMode: FloorViewMode
+  showTransparentUpper: boolean
 }
 
 function App() {
@@ -20,7 +21,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [loadingStatus, setLoadingStatus] = useState('Initializing...')
   const [error, setError] = useState<string | null>(null)
-  const [camera, setCamera] = useState<CameraState>({ x: 0, y: 0, zoom: 1, floor: 7, floorViewMode: 'single' })
+  const [camera, setCamera] = useState<CameraState>({ x: 0, y: 0, zoom: 1, floor: 7, floorViewMode: 'single', showTransparentUpper: false })
   const [mapInfo, setMapInfo] = useState<{ tiles: number; towns: string[] } | null>(null)
 
   const handleFloorChange = useCallback((delta: number) => {
@@ -32,6 +33,12 @@ function App() {
   const handleFloorViewMode = useCallback((mode: FloorViewMode) => {
     if (rendererRef.current) {
       rendererRef.current.setFloorViewMode(mode)
+    }
+  }, [])
+
+  const handleToggleTransparentUpper = useCallback(() => {
+    if (rendererRef.current) {
+      rendererRef.current.setShowTransparentUpper(!rendererRef.current.showTransparentUpper)
     }
   }, [])
 
@@ -83,8 +90,8 @@ function App() {
       rendererRef.current = renderer
       ;(window as any).__renderer = renderer
 
-      renderer.onCameraChange = (x, y, zoom, floor, floorViewMode) => {
-        setCamera({ x, y, zoom, floor, floorViewMode })
+      renderer.onCameraChange = (x, y, zoom, floor, floorViewMode, showTransparentUpper) => {
+        setCamera({ x, y, zoom, floor, floorViewMode, showTransparentUpper })
       }
 
       setCamera({
@@ -93,6 +100,7 @@ function App() {
         zoom: renderer.zoom,
         floor: renderer.floor,
         floorViewMode: renderer.floorViewMode,
+        showTransparentUpper: renderer.showTransparentUpper,
       })
 
       setLoading(false)
@@ -294,6 +302,25 @@ function App() {
               <path d="M7 1L1 4L7 7L13 4L7 1Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
               <path d="M1 7L7 10L13 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
               <path d="M1 10L7 13L13 10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+
+          <div className="separator" style={{ width: '100%', margin: 'var(--space-1) 0' }} />
+
+          {/* Transparent upper floor toggle */}
+          <button
+            className="btn btn-icon"
+            onClick={handleToggleTransparentUpper}
+            title="Show transparent upper floor"
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: camera.showTransparentUpper ? 'var(--accent)' : undefined,
+            }}
+          >
+            <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
+              <path d="M1 5C1 5 3.5 1 7 1C10.5 1 13 5 13 5C13 5 10.5 9 7 9C3.5 9 1 5 1 5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+              <circle cx="7" cy="5" r="2" stroke="currentColor" strokeWidth="1.2"/>
             </svg>
           </button>
         </div>

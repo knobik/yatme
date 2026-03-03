@@ -193,6 +193,7 @@ export class MapRenderer {
   private _zoom = 1
   private _floor = 7
   private _floorViewMode: FloorViewMode = 'single'
+  private _showTransparentUpper = false
 
   // Interaction state
   private dragging = false
@@ -219,7 +220,7 @@ export class MapRenderer {
   private _allPrefetchKeys = new Set<string>()
 
   // Callbacks for HUD updates
-  onCameraChange?: (x: number, y: number, zoom: number, floor: number, floorViewMode: FloorViewMode) => void
+  onCameraChange?: (x: number, y: number, zoom: number, floor: number, floorViewMode: FloorViewMode, showTransparentUpper: boolean) => void
 
   constructor(app: Application, appearances: AppearanceData, mapData: OtbmMap) {
     this.app = app
@@ -246,6 +247,7 @@ export class MapRenderer {
   get zoom(): number { return this._zoom }
   get floor(): number { return this._floor }
   get floorViewMode(): FloorViewMode { return this._floorViewMode }
+  get showTransparentUpper(): boolean { return this._showTransparentUpper }
   get worldX(): number { return Math.floor(this.cameraX / TILE_SIZE) }
   get worldY(): number { return Math.floor(this.cameraY / TILE_SIZE) }
 
@@ -259,6 +261,13 @@ export class MapRenderer {
   setFloorViewMode(mode: FloorViewMode): void {
     if (mode === this._floorViewMode) return
     this._floorViewMode = mode
+    this.recycleAllChunks()
+    this.notifyCamera()
+  }
+
+  setShowTransparentUpper(v: boolean): void {
+    if (v === this._showTransparentUpper) return
+    this._showTransparentUpper = v
     this.recycleAllChunks()
     this.notifyCamera()
   }
@@ -289,9 +298,6 @@ export class MapRenderer {
     let endZ: number
 
     if (this._floor <= GROUND_LAYER) {
-      // Above ground: startZ = ground (Z=7), endZ = upper limit.
-      // Lower Z = higher elevation. 'current-below' stops at current floor,
-      // 'all' goes all the way up to Z=0.
       startZ = GROUND_LAYER
       endZ = this._floorViewMode === 'current-below' ? this._floor : 0
     } else {
@@ -373,7 +379,7 @@ export class MapRenderer {
   }
 
   private notifyCamera(): void {
-    this.onCameraChange?.(this.worldX, this.worldY, this._zoom, this._floor, this._floorViewMode)
+    this.onCameraChange?.(this.worldX, this.worldY, this._zoom, this._floor, this._floorViewMode, this._showTransparentUpper)
   }
 
   // ── Viewport range helpers ────────────────────────────────────
@@ -402,7 +408,7 @@ export class MapRenderer {
         const container = this.floorContainers.get(z)!
         const offset = this.getFloorOffset(z)
         container.position.set(-offset, -offset)
-        container.alpha = z < this._floor ? FLOOR_ABOVE_ALPHA : 1.0
+        container.alpha = (z < this._floor && this._showTransparentUpper) ? FLOOR_ABOVE_ALPHA : 1.0
       }
       return
     }
@@ -473,7 +479,7 @@ export class MapRenderer {
       if (ex > maxEX) maxEX = ex
       if (ey > maxEY) maxEY = ey
     }
-    return `${minSX},${minSY},${maxEX},${maxEY},${this._floor},${this._floorViewMode}`
+    return `${minSX},${minSY},${maxEX},${maxEY},${this._floor},${this._floorViewMode},${this._showTransparentUpper}`
   }
 
   private update(): void {
