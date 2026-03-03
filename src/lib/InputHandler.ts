@@ -16,6 +16,8 @@ export interface InputHost {
   onTilePointerMove?: (pos: TilePos, event: PointerEvent) => void
   onTilePointerUp?: (pos: TilePos, event: PointerEvent) => void
   onTileClick?: (tile: OtbmTile | null, worldX: number, worldY: number) => void
+  onTileContextMenu?: (pos: TilePos, tile: OtbmTile | null, screenX: number, screenY: number) => void
+  onItemDrop?: (pos: TilePos, itemId: number) => void
 }
 
 /**
@@ -40,6 +42,10 @@ export function setupMapInput(
   let activeButton = -1
   let toolFired = false
 
+  function onContextMenu(e: Event) {
+    e.preventDefault()
+  }
+
   function onPointerDown(e: PointerEvent) {
     if (e.button === 1) {
       // Middle mouse: always pan
@@ -50,6 +56,14 @@ export function setupMapInput(
       cameraStartX = camera.x
       cameraStartY = camera.y
       activeButton = 1
+      canvas.setPointerCapture(e.pointerId)
+    } else if (e.button === 2) {
+      // Right mouse: track for context menu
+      dragging = true
+      dragDist = 0
+      dragStartX = e.clientX
+      dragStartY = e.clientY
+      activeButton = 2
       canvas.setPointerCapture(e.pointerId)
     } else if (e.button === 0) {
       // Left mouse: tool callbacks or pan fallback
@@ -103,7 +117,15 @@ export function setupMapInput(
     dragging = false
     canvas.releasePointerCapture(e.pointerId)
 
-    if (activeButton === 0) {
+    if (activeButton === 2) {
+      if (wasClick && host.onTileContextMenu) {
+        const rect = canvas.getBoundingClientRect()
+        const pos = camera.getTileAt(e.clientX - rect.left, e.clientY - rect.top)
+        const key = `${pos.x},${pos.y},${pos.z}`
+        const tile = host.mapData.tiles.get(key) ?? null
+        host.onTileContextMenu(pos, tile, e.clientX, e.clientY)
+      }
+    } else if (activeButton === 0) {
       if (toolFired && host.onTilePointerUp) {
         const rect = canvas.getBoundingClientRect()
         const pos = camera.getTileAt(e.clientX - rect.left, e.clientY - rect.top)
@@ -131,15 +153,39 @@ export function setupMapInput(
     onCameraChange()
   }
 
+  function onDragOver(e: DragEvent) {
+    if (e.dataTransfer?.types.includes('application/x-tibia-item')) {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+    }
+  }
+
+  function onDrop(e: DragEvent) {
+    e.preventDefault()
+    const itemIdStr = e.dataTransfer?.getData('application/x-tibia-item')
+    if (!itemIdStr) return
+    const itemId = parseInt(itemIdStr, 10)
+    if (isNaN(itemId)) return
+    const rect = canvas.getBoundingClientRect()
+    const pos = camera.getTileAt(e.clientX - rect.left, e.clientY - rect.top)
+    host.onItemDrop?.(pos, itemId)
+  }
+
+  canvas.addEventListener('contextmenu', onContextMenu)
   canvas.addEventListener('pointerdown', onPointerDown)
   canvas.addEventListener('pointermove', onPointerMove)
   canvas.addEventListener('pointerup', onPointerUp)
   canvas.addEventListener('wheel', onWheel, { passive: false })
+  canvas.addEventListener('dragover', onDragOver)
+  canvas.addEventListener('drop', onDrop)
 
   return () => {
+    canvas.removeEventListener('contextmenu', onContextMenu)
     canvas.removeEventListener('pointerdown', onPointerDown)
     canvas.removeEventListener('pointermove', onPointerMove)
     canvas.removeEventListener('pointerup', onPointerUp)
     canvas.removeEventListener('wheel', onWheel)
+    canvas.removeEventListener('dragover', onDragOver)
+    canvas.removeEventListener('drop', onDrop)
   }
 }

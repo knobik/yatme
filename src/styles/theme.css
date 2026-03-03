@@ -214,8 +214,8 @@ html, body, #root {
 }
 
 .btn-icon {
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   font-size: var(--text-md);
 }
@@ -285,8 +285,8 @@ html, body, #root {
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
   pointer-events: auto;
   user-select: none;
   z-index: 10;
@@ -302,14 +302,14 @@ html, body, #root {
   background: var(--accent-subtle) !important;
 }
 
-/* ── Inspector panel ─────────────────────────────────────────────── */
+/* ── Inspector / Browse Tile panel ───────────────────────────────── */
 
 .inspector {
   position: absolute;
   left: var(--space-4);
   top: var(--space-4);
   bottom: var(--space-4);
-  width: 300px;
+  width: 400px;
   display: flex;
   flex-direction: column;
   pointer-events: auto;
@@ -326,28 +326,28 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-5) var(--space-6);
 }
 
 .inspector-section {
-  padding: var(--space-3) var(--space-5);
+  padding: var(--space-4) var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .inspector-field {
   display: flex;
   align-items: baseline;
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
 .inspector-field .label {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 
 .inspector-field .value {
-  font-size: var(--text-base);
+  font-size: var(--text-md);
 }
 
 .inspector-items {
@@ -360,8 +360,10 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--duration-fast) var(--ease-out),
+              opacity var(--duration-fast) var(--ease-out);
 }
 
 .item-row:last-child {
@@ -370,6 +372,14 @@ html, body, #root {
 
 .item-row:hover {
   background: var(--bg-hover);
+}
+
+.item-row:hover .item-actions {
+  opacity: 1;
+}
+
+.item-row:hover .drag-handle {
+  opacity: 0.6;
 }
 
 .item-row .item-name {
@@ -387,6 +397,149 @@ html, body, #root {
   font-size: var(--text-sm);
   color: var(--text-tertiary);
   line-height: var(--leading-normal);
+}
+
+/* ── Drag handle ────────────────────────────────────────────────── */
+
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  flex-shrink: 0;
+  cursor: grab;
+  color: var(--text-tertiary);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* ── Drag states ────────────────────────────────────────────────── */
+
+.item-row.dragging {
+  opacity: 0.35;
+}
+
+.item-row.drag-over-top {
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+
+.item-row.drag-over-bottom {
+  box-shadow: inset 0 -2px 0 0 var(--accent);
+}
+
+/* ── Browse Tile action buttons ─────────────────────────────────── */
+
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.item-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.item-action-btn:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.item-action-btn.danger:hover {
+  background: var(--danger-subtle);
+  color: var(--danger);
+}
+
+.item-action-btn.brush:hover {
+  background: var(--accent-subtle);
+  color: var(--accent-text);
+}
+
+/* ── Browse Tile inline property editor ─────────────────────────── */
+
+.item-properties {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--space-5) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.item-prop-row {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.item-prop-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 70px;
+}
+
+.item-prop-field .label {
+  font-size: var(--text-sm);
+}
+
+.item-prop-input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.item-prop-input:focus {
+  border-color: var(--accent);
+}
+
+.item-prop-input.has-value {
+  border-color: var(--border-strong);
+}
+
+.item-prop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  padding-top: var(--space-3);
+}
+
+.item-ground-badge {
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--accent-text);
+  background: var(--accent-subtle);
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
 }
 
 /* ── Item palette ───────────────────────────────────────────────── */
@@ -512,6 +665,146 @@ html, body, #root {
   white-space: nowrap;
   max-width: 100%;
   line-height: 1.3;
+}
+
+/* ── Context menu ───────────────────────────────────────────────── */
+
+.context-menu {
+  min-width: 200px;
+  padding: var(--space-2) 0;
+}
+
+.context-menu .separator {
+  margin: var(--space-2) 0;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--space-2) var(--space-5);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--text-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.context-menu-item:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.context-menu-item:disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.context-menu-shortcut {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  margin-left: var(--space-8);
+}
+
+/* ── Hamburger menu ─────────────────────────────────────────────── */
+
+.hamburger-menu {
+  min-width: 240px;
+}
+
+.hamburger-menu-header {
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: var(--space-3) var(--space-5) var(--space-1);
+}
+
+/* ── Go to position dialog ──────────────────────────────────────── */
+
+.goto-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.goto-dialog {
+  min-width: 280px;
+  padding: var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.goto-dialog .goto-title {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.goto-dialog .goto-fields {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.goto-dialog .goto-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+}
+
+.goto-dialog .goto-field .label {
+  font-size: var(--text-sm);
+}
+
+.goto-dialog .goto-input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  color: var(--text-primary);
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.goto-dialog .goto-input:focus {
+  border-color: var(--accent);
+}
+
+.goto-dialog .goto-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.goto-dialog .btn-accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-inverse);
+}
+
+.goto-dialog .btn-accent:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--text-inverse);
 }
 
 /* ── Loading overlay ─────────────────────────────────────────────── */

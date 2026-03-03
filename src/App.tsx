@@ -10,6 +10,9 @@ import { useEditorTools } from './hooks/useEditorTools'
 import { Inspector } from './components/Inspector'
 import { ItemPalette } from './components/ItemPalette'
 import { Toolbar } from './components/Toolbar'
+import { ContextMenu, type ContextMenuGroup } from './components/ContextMenu'
+import { GoToPositionDialog } from './components/GoToPositionDialog'
+import { getItemDisplayName } from './lib/items'
 
 interface CameraState {
   x: number
@@ -32,15 +35,24 @@ function App() {
   const [mapInfo, setMapInfo] = useState<{ tiles: number; towns: string[] } | null>(null)
 
   // Phase 6 state
-  const [selectedTile, setSelectedTile] = useState<OtbmTile | null>(null)
+  const [selectedTilePos, setSelectedTilePos] = useState<{ x: number; y: number; z: number } | null>(null)
+  const [tileVersion, setTileVersion] = useState(0)
   const [itemRegistry, setItemRegistry] = useState<ItemRegistry | null>(null)
   const [appearancesData, setAppearancesData] = useState<AppearanceData | null>(null)
-  const [showPalette, setShowPalette] = useState(false)
+  const [showPalette, setShowPalette] = useState(true)
 
   // Phase 7 state
   const [mapData, setMapData] = useState<OtbmMap | null>(null)
   const [rendererReady, setRendererReady] = useState<MapRenderer | null>(null)
   const [mutatorReady, setMutatorReady] = useState<MapMutator | null>(null)
+
+  const [showGoToDialog, setShowGoToDialog] = useState(false)
+
+  const [contextMenu, setContextMenu] = useState<{
+    x: number; y: number
+    tilePos: { x: number; y: number; z: number }
+    tile: OtbmTile | null
+  } | null>(null)
 
   const tools = useEditorTools(rendererReady, mutatorReady, mapData)
   const toolsRef = useRef(tools)
@@ -65,12 +77,35 @@ function App() {
   }, [])
 
   const handleCloseInspector = useCallback(() => {
-    setSelectedTile(null)
+    setSelectedTilePos(null)
     rendererRef.current?.deselectTile()
   }, [])
 
+  const handleSelectAsBrush = useCallback((itemId: number) => {
+    tools.setSelectedItemId(itemId)
+    tools.setActiveTool('draw')
+  }, [tools])
+
   const handleClosePalette = useCallback(() => {
     setShowPalette(false)
+  }, [])
+
+  const handleZoomIn = useCallback(() => {
+    rendererRef.current?.zoomIn()
+  }, [])
+
+  const handleZoomOut = useCallback(() => {
+    rendererRef.current?.zoomOut()
+  }, [])
+
+  const handleResetZoom = useCallback(() => {
+    rendererRef.current?.resetZoom()
+  }, [])
+
+  const handleGoToPosition = useCallback((x: number, y: number, z: number) => {
+    if (!rendererRef.current) return
+    rendererRef.current.setFloor(z)
+    rendererRef.current.centerOn(x, y)
   }, [])
 
   useEffect(() => {
@@ -136,14 +171,28 @@ function App() {
       mutator.onTileChanged = (x, y, z) => {
         const tile = mapData.tiles.get(`${x},${y},${z}`)
         if (tile) renderer.updateChunkIndex(tile)
+        setTileVersion(v => v + 1)
       }
 
       renderer.onCameraChange = (x, y, zoom, floor, floorViewMode, showTransparentUpper) => {
         setCamera({ x, y, zoom, floor, floorViewMode, showTransparentUpper })
+        setContextMenu(null)
       }
 
-      renderer.onTileClick = (tile) => {
-        setSelectedTile(tile)
+      renderer.onTileClick = (tile, worldX, worldY) => {
+        if (tile) {
+          setSelectedTilePos({ x: tile.x, y: tile.y, z: tile.z })
+        } else {
+          setSelectedTilePos(null)
+        }
+      }
+
+      renderer.onTileContextMenu = (pos, tile, screenX, screenY) => {
+        setContextMenu({ x: screenX, y: screenY, tilePos: pos, tile })
+      }
+
+      renderer.onItemDrop = (pos, itemId) => {
+        mutator.addItem(pos.x, pos.y, pos.z, { id: itemId })
       }
 
       setCamera({
@@ -200,9 +249,34 @@ function App() {
           toolsRef.current.copy()
           return
         }
+        if (e.key === 'x') {
+          e.preventDefault()
+          toolsRef.current.cut()
+          return
+        }
         if (e.key === 'v') {
           e.preventDefault()
           toolsRef.current.paste()
+          return
+        }
+        if (e.key === 'g') {
+          e.preventDefault()
+          setShowGoToDialog(true)
+          return
+        }
+        if (e.key === '=' || e.key === '+') {
+          e.preventDefault()
+          rendererRef.current?.zoomIn()
+          return
+        }
+        if (e.key === '-') {
+          e.preventDefault()
+          rendererRef.current?.zoomOut()
+          return
+        }
+        if (e.key === '0') {
+          e.preventDefault()
+          rendererRef.current?.resetZoom()
           return
         }
         return
@@ -219,10 +293,14 @@ function App() {
         toolsRef.current.deleteSelection()
       } else if (e.key === 'Escape') {
         e.preventDefault()
-        if (showPalette) {
+        if (showGoToDialog) {
+          setShowGoToDialog(false)
+        } else if (contextMenu) {
+          setContextMenu(null)
+        } else if (showPalette) {
           setShowPalette(false)
-        } else if (selectedTile) {
-          setSelectedTile(null)
+        } else if (selectedTilePos) {
+          setSelectedTilePos(null)
           rendererRef.current?.deselectTile()
         }
       } else if (e.key === 'p' || e.key === 'P') {
@@ -241,7 +319,129 @@ function App() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [handleFloorChange, showPalette, selectedTile])
+  }, [handleFloorChange, showPalette, selectedTilePos, contextMenu, showGoToDialog])
+
+  function buildContextMenuGroups(): ContextMenuGroup[] {
+    if (!contextMenu) return []
+    const { tilePos, tile } = contextMenu
+    const renderer = rendererRef.current
+    const currentTools = toolsRef.current
+
+    const isInSelection = currentTools.selection.some(
+      s => s.x === tilePos.x && s.y === tilePos.y && s.z === tilePos.z,
+    )
+
+    // Clipboard group
+    const clipboardGroup: ContextMenuGroup = {
+      items: [
+        {
+          label: 'Copy',
+          shortcut: 'Ctrl+C',
+          disabled: !tile,
+          onClick: () => {
+            if (!isInSelection) currentTools.selectTiles([tilePos])
+            currentTools.copy()
+          },
+        },
+        {
+          label: 'Cut',
+          shortcut: 'Ctrl+X',
+          disabled: !tile,
+          onClick: () => {
+            if (!isInSelection) currentTools.selectTiles([tilePos])
+            currentTools.copy()
+            currentTools.deleteSelection()
+          },
+        },
+        {
+          label: 'Paste',
+          shortcut: 'Ctrl+V',
+          disabled: !currentTools.clipboard,
+          onClick: () => {
+            currentTools.selectTiles([tilePos])
+            currentTools.paste()
+          },
+        },
+        {
+          label: 'Delete',
+          shortcut: 'Del',
+          disabled: !tile,
+          onClick: () => {
+            if (!isInSelection) currentTools.selectTiles([tilePos])
+            currentTools.deleteSelection()
+          },
+        },
+      ],
+    }
+
+    // Position group
+    const positionGroup: ContextMenuGroup = {
+      items: [
+        {
+          label: 'Copy Position',
+          onClick: () => {
+            navigator.clipboard.writeText(`{x=${tilePos.x}, y=${tilePos.y}, z=${tilePos.z}}`)
+          },
+        },
+        ...(tile
+          ? [{
+              label: 'Browse Tile',
+              onClick: () => {
+                renderer?.onTileClick?.(tile, tilePos.x, tilePos.y)
+              },
+            }]
+          : []),
+      ],
+    }
+
+    // Item info group
+    const topItem = tile?.items?.[tile.items.length - 1]
+    const itemInfoGroup: ContextMenuGroup = {
+      items: topItem && itemRegistry && appearancesData
+        ? [
+            {
+              label: 'Copy Top Item ID',
+              onClick: () => {
+                navigator.clipboard.writeText(String(topItem.id))
+              },
+            },
+            {
+              label: 'Copy Top Item Name',
+              onClick: () => {
+                navigator.clipboard.writeText(
+                  getItemDisplayName(topItem.id, itemRegistry!, appearancesData!),
+                )
+              },
+            },
+          ]
+        : [],
+    }
+
+    // Teleport group — find first item with teleportDestination
+    const teleportItem = tile?.items?.find(i => i.teleportDestination)
+    const dest = teleportItem?.teleportDestination
+    const teleportGroup: ContextMenuGroup = {
+      items: dest && renderer
+        ? [
+            {
+              label: 'Go to Destination',
+              onClick: () => {
+                renderer!.setFloor(dest.z)
+                renderer!.centerOn(dest.x, dest.y)
+              },
+            },
+            {
+              label: 'Copy Destination',
+              onClick: () => {
+                navigator.clipboard.writeText(`{x=${dest.x}, y=${dest.y}, z=${dest.z}}`)
+              },
+            },
+          ]
+        : [],
+    }
+
+    return [clipboardGroup, positionGroup, itemInfoGroup, teleportGroup]
+  }
 
   if (error) {
     return (
@@ -299,6 +499,39 @@ function App() {
           selectedItemId={tools.selectedItemId}
           appearances={appearancesData}
           registry={itemRegistry}
+          onCut={tools.cut}
+          onCopy={tools.copy}
+          onPaste={tools.paste}
+          onDelete={tools.deleteSelection}
+          canPaste={!!tools.clipboard}
+          hasSelection={tools.selection.length > 0}
+          onGoToPosition={() => setShowGoToDialog(true)}
+          showPalette={showPalette}
+          onTogglePalette={() => setShowPalette(prev => !prev)}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onResetZoom={handleResetZoom}
+        />
+      )}
+
+      {/* Context menu */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          groups={buildContextMenuGroups()}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Go to position dialog */}
+      {showGoToDialog && (
+        <GoToPositionDialog
+          currentX={camera.x}
+          currentY={camera.y}
+          currentZ={camera.floor}
+          onNavigate={handleGoToPosition}
+          onClose={() => setShowGoToDialog(false)}
         />
       )}
 
@@ -316,13 +549,17 @@ function App() {
         />
       )}
 
-      {/* Inspector panel — left side (offset right when palette is open) */}
-      {!loading && selectedTile && itemRegistry && appearancesData && (
+      {/* Browse Tile panel — left side (offset right when palette is open) */}
+      {!loading && selectedTilePos && itemRegistry && appearancesData && mapData && mutatorReady && (
         <Inspector
-          tile={selectedTile}
+          tilePos={selectedTilePos}
+          mapData={mapData}
+          tileVersion={tileVersion}
           registry={itemRegistry}
           appearances={appearancesData}
+          mutator={mutatorReady}
           onClose={handleCloseInspector}
+          onSelectAsBrush={handleSelectAsBrush}
           offset={showPalette}
         />
       )}
@@ -332,12 +569,12 @@ function App() {
         <div className="panel" style={{
           position: 'absolute',
           bottom: 'var(--space-4)',
-          left: showPalette && selectedTile
-            ? 'calc(var(--space-4) + 320px + var(--space-3) + 300px + var(--space-3))'
+          left: showPalette && selectedTilePos
+            ? 'calc(var(--space-4) + 320px + var(--space-3) + 400px + var(--space-3))'
             : showPalette
               ? 'calc(var(--space-4) + 320px + var(--space-3))'
-              : selectedTile
-                ? 'calc(var(--space-4) + 300px + var(--space-3))'
+              : selectedTilePos
+                ? 'calc(var(--space-4) + 400px + var(--space-3))'
                 : 'var(--space-4)',
           display: 'flex',
           alignItems: 'center',
@@ -356,26 +593,6 @@ function App() {
               <HudField label="TILES" value={mapInfo.tiles.toLocaleString()} />
             </>
           )}
-          <div className="separator-v" style={{ height: 16, flexShrink: 0 }} />
-          {/* Palette toggle button */}
-          <button
-            className="btn btn-icon"
-            onClick={() => setShowPalette(prev => !prev)}
-            title="Item palette (P)"
-            style={{
-              border: 'none',
-              background: 'transparent',
-              color: showPalette ? 'var(--accent)' : undefined,
-              pointerEvents: 'auto',
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
-              <rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
-              <rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
-              <rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
-            </svg>
-          </button>
         </div>
       )}
 
@@ -389,7 +606,7 @@ function App() {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          padding: 'var(--space-2)',
+          padding: 'var(--space-3)',
           gap: 'var(--space-1)',
         }}>
           <button
@@ -398,7 +615,7 @@ function App() {
             title="Floor up (PageUp)"
             style={{ border: 'none', background: 'transparent' }}
           >
-            <svg width="12" height="8" viewBox="0 0 12 8" fill="none">
+            <svg width="16" height="10" viewBox="0 0 12 8" fill="none">
               <path d="M1 6.5L6 1.5L11 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
@@ -407,11 +624,11 @@ function App() {
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            padding: 'var(--space-2) var(--space-4)',
-            gap: 1,
+            padding: 'var(--space-2) var(--space-5)',
+            gap: 2,
           }}>
-            <span className="label" style={{ fontSize: 8, lineHeight: 1 }}>FLOOR</span>
-            <span className="value value-accent" style={{ fontSize: 'var(--text-xl)', fontWeight: 500, lineHeight: 1 }}>
+            <span className="label" style={{ fontSize: 10, lineHeight: 1 }}>FLOOR</span>
+            <span className="value value-accent" style={{ fontSize: 'var(--text-2xl)', fontWeight: 500, lineHeight: 1 }}>
               {camera.floor}
             </span>
           </div>
@@ -422,7 +639,7 @@ function App() {
             title="Floor down (PageDown)"
             style={{ border: 'none', background: 'transparent' }}
           >
-            <svg width="12" height="8" viewBox="0 0 12 8" fill="none">
+            <svg width="16" height="10" viewBox="0 0 12 8" fill="none">
               <path d="M1 1.5L6 6.5L11 1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
@@ -440,7 +657,7 @@ function App() {
               color: camera.floorViewMode === 'single' ? 'var(--accent)' : undefined,
             }}
           >
-            <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
+            <svg width="18" height="13" viewBox="0 0 14 10" fill="none">
               <path d="M7 2L1 5L7 8L13 5L7 2Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
             </svg>
           </button>
@@ -455,7 +672,7 @@ function App() {
               color: camera.floorViewMode === 'current-below' ? 'var(--accent)' : undefined,
             }}
           >
-            <svg width="14" height="12" viewBox="0 0 14 12" fill="none">
+            <svg width="18" height="16" viewBox="0 0 14 12" fill="none">
               <path d="M7 1L1 4L7 7L13 4L7 1Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
               <path d="M1 7.5L7 10.5L13 7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
@@ -471,7 +688,7 @@ function App() {
               color: camera.floorViewMode === 'all' ? 'var(--accent)' : undefined,
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
               <path d="M7 1L1 4L7 7L13 4L7 1Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
               <path d="M1 7L7 10L13 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
               <path d="M1 10L7 13L13 10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -491,7 +708,7 @@ function App() {
               color: camera.showTransparentUpper ? 'var(--accent)' : undefined,
             }}
           >
-            <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
+            <svg width="18" height="13" viewBox="0 0 14 10" fill="none">
               <path d="M1 5C1 5 3.5 1 7 1C10.5 1 13 5 13 5C13 5 10.5 9 7 9C3.5 9 1 5 1 5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
               <circle cx="7" cy="5" r="2" stroke="currentColor" strokeWidth="1.2"/>
             </svg>

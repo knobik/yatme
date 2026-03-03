@@ -61,6 +61,29 @@ export class Camera {
     this.y = y * TILE_SIZE - this.screen.height / (2 * this._zoom)
   }
 
+  /** Set zoom to a specific level, keeping the viewport center stable. */
+  setZoom(level: number, screenWidth: number, screenHeight: number): void {
+    // Find the nearest ZOOM_LEVELS entry
+    let bestIdx = 0
+    let bestDist = Math.abs(ZOOM_LEVELS[0] - level)
+    for (let i = 1; i < ZOOM_LEVELS.length; i++) {
+      const dist = Math.abs(ZOOM_LEVELS[i] - level)
+      if (dist < bestDist) { bestDist = dist; bestIdx = i }
+    }
+    const newZoom = ZOOM_LEVELS[bestIdx]
+    if (newZoom === this._zoom) return
+
+    // Compute world center before zoom change
+    const centerWorldX = this.x + screenWidth / (2 * this._zoom)
+    const centerWorldY = this.y + screenHeight / (2 * this._zoom)
+
+    this._zoom = newZoom
+
+    // Restore center after zoom change
+    this.x = centerWorldX - screenWidth / (2 * this._zoom)
+    this.y = centerWorldY - screenHeight / (2 * this._zoom)
+  }
+
   /** Zoom to the next discrete level, anchoring at a screen point. */
   zoomAt(screenX: number, screenY: number, deltaY: number): void {
     const worldBeforeX = this.x + screenX / this._zoom

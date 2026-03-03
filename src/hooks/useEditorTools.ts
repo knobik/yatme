@@ -24,8 +24,10 @@ export interface EditorToolsState {
   undo: () => void
   redo: () => void
   copy: () => void
+  cut: () => void
   paste: () => void
   deleteSelection: () => void
+  selectTiles: (tiles: { x: number; y: number; z: number }[]) => void
 }
 
 export function useEditorTools(
@@ -169,12 +171,13 @@ export function useEditorTools(
   const redo = useCallback(() => { mutator?.redo() }, [mutator])
 
   const copy = useCallback(() => {
-    if (!mapData || selection.length === 0) return
-    const minX = Math.min(...selection.map(s => s.x))
-    const minY = Math.min(...selection.map(s => s.y))
-    const z = selection[0].z
+    const sel = selectionRef.current
+    if (!mapData || sel.length === 0) return
+    const minX = Math.min(...sel.map(s => s.x))
+    const minY = Math.min(...sel.map(s => s.y))
+    const z = sel[0].z
     const tiles: ClipboardData['tiles'] = []
-    for (const s of selection) {
+    for (const s of sel) {
       const tile = mapData.tiles.get(`${s.x},${s.y},${s.z}`)
       if (tile && tile.items.length > 0) {
         tiles.push({
@@ -187,13 +190,14 @@ export function useEditorTools(
     if (tiles.length > 0) {
       setClipboard({ originX: minX, originY: minY, z, tiles })
     }
-  }, [mapData, selection])
+  }, [mapData])
 
   const paste = useCallback(() => {
     if (!clipboard || !mutator || !renderer) return
+    const sel = selectionRef.current
     // Paste at the first selected tile, or at clipboard origin if no selection
-    const targetX = selection.length > 0 ? selection[0].x : clipboard.originX
-    const targetY = selection.length > 0 ? selection[0].y : clipboard.originY
+    const targetX = sel.length > 0 ? sel[0].x : clipboard.originX
+    const targetY = sel.length > 0 ? sel[0].y : clipboard.originY
     const targetZ = renderer.floor
 
     mutator.beginBatch('Paste')
@@ -205,18 +209,31 @@ export function useEditorTools(
       if (tile) renderer.updateChunkIndex(tile)
     }
     mutator.commitBatch()
-  }, [clipboard, mutator, renderer, selection])
+  }, [clipboard, mutator, renderer])
 
   const deleteSelection = useCallback(() => {
-    if (!mutator || !renderer || selection.length === 0) return
+    const sel = selectionRef.current
+    if (!mutator || !renderer || sel.length === 0) return
     mutator.beginBatch('Delete selection')
-    for (const s of selection) {
+    for (const s of sel) {
       mutator.setTileItems(s.x, s.y, s.z, [])
     }
     mutator.commitBatch()
     setSelection([])
+    selectionRef.current = []
     renderer.clearSelectionOverlay()
-  }, [mutator, renderer, selection])
+  }, [mutator, renderer])
+
+  const cut = useCallback(() => {
+    copy()
+    deleteSelection()
+  }, [copy, deleteSelection])
+
+  const selectTiles = useCallback((tiles: { x: number; y: number; z: number }[]) => {
+    setSelection(tiles)
+    selectionRef.current = tiles
+    renderer?.updateSelectionOverlay(tiles)
+  }, [renderer])
 
   return {
     activeTool,
@@ -230,7 +247,9 @@ export function useEditorTools(
     undo,
     redo,
     copy,
+    cut,
     paste,
     deleteSelection,
+    selectTiles,
   }
 }

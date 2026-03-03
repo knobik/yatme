@@ -34,6 +34,8 @@ Place/remove items, selection, copy/paste, undo/redo.
 ### Phase 8 — Save/Export
 Serialize map back to OTBM, file download.
 
+**Item order translation required:** Internally we store and render items in RME-style forward order (last item in array = drawn last = visually on top). OTClient/server expects the opposite for common items (first common item = visually on top, rendered via `std::ranges::reverse_view`). When writing OTBM files, common items within each tile must be reversed so the exported map renders correctly in OTClient and the game server.
+
 ## References
 - OTBM format: `vendor/otclient/src/client/mapio.cpp`, `vendor/remeres-map-editor/source/iomap_otbm.cpp`
 - Appearances: `vendor/otclient/src/client/thingtypemanager.cpp`

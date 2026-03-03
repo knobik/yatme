@@ -13,9 +13,9 @@ function deepCloneItems(items: OtbmItem[]): OtbmItem[] {
 }
 
 // Item draw-layer classification — matches MapRenderer.renderTile() logic
-type DrawLayer = 'ground' | 'bottom' | 'common' | 'top'
+export type DrawLayer = 'ground' | 'bottom' | 'common' | 'top'
 
-function classifyItem(itemId: number, appearances: AppearanceData): DrawLayer {
+export function classifyItem(itemId: number, appearances: AppearanceData): DrawLayer {
   const appearance = appearances.objects.get(itemId)
   const flags = appearance?.flags
   if (flags?.bank) return 'ground'
@@ -284,7 +284,8 @@ export class MapMutator {
 
   private findInsertIndex(tile: OtbmTile, layer: DrawLayer): number {
     // Layer order: ground → bottom → common → top
-    // Insert at the end of the item's layer section
+    // RME convention: render forward, last item in layer = drawn last = visually on top.
+    // Insert at the END of the layer section so new items appear on top.
     const layerOrder: DrawLayer[] = ['ground', 'bottom', 'common', 'top']
     const targetOrder = layerOrder.indexOf(layer)
 

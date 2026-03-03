@@ -214,6 +214,22 @@ export function ItemPalette({ registry, appearances, onClose, selectedItemId, on
                 key={item.id}
                 className={`item-cell${item.id === selectedItemId ? ' selected' : ''}`}
                 onClick={() => onItemSelect?.(item.id)}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('application/x-tibia-item', String(item.id))
+                  e.dataTransfer.effectAllowed = 'copy'
+                  const canvas = e.currentTarget.querySelector('canvas')
+                  if (canvas) {
+                    const ghost = canvas.cloneNode(true) as HTMLCanvasElement
+                    const ctx = ghost.getContext('2d')
+                    if (ctx) ctx.drawImage(canvas, 0, 0)
+                    ghost.style.position = 'fixed'
+                    ghost.style.left = '-9999px'
+                    document.body.appendChild(ghost)
+                    e.dataTransfer.setDragImage(ghost, 18, 18)
+                    requestAnimationFrame(() => document.body.removeChild(ghost))
+                  }
+                }}
                 title={`${item.name} (ID: ${item.id})`}
               >
                 <ItemSprite itemId={item.id} appearances={appearances} size={36} />
