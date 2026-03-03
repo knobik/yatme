@@ -1,8 +1,7 @@
 import { Application, Container, Sprite } from 'pixi.js'
 import { getTextureSync, preloadSheets } from './TextureManager'
 import type { AppearanceData } from './appearances'
-import type { Appearance } from '../proto/appearances'
-import type { SpriteInfo } from '../proto/appearances'
+import type { Appearance, SpriteInfo, SpriteAnimation } from '../proto/appearances'
 import type { OtbmMap, OtbmTile, OtbmItem } from './otbm'
 
 const TILE_SIZE = 32
@@ -24,14 +23,27 @@ const ZOOM_LEVELS = [
   2, 2.5, 3, 4, 5, 6, 8,
 ]
 
+/** Ref to an animated sprite for in-place texture updates (avoids chunk rebuild). */
+interface AnimatedSpriteRef {
+  sprite: Sprite
+  appearance: Appearance
+  item: OtbmItem
+  tile: OtbmTile
+}
+
 // ── Chunk index ─────────────────────────────────────────────────────
 
 function chunkKeyStr(cx: number, cy: number, z: number): string {
   return `${cx},${cy},${z}`
 }
 
-function buildChunkIndex(tiles: Map<string, OtbmTile>): Map<string, OtbmTile[]> {
+function buildChunkIndex(
+  tiles: Map<string, OtbmTile>,
+  appearances: AppearanceData,
+): { index: Map<string, OtbmTile[]>, animatedKeys: Set<string> } {
   const index = new Map<string, OtbmTile[]>()
+  const animatedKeys = new Set<string>()
+
   for (const tile of tiles.values()) {
     const cx = Math.floor(tile.x / CHUNK_SIZE)
     const cy = Math.floor(tile.y / CHUNK_SIZE)
@@ -42,8 +54,26 @@ function buildChunkIndex(tiles: Map<string, OtbmTile>): Map<string, OtbmTile[]> 
       index.set(key, arr)
     }
     arr.push(tile)
+
+    // Detect animated items for this chunk
+    if (!animatedKeys.has(key)) {
+      for (const item of tile.items) {
+        const appearance = appearances.objects.get(item.id)
+        const info = appearance?.frameGroup?.[0]?.spriteInfo
+        if (info?.animation && info.animation.spritePhase.length > 1) {
+          animatedKeys.add(key)
+          break
+        }
+      }
+    }
   }
-  return index
+
+  // Pre-sort each chunk's tiles by draw order (Y ascending, then X ascending)
+  // so buildChunkSync doesn't need to sort on every build
+  for (const arr of index.values()) {
+    arr.sort((a, b) => a.y - b.y || a.x - b.x)
+  }
+  return { index, animatedKeys }
 }
 
 // ── LRU chunk cache ─────────────────────────────────────────────────
@@ -51,6 +81,7 @@ function buildChunkIndex(tiles: Map<string, OtbmTile>): Map<string, OtbmTile[]> 
 class ChunkCache {
   private cache = new Map<string, Container>() // insertion-order = LRU order
   private maxSize: number
+  onEvict?: (key: string) => void // called when a chunk is destroyed (evicted or replaced)
 
   constructor(maxSize: number) {
     this.maxSize = maxSize
@@ -74,6 +105,7 @@ class ChunkCache {
       existing.removeChildren()
       existing.destroy()
       this.cache.delete(key)
+      this.onEvict?.(key)
     }
     this.cache.set(key, container)
     this.evict()
@@ -100,6 +132,7 @@ class ChunkCache {
       container.removeChildren()
       container.destroy()
       this.cache.delete(firstKey)
+      this.onEvict?.(firstKey)
     }
   }
 }
@@ -114,7 +147,7 @@ function getSpriteIndex(
   layer: number = 0,
   animPhase: number = 0,
 ): number {
-  const phases = info.animation?.spritesPhase?.length ?? 1
+  const phases = info.animation?.spritePhase?.length ?? 1
   const index =
     ((((animPhase % Math.max(1, phases)) * Math.max(1, info.patternDepth) + zPattern) *
       Math.max(1, info.patternHeight) +
@@ -130,6 +163,8 @@ function getItemSpriteId(
   appearance: Appearance,
   item: OtbmItem,
   tile: OtbmTile,
+  elapsedMs: number = 0,
+  overridePhase?: number,
 ): number | null {
   const info = appearance.frameGroup?.[0]?.spriteInfo
   if (!info || info.spriteId.length === 0) return null
@@ -175,7 +210,75 @@ function getItemSpriteId(
     zPattern = tile.z % pd
   }
 
-  return getSpriteIndex(info, xPattern, yPattern, zPattern)
+  // Compute animation phase
+  let animPhase = overridePhase ?? 0
+  if (overridePhase === undefined && info.animation && info.animation.spritePhase.length > 1) {
+    animPhase = getAnimationPhase(info.animation, elapsedMs)
+  }
+
+  return getSpriteIndex(info, xPattern, yPattern, zPattern, 0, animPhase)
+}
+
+// ── Animation phase calculation ─────────────────────────────────────
+
+/** Precompute average durations for an animation (avoids per-frame allocation). */
+function getAvgDurations(animation: SpriteAnimation): number[] {
+  return animation.spritePhase.map(p => (p.durationMin + p.durationMax) / 2)
+}
+
+/** Animation duration cache — keyed by animation object identity. */
+const animDurationCache = new WeakMap<SpriteAnimation, { durations: number[], total: number }>()
+
+function getCachedDurations(animation: SpriteAnimation): { durations: number[], total: number } {
+  let cached = animDurationCache.get(animation)
+  if (!cached) {
+    const durations = getAvgDurations(animation)
+    const total = durations.reduce((a, b) => a + b, 0)
+    cached = { durations, total }
+    animDurationCache.set(animation, cached)
+  }
+  return cached
+}
+
+function getAnimationPhase(animation: SpriteAnimation, elapsedMs: number): number {
+  const phases = animation.spritePhase
+  if (!phases || phases.length <= 1) return 0
+
+  const { durations, total } = getCachedDurations(animation)
+  if (total <= 0) return 0
+
+  if (animation.loopType === -1) { // PINGPONG
+    // Forward: 0,1,...,n-1; Backward: n-2,...,1 (skip endpoints to avoid double-counting)
+    let backwardDuration = 0
+    for (let i = phases.length - 2; i >= 1; i--) {
+      backwardDuration += durations[i]
+    }
+    const cycleDuration = total + backwardDuration
+    if (cycleDuration <= 0) return 0
+
+    const t = elapsedMs % cycleDuration
+    let accum = 0
+    // Forward pass
+    for (let i = 0; i < phases.length; i++) {
+      accum += durations[i]
+      if (t < accum) return i
+    }
+    // Backward pass
+    for (let i = phases.length - 2; i >= 1; i--) {
+      accum += durations[i]
+      if (t < accum) return i
+    }
+    return 0
+  }
+
+  // INFINITE or COUNTED (treat counted as infinite for map viewer)
+  const t = elapsedMs % total
+  let accum = 0
+  for (let i = 0; i < phases.length; i++) {
+    accum += durations[i]
+    if (t < accum) return i
+  }
+  return phases.length - 1
 }
 
 // ── MapRenderer ─────────────────────────────────────────────────────
@@ -185,7 +288,7 @@ export class MapRenderer {
   private mapContainer: Container
   private appearances: AppearanceData
   private chunkIndex: Map<string, OtbmTile[]>
-  mapData: OtbmMap
+  private readonly mapData: OtbmMap
 
   // Camera state
   private cameraX = 0 // world pixel position
@@ -218,6 +321,19 @@ export class MapRenderer {
   // Reusable per-frame collections (avoid GC pressure)
   private _allVisibleKeys = new Set<string>()
   private _allPrefetchKeys = new Set<string>()
+  // Reusable per-tile arrays (avoid allocations in renderTile hot path)
+  private _ground: OtbmItem[] = []
+  private _bottom: OtbmItem[] = []
+  private _common: OtbmItem[] = []
+  private _top: OtbmItem[] = []
+  private _drawOrder: OtbmItem[] = []
+
+  // Animation state
+  private _animStartTime: number
+  private _animElapsed = 0
+  private _animLastUpdate = 0
+  private _animatedChunkKeys: Set<string> // precomputed: which chunk keys have animations
+  private _chunkAnimSprites = new Map<string, AnimatedSpriteRef[]>() // active animated sprite refs
 
   // Callbacks for HUD updates
   onCameraChange?: (x: number, y: number, zoom: number, floor: number, floorViewMode: FloorViewMode, showTransparentUpper: boolean) => void
@@ -226,7 +342,11 @@ export class MapRenderer {
     this.app = app
     this.appearances = appearances
     this.mapData = mapData
-    this.chunkIndex = buildChunkIndex(mapData.tiles)
+    const { index, animatedKeys } = buildChunkIndex(mapData.tiles, appearances)
+    this.chunkIndex = index
+    this._animatedChunkKeys = animatedKeys
+    this._animStartTime = performance.now()
+    this.chunkCache.onEvict = (key) => this._chunkAnimSprites.delete(key)
 
     this.mapContainer = new Container()
     this.app.stage.addChild(this.mapContainer)
@@ -268,7 +388,9 @@ export class MapRenderer {
   setShowTransparentUpper(v: boolean): void {
     if (v === this._showTransparentUpper) return
     this._showTransparentUpper = v
-    this.recycleAllChunks()
+    // Only alpha changes — no need to rebuild chunks, just invalidate floor tracking
+    // so updateFloorContainers re-applies the correct alpha values next frame
+    this._lastVisibleFloors = []
     this.notifyCamera()
   }
 
@@ -435,7 +557,7 @@ export class MapRenderer {
 
       const offset = this.getFloorOffset(z)
       container.position.set(-offset, -offset)
-      container.alpha = z < this._floor ? FLOOR_ABOVE_ALPHA : 1.0
+      container.alpha = (z < this._floor && this._showTransparentUpper) ? FLOOR_ABOVE_ALPHA : 1.0
     }
 
     // Re-add to mapContainer in correct Z-order (back-to-front)
@@ -464,22 +586,16 @@ export class MapRenderer {
 
   /** Build a range key string for dirty checking. */
   private computeRangeKey(visibleFloors: number[]): string {
-    const screenW = this.app.screen.width
-    const screenH = this.app.screen.height
-    // Compute the bounding chunk range across all visible floors
     let minSX = Infinity, minSY = Infinity, maxEX = -Infinity, maxEY = -Infinity
     for (const z of visibleFloors) {
       const offset = this.getFloorOffset(z)
-      const sx = Math.floor((this.cameraX + offset) / CHUNK_PX) - 1
-      const sy = Math.floor((this.cameraY + offset) / CHUNK_PX) - 1
-      const ex = Math.floor((this.cameraX + offset + screenW / this._zoom) / CHUNK_PX) + 1
-      const ey = Math.floor((this.cameraY + offset + screenH / this._zoom) / CHUNK_PX) + 1
-      if (sx < minSX) minSX = sx
-      if (sy < minSY) minSY = sy
-      if (ex > maxEX) maxEX = ex
-      if (ey > maxEY) maxEY = ey
+      const { startX, startY, endX, endY } = this.getVisibleRangeForFloor(offset)
+      if (startX < minSX) minSX = startX
+      if (startY < minSY) minSY = startY
+      if (endX > maxEX) maxEX = endX
+      if (endY > maxEY) maxEY = endY
     }
-    return `${minSX},${minSY},${maxEX},${maxEY},${this._floor},${this._floorViewMode},${this._showTransparentUpper}`
+    return `${minSX},${minSY},${maxEX},${maxEY},${this._floor},${this._floorViewMode}`
   }
 
   private update(): void {
@@ -489,6 +605,9 @@ export class MapRenderer {
       Math.round(-this.cameraY * this._zoom),
     )
     this.mapContainer.scale.set(this._zoom)
+
+    // Animation elapsed time (consistent across all chunks this frame)
+    this._animElapsed = performance.now() - this._animStartTime
 
     const visibleFloors = this.getVisibleFloors()
 
@@ -569,11 +688,14 @@ export class MapRenderer {
           if (!tiles || tiles.length === 0) continue
 
           const container = new Container()
-          this.buildChunkSync(container, tiles)
+          const animSprites = this.buildChunkSync(container, tiles, this._animElapsed)
           container.cacheAsTexture({ scaleMode: 'nearest', antialias: false })
+          if (animSprites.length > 0) {
+            this._chunkAnimSprites.set(key, animSprites)
+          }
           floorContainer.addChild(container)
           this.activeChunks.set(key, container)
-          this.preloadAndRebuild(container, tiles)
+          this.preloadAndRebuild(container, tiles, key)
 
           if (performance.now() - frameStart > CHUNK_BUILD_BUDGET_MS) {
             budgetExhausted = true
@@ -582,6 +704,9 @@ export class MapRenderer {
         }
       }
     }
+
+    // Update animated sprite textures in-place, then re-render affected chunk caches
+    this.updateAnimatedSprites()
 
     // Queue prefetch chunks and process build queue only when range changed
     if (rangeChanged) {
@@ -599,6 +724,39 @@ export class MapRenderer {
     this.processBuildQueue(frameStart)
   }
 
+  /** Update animated sprite textures in-place and re-render affected chunk caches. */
+  private updateAnimatedSprites(): void {
+    if (this._chunkAnimSprites.size === 0) return
+
+    // Throttle to ~100ms intervals (most Tibia animations are 100-500ms per phase)
+    const timeSinceUpdate = this._animElapsed - this._animLastUpdate
+    if (timeSinceUpdate < 100) return
+    this._animLastUpdate = this._animElapsed
+
+    for (const [key, sprites] of this._chunkAnimSprites) {
+      // Only update active (on-screen) chunks
+      const container = this.activeChunks.get(key)
+      if (!container) continue
+
+      // Swap textures on animated sprites, track if anything changed
+      let changed = false
+      for (const ref of sprites) {
+        const spriteId = getItemSpriteId(ref.appearance, ref.item, ref.tile, this._animElapsed)
+        if (spriteId == null || spriteId === 0) continue
+        const texture = getTextureSync(spriteId)
+        if (texture && texture !== ref.sprite.texture) {
+          ref.sprite.texture = texture
+          changed = true
+        }
+      }
+
+      // Only re-render the cache if at least one sprite changed
+      if (changed && container.isCachedAsTexture) {
+        container.updateCacheTexture()
+      }
+    }
+  }
+
   private processBuildQueue(frameStart: number): void {
     while (this.buildQueueReadIdx < this.buildQueue.length) {
       if (performance.now() - frameStart > CHUNK_BUILD_BUDGET_MS) break
@@ -613,8 +771,11 @@ export class MapRenderer {
 
       // Pre-build into cache (not on screen yet)
       const container = new Container()
-      this.buildChunkSync(container, tiles)
-      this.preloadAndRebuild(container, tiles)
+      const animSprites = this.buildChunkSync(container, tiles, this._animElapsed)
+      if (animSprites.length > 0) {
+        this._chunkAnimSprites.set(key, animSprites)
+      }
+      this.preloadAndRebuild(container, tiles, key)
 
       // Store in cache for instant retrieval later
       this.chunkCache.set(key, container)
@@ -636,6 +797,7 @@ export class MapRenderer {
       container.destroy()
     }
     this.activeChunks.clear()
+    this._chunkAnimSprites.clear()
     this.chunkCache.clear()
     this.buildQueue.length = 0
     this.buildQueueReadIdx = 0
@@ -653,30 +815,42 @@ export class MapRenderer {
 
   // ── Chunk building ──────────────────────────────────────────────
 
-  private buildChunkSync(container: Container, tiles: OtbmTile[]): void {
-    // Sort tiles by draw order: Y ascending, then X ascending.
-    const sorted = tiles.slice().sort((a, b) => a.y - b.y || a.x - b.x)
-    for (const tile of sorted) {
-      this.renderTile(container, tile)
+  private buildChunkSync(container: Container, tiles: OtbmTile[], elapsedMs: number): AnimatedSpriteRef[] {
+    // Tiles are pre-sorted in buildChunkIndex (Y ascending, then X ascending)
+    const animSprites: AnimatedSpriteRef[] = []
+    for (const tile of tiles) {
+      this.renderTile(container, tile, elapsedMs, animSprites)
     }
+    return animSprites
   }
 
-  private preloadAndRebuild(container: Container, tiles: OtbmTile[]): void {
+  private preloadAndRebuild(container: Container, tiles: OtbmTile[], chunkKey: string): void {
     const spriteIds: number[] = []
     for (const tile of tiles) {
       for (const item of tile.items) {
         const appearance = this.appearances.objects.get(item.id)
         if (!appearance) continue
-        const sid = getItemSpriteId(appearance, item, tile)
-        if (sid != null && sid !== 0) spriteIds.push(sid)
+        const info = appearance.frameGroup?.[0]?.spriteInfo
+        if (!info || info.spriteId.length === 0) continue
+        // Collect sprites for ALL animation phases so they're preloaded
+        const phaseCount = info.animation?.spritePhase?.length ?? 1
+        for (let phase = 0; phase < phaseCount; phase++) {
+          const sid = getItemSpriteId(appearance, item, tile, 0, phase)
+          if (sid != null && sid !== 0) spriteIds.push(sid)
+        }
       }
     }
 
     if (spriteIds.length > 0) {
       preloadSheets(spriteIds).then(() => {
+        const elapsed = performance.now() - this._animStartTime
         container.removeChildren()
-        this.buildChunkSync(container, tiles)
-        // Update the cached texture with newly loaded sprites
+        const animSprites = this.buildChunkSync(container, tiles, elapsed)
+        // Refresh animation tracking (old sprite refs are stale after rebuild)
+        if (animSprites.length > 0) {
+          this._chunkAnimSprites.set(chunkKey, animSprites)
+        }
+        // Update the cached texture (only for static chunks)
         if (container.isCachedAsTexture) {
           container.updateCacheTexture()
         }
@@ -684,15 +858,20 @@ export class MapRenderer {
     }
   }
 
-  private renderTile(parent: Container, tile: OtbmTile): void {
+  private renderTile(
+    parent: Container,
+    tile: OtbmTile,
+    elapsedMs: number,
+    animSprites?: AnimatedSpriteRef[],
+  ): void {
     const baseX = tile.x * TILE_SIZE
     const baseY = tile.y * TILE_SIZE
 
-    // Sort items by draw order
-    const ground: OtbmItem[] = []
-    const bottom: OtbmItem[] = []
-    const common: OtbmItem[] = []
-    const top: OtbmItem[] = []
+    // Sort items by draw order — reuse class-level arrays to avoid allocations
+    const ground = this._ground; ground.length = 0
+    const bottom = this._bottom; bottom.length = 0
+    const common = this._common; common.length = 0
+    const top = this._top; top.length = 0
 
     for (const item of tile.items) {
       const appearance = this.appearances.objects.get(item.id)
@@ -711,13 +890,17 @@ export class MapRenderer {
     let elevation = 0
     // OTClient draws: ground → bottom (forward), common (REVERSE), top
     common.reverse()
-    const drawOrder = [...ground, ...bottom, ...common, ...top]
+    const drawOrder = this._drawOrder; drawOrder.length = 0
+    for (let i = 0; i < ground.length; i++) drawOrder.push(ground[i])
+    for (let i = 0; i < bottom.length; i++) drawOrder.push(bottom[i])
+    for (let i = 0; i < common.length; i++) drawOrder.push(common[i])
+    for (let i = 0; i < top.length; i++) drawOrder.push(top[i])
 
     for (const item of drawOrder) {
       const appearance = this.appearances.objects.get(item.id)
       if (!appearance) continue
 
-      const spriteId = getItemSpriteId(appearance, item, tile)
+      const spriteId = getItemSpriteId(appearance, item, tile, elapsedMs)
       if (spriteId == null || spriteId === 0) continue
 
       const texture = getTextureSync(spriteId)
@@ -732,6 +915,14 @@ export class MapRenderer {
       sprite.y = baseY + TILE_SIZE - texture.height - elevation - (shift?.y ?? 0)
 
       parent.addChild(sprite)
+
+      // Track animated sprites for in-place texture updates
+      if (animSprites) {
+        const info = appearance.frameGroup?.[0]?.spriteInfo
+        if (info?.animation && info.animation.spritePhase.length > 1) {
+          animSprites.push({ sprite, appearance, item, tile })
+        }
+      }
 
       // Accumulate elevation
       if (appearance.flags?.height?.elevation) {
