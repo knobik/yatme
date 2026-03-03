@@ -115,6 +115,18 @@ class ChunkCache {
     return this.cache.has(key)
   }
 
+  /** Evict and destroy a specific entry. */
+  delete(key: string): void {
+    const container = this.cache.get(key)
+    if (container) {
+      if (container.isCachedAsTexture) container.cacheAsTexture(false)
+      container.removeChildren()
+      container.destroy()
+      this.cache.delete(key)
+      this.onEvict?.(key)
+    }
+  }
+
   clear(): void {
     for (const container of this.cache.values()) {
       if (container.isCachedAsTexture) container.cacheAsTexture(false)
@@ -343,9 +355,17 @@ export class MapRenderer {
   private _highlightContainer: Container
   private _dragDist = 0
 
+  // Multi-tile selection overlay
+  private _selectionGraphics: Graphics
+  private _selectionTiles: { x: number; y: number; z: number }[] = []
+
   // Callbacks
   onCameraChange?: (x: number, y: number, zoom: number, floor: number, floorViewMode: FloorViewMode, showTransparentUpper: boolean) => void
   onTileClick?: (tile: OtbmTile | null, worldX: number, worldY: number) => void
+  // Tool-aware pointer callbacks (left-click only)
+  onTilePointerDown?: (pos: { x: number; y: number; z: number }, event: PointerEvent) => void
+  onTilePointerMove?: (pos: { x: number; y: number; z: number }, event: PointerEvent) => void
+  onTilePointerUp?: (pos: { x: number; y: number; z: number }, event: PointerEvent) => void
 
   constructor(app: Application, appearances: AppearanceData, mapData: OtbmMap) {
     this.app = app
@@ -364,7 +384,10 @@ export class MapRenderer {
     this._highlightContainer = new Container()
     this._highlightGraphics = new Graphics()
     this._highlightGraphics.visible = false
+    this._selectionGraphics = new Graphics()
+    this._selectionGraphics.visible = false
     this._highlightContainer.addChild(this._highlightGraphics)
+    this._highlightContainer.addChild(this._selectionGraphics)
     this.mapContainer.addChild(this._highlightContainer)
 
     this.setupInput()
@@ -417,6 +440,94 @@ export class MapRenderer {
     this.notifyCamera()
   }
 
+  // ── Editor support ──────────────────────────────────────────────
+
+  /** Invalidate specific chunks, forcing them to rebuild on next frame. */
+  invalidateChunks(keys: Set<string>): void {
+    for (const key of keys) {
+      // Destroy active on-screen chunk
+      const active = this.activeChunks.get(key)
+      if (active) {
+        active.cacheAsTexture(false)
+        active.parent?.removeChild(active)
+        active.removeChildren()
+        active.destroy()
+        this.activeChunks.delete(key)
+      }
+      // Evict from LRU cache
+      this.chunkCache.delete(key)
+      // Clear stale animation refs
+      this._chunkAnimSprites.delete(key)
+    }
+    // Force range re-evaluation on next frame
+    this._lastRangeKey = ''
+  }
+
+  /** Update the chunk index when a tile is created or modified. */
+  updateChunkIndex(tile: OtbmTile): void {
+    const cx = Math.floor(tile.x / CHUNK_SIZE)
+    const cy = Math.floor(tile.y / CHUNK_SIZE)
+    const key = chunkKeyStr(cx, cy, tile.z)
+    let arr = this.chunkIndex.get(key)
+    if (!arr) {
+      arr = []
+      this.chunkIndex.set(key, arr)
+    }
+    const existing = arr.findIndex(t => t.x === tile.x && t.y === tile.y)
+    if (existing >= 0) {
+      arr[existing] = tile
+    } else {
+      arr.push(tile)
+      arr.sort((a, b) => a.y - b.y || a.x - b.x)
+    }
+    // Update animated keys tracking
+    let hasAnim = false
+    for (const t of arr) {
+      for (const item of t.items) {
+        const appearance = this.appearances.objects.get(item.id)
+        const info = appearance?.frameGroup?.[0]?.spriteInfo
+        if (info?.animation && info.animation.spritePhase.length > 1) {
+          hasAnim = true
+          break
+        }
+      }
+      if (hasAnim) break
+    }
+    if (hasAnim) this._animatedChunkKeys.add(key)
+  }
+
+  /** Set multi-tile selection overlay. */
+  updateSelectionOverlay(tiles: { x: number; y: number; z: number }[]): void {
+    this._selectionTiles = tiles
+    const g = this._selectionGraphics
+    g.clear()
+    if (tiles.length === 0) {
+      g.visible = false
+      return
+    }
+    for (const t of tiles) {
+      if (t.z !== this._floor) continue
+      const px = t.x * TILE_SIZE
+      const py = t.y * TILE_SIZE
+      g.rect(px, py, TILE_SIZE, TILE_SIZE)
+      g.stroke({ color: 0xd4a549, width: 1, alpha: 0.7 })
+      g.rect(px + 1, py + 1, TILE_SIZE - 2, TILE_SIZE - 2)
+      g.fill({ color: 0xd4a549, alpha: 0.08 })
+    }
+    g.visible = true
+  }
+
+  clearSelectionOverlay(): void {
+    this._selectionTiles = []
+    this._selectionGraphics.clear()
+    this._selectionGraphics.visible = false
+  }
+
+  /** Change the canvas cursor style. */
+  setCursorStyle(style: string): void {
+    (this.app.canvas as HTMLCanvasElement).style.cursor = style
+  }
+
   // ── Tile selection ──────────────────────────────────────────────
 
   getTileAt(screenX: number, screenY: number): { x: number; y: number; z: number } {
@@ -453,6 +564,11 @@ export class MapRenderer {
     // Position highlight container with the same floor offset
     const offset = this.getFloorOffset(this._floor)
     this._highlightContainer.position.set(-offset, -offset)
+
+    // Re-render selection overlay if floor changed
+    if (this._selectionTiles.length > 0) {
+      this.updateSelectionOverlay(this._selectionTiles)
+    }
   }
 
   // ── Floor helpers ────────────────────────────────────────────────
@@ -495,16 +611,38 @@ export class MapRenderer {
 
   private setupInput(): void {
     const canvas = this.app.canvas as HTMLCanvasElement
+    let activeButton = -1
+    let toolFired = false
 
     canvas.addEventListener('pointerdown', (e) => {
-      if (e.button === 0 || e.button === 1) {
+      if (e.button === 1) {
+        // Middle mouse: always pan
         this.dragging = true
         this._dragDist = 0
         this.dragStartX = e.clientX
         this.dragStartY = e.clientY
         this.cameraStartX = this.cameraX
         this.cameraStartY = this.cameraY
+        activeButton = 1
         canvas.setPointerCapture(e.pointerId)
+      } else if (e.button === 0) {
+        // Left mouse: tool callbacks or pan fallback
+        this.dragging = true
+        this._dragDist = 0
+        this.dragStartX = e.clientX
+        this.dragStartY = e.clientY
+        this.cameraStartX = this.cameraX
+        this.cameraStartY = this.cameraY
+        activeButton = 0
+        toolFired = false
+        canvas.setPointerCapture(e.pointerId)
+
+        if (this.onTilePointerDown) {
+          const rect = canvas.getBoundingClientRect()
+          const pos = this.getTileAt(e.clientX - rect.left, e.clientY - rect.top)
+          this.onTilePointerDown(pos, e)
+          toolFired = true
+        }
       }
     })
 
@@ -513,18 +651,40 @@ export class MapRenderer {
       const dx = e.clientX - this.dragStartX
       const dy = e.clientY - this.dragStartY
       this._dragDist = Math.sqrt(dx * dx + dy * dy)
-      this.cameraX = this.cameraStartX - dx / this._zoom
-      this.cameraY = this.cameraStartY - dy / this._zoom
-      this.notifyCamera()
+
+      if (activeButton === 1) {
+        // Middle mouse: always pan
+        this.cameraX = this.cameraStartX - dx / this._zoom
+        this.cameraY = this.cameraStartY - dy / this._zoom
+        this.notifyCamera()
+      } else if (activeButton === 0) {
+        if (toolFired && this.onTilePointerMove) {
+          // Left mouse with tool: forward to tool callback
+          const rect = canvas.getBoundingClientRect()
+          const pos = this.getTileAt(e.clientX - rect.left, e.clientY - rect.top)
+          this.onTilePointerMove(pos, e)
+        } else if (!toolFired) {
+          // Left mouse without tool: pan
+          this.cameraX = this.cameraStartX - dx / this._zoom
+          this.cameraY = this.cameraStartY - dy / this._zoom
+          this.notifyCamera()
+        }
+      }
     })
 
     canvas.addEventListener('pointerup', (e) => {
-      if (this.dragging) {
-        const wasClick = this._dragDist < 4
-        this.dragging = false
-        canvas.releasePointerCapture(e.pointerId)
+      if (!this.dragging) return
+      const wasClick = this._dragDist < 4
+      this.dragging = false
+      canvas.releasePointerCapture(e.pointerId)
 
-        if (wasClick && e.button === 0) {
+      if (activeButton === 0) {
+        if (toolFired && this.onTilePointerUp) {
+          const rect = canvas.getBoundingClientRect()
+          const pos = this.getTileAt(e.clientX - rect.left, e.clientY - rect.top)
+          this.onTilePointerUp(pos, e)
+        } else if (wasClick && !toolFired) {
+          // Fallback click behavior (select tool default)
           const rect = canvas.getBoundingClientRect()
           const screenX = e.clientX - rect.left
           const screenY = e.clientY - rect.top
@@ -538,6 +698,9 @@ export class MapRenderer {
           this.onTileClick?.(tile, pos.x, pos.y)
         }
       }
+
+      activeButton = -1
+      toolFired = false
     })
 
     canvas.addEventListener('wheel', (e) => {
@@ -1015,6 +1178,7 @@ export class MapRenderer {
     this.app.ticker.remove(this.update, this)
     this.recycleAllChunks()
     this._highlightGraphics.destroy()
+    this._selectionGraphics.destroy()
     this._highlightContainer.destroy()
     this.mapContainer.destroy({ children: true })
   }

@@ -276,6 +276,32 @@ html, body, #root {
   border-radius: 2px;
 }
 
+/* ── Toolbar ─────────────────────────────────────────────────────── */
+
+.toolbar {
+  position: absolute;
+  top: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  pointer-events: auto;
+  user-select: none;
+  z-index: 10;
+}
+
+.tool-group {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.tool-active {
+  color: var(--accent-text) !important;
+  background: var(--accent-subtle) !important;
+}
+
 /* ── Inspector panel ─────────────────────────────────────────────── */
 
 .inspector {
@@ -468,6 +494,12 @@ html, body, #root {
 
 .item-cell:hover {
   background: var(--bg-hover);
+}
+
+.item-cell.selected {
+  background: var(--accent-subtle);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .item-cell .item-name {

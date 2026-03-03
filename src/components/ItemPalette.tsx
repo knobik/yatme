@@ -9,6 +9,7 @@ interface ItemPaletteProps {
   registry: ItemRegistry
   appearances: AppearanceData
   onClose: () => void
+  selectedItemId?: number | null
   onItemSelect?: (itemId: number) => void
 }
 
@@ -68,7 +69,7 @@ function getItemCategory(id: number, appearances: AppearanceData, registry: Item
   return 'OTHER'
 }
 
-export function ItemPalette({ registry, appearances, onClose, onItemSelect }: ItemPaletteProps) {
+export function ItemPalette({ registry, appearances, onClose, selectedItemId, onItemSelect }: ItemPaletteProps) {
   const [activeCategory, setActiveCategory] = useState<Category>('ALL')
   const [search, setSearch] = useState('')
   const [scrollTop, setScrollTop] = useState(0)
@@ -211,7 +212,7 @@ export function ItemPalette({ registry, appearances, onClose, onItemSelect }: It
             {visibleItems.map((item) => (
               <div
                 key={item.id}
-                className="item-cell"
+                className={`item-cell${item.id === selectedItemId ? ' selected' : ''}`}
                 onClick={() => onItemSelect?.(item.id)}
                 title={`${item.name} (ID: ${item.id})`}
               >

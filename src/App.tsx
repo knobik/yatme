@@ -4,9 +4,12 @@ import { loadAppearances, type AppearanceData } from './lib/appearances'
 import { loadSpriteCatalog } from './lib/sprites'
 import { loadOtbm, type OtbmMap, type OtbmTile } from './lib/otbm'
 import { MapRenderer, type FloorViewMode } from './lib/MapRenderer'
+import { MapMutator } from './lib/MapMutator'
 import { loadItems, type ItemRegistry } from './lib/items'
+import { useEditorTools } from './hooks/useEditorTools'
 import { Inspector } from './components/Inspector'
 import { ItemPalette } from './components/ItemPalette'
+import { Toolbar } from './components/Toolbar'
 
 interface CameraState {
   x: number
@@ -20,6 +23,7 @@ interface CameraState {
 function App() {
   const containerRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<MapRenderer | null>(null)
+  const mutatorRef = useRef<MapMutator | null>(null)
   const appRef = useRef<Application | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingStatus, setLoadingStatus] = useState('Initializing...')
@@ -32,6 +36,15 @@ function App() {
   const [itemRegistry, setItemRegistry] = useState<ItemRegistry | null>(null)
   const [appearancesData, setAppearancesData] = useState<AppearanceData | null>(null)
   const [showPalette, setShowPalette] = useState(false)
+
+  // Phase 7 state
+  const [mapData, setMapData] = useState<OtbmMap | null>(null)
+  const [rendererReady, setRendererReady] = useState<MapRenderer | null>(null)
+  const [mutatorReady, setMutatorReady] = useState<MapMutator | null>(null)
+
+  const tools = useEditorTools(rendererReady, mutatorReady, mapData)
+  const toolsRef = useRef(tools)
+  toolsRef.current = tools
 
   const handleFloorChange = useCallback((delta: number) => {
     if (rendererRef.current) {
@@ -114,6 +127,17 @@ function App() {
       rendererRef.current = renderer
       ;(window as any).__renderer = renderer
 
+      // Create mutator and wire chunk invalidation
+      const mutator = new MapMutator(mapData, appearances)
+      mutatorRef.current = mutator
+      mutator.onChunksInvalidated = (keys) => {
+        renderer.invalidateChunks(keys)
+      }
+      mutator.onTileChanged = (x, y, z) => {
+        const tile = mapData.tiles.get(`${x},${y},${z}`)
+        if (tile) renderer.updateChunkIndex(tile)
+      }
+
       renderer.onCameraChange = (x, y, zoom, floor, floorViewMode, showTransparentUpper) => {
         setCamera({ x, y, zoom, floor, floorViewMode, showTransparentUpper })
       }
@@ -131,6 +155,9 @@ function App() {
         showTransparentUpper: renderer.showTransparentUpper,
       })
 
+      setMapData(mapData)
+      setRendererReady(renderer)
+      setMutatorReady(mutator)
       setLoading(false)
     }
 
@@ -156,12 +183,40 @@ function App() {
       // Don't handle shortcuts when typing in an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
 
+      // Ctrl shortcuts
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z' && !e.shiftKey) {
+          e.preventDefault()
+          toolsRef.current.undo()
+          return
+        }
+        if (e.key === 'y' || (e.key === 'z' && e.shiftKey) || (e.key === 'Z')) {
+          e.preventDefault()
+          toolsRef.current.redo()
+          return
+        }
+        if (e.key === 'c') {
+          e.preventDefault()
+          toolsRef.current.copy()
+          return
+        }
+        if (e.key === 'v') {
+          e.preventDefault()
+          toolsRef.current.paste()
+          return
+        }
+        return
+      }
+
       if (e.key === 'PageUp') {
         e.preventDefault()
         handleFloorChange(-1)
       } else if (e.key === 'PageDown') {
         e.preventDefault()
         handleFloorChange(1)
+      } else if (e.key === 'Delete') {
+        e.preventDefault()
+        toolsRef.current.deleteSelection()
       } else if (e.key === 'Escape') {
         e.preventDefault()
         if (showPalette) {
@@ -173,6 +228,15 @@ function App() {
       } else if (e.key === 'p' || e.key === 'P') {
         e.preventDefault()
         setShowPalette(prev => !prev)
+      } else if (e.key === 's' && !e.ctrlKey) {
+        e.preventDefault()
+        toolsRef.current.setActiveTool('select')
+      } else if (e.key === 'd' && !e.ctrlKey) {
+        e.preventDefault()
+        toolsRef.current.setActiveTool('draw')
+      } else if (e.key === 'e' && !e.ctrlKey) {
+        e.preventDefault()
+        toolsRef.current.setActiveTool('erase')
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -223,12 +287,32 @@ function App() {
       {/* Loading overlay */}
       {loading && <LoadingOverlay status={loadingStatus} />}
 
+      {/* Toolbar — top center */}
+      {!loading && appearancesData && (
+        <Toolbar
+          activeTool={tools.activeTool}
+          onToolChange={tools.setActiveTool}
+          canUndo={tools.canUndo}
+          canRedo={tools.canRedo}
+          onUndo={tools.undo}
+          onRedo={tools.redo}
+          selectedItemId={tools.selectedItemId}
+          appearances={appearancesData}
+          registry={itemRegistry}
+        />
+      )}
+
       {/* Item palette — left side */}
       {!loading && showPalette && itemRegistry && appearancesData && (
         <ItemPalette
           registry={itemRegistry}
           appearances={appearancesData}
           onClose={handleClosePalette}
+          selectedItemId={tools.selectedItemId}
+          onItemSelect={(id) => {
+            tools.setSelectedItemId(id)
+            tools.setActiveTool('draw')
+          }}
         />
       )}
 
