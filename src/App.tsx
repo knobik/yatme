@@ -3,13 +3,14 @@ import { Application } from 'pixi.js'
 import { loadAppearances, type AppearanceData } from './lib/appearances'
 import { loadSpriteCatalog } from './lib/sprites'
 import { loadOtbm, type OtbmMap } from './lib/otbm'
-import { MapRenderer } from './lib/MapRenderer'
+import { MapRenderer, type FloorViewMode } from './lib/MapRenderer'
 
 interface CameraState {
   x: number
   y: number
   zoom: number
   floor: number
+  floorViewMode: FloorViewMode
 }
 
 function App() {
@@ -19,12 +20,18 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [loadingStatus, setLoadingStatus] = useState('Initializing...')
   const [error, setError] = useState<string | null>(null)
-  const [camera, setCamera] = useState<CameraState>({ x: 0, y: 0, zoom: 1, floor: 7 })
+  const [camera, setCamera] = useState<CameraState>({ x: 0, y: 0, zoom: 1, floor: 7, floorViewMode: 'single' })
   const [mapInfo, setMapInfo] = useState<{ tiles: number; towns: string[] } | null>(null)
 
   const handleFloorChange = useCallback((delta: number) => {
     if (rendererRef.current) {
       rendererRef.current.setFloor(rendererRef.current.floor + delta)
+    }
+  }, [])
+
+  const handleFloorViewMode = useCallback((mode: FloorViewMode) => {
+    if (rendererRef.current) {
+      rendererRef.current.setFloorViewMode(mode)
     }
   }, [])
 
@@ -74,9 +81,10 @@ function App() {
       setLoadingStatus('Building renderer...')
       const renderer = new MapRenderer(app, appearances, mapData)
       rendererRef.current = renderer
+      ;(window as any).__renderer = renderer
 
-      renderer.onCameraChange = (x, y, zoom, floor) => {
-        setCamera({ x, y, zoom, floor })
+      renderer.onCameraChange = (x, y, zoom, floor, floorViewMode) => {
+        setCamera({ x, y, zoom, floor, floorViewMode })
       }
 
       setCamera({
@@ -84,6 +92,7 @@ function App() {
         y: renderer.worldY,
         zoom: renderer.zoom,
         floor: renderer.floor,
+        floorViewMode: renderer.floorViewMode,
       })
 
       setLoading(false)
@@ -234,6 +243,57 @@ function App() {
           >
             <svg width="12" height="8" viewBox="0 0 12 8" fill="none">
               <path d="M1 1.5L6 6.5L11 1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+
+          <div className="separator" style={{ width: '100%', margin: 'var(--space-1) 0' }} />
+
+          {/* Floor view mode: single / current+below / all */}
+          <button
+            className="btn btn-icon"
+            onClick={() => handleFloorViewMode('single')}
+            title="Single floor"
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: camera.floorViewMode === 'single' ? 'var(--accent)' : undefined,
+            }}
+          >
+            <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
+              <path d="M7 2L1 5L7 8L13 5L7 2Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+            </svg>
+          </button>
+
+          <button
+            className="btn btn-icon"
+            onClick={() => handleFloorViewMode('current-below')}
+            title="Current floor + below"
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: camera.floorViewMode === 'current-below' ? 'var(--accent)' : undefined,
+            }}
+          >
+            <svg width="14" height="12" viewBox="0 0 14 12" fill="none">
+              <path d="M7 1L1 4L7 7L13 4L7 1Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+              <path d="M1 7.5L7 10.5L13 7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+
+          <button
+            className="btn btn-icon"
+            onClick={() => handleFloorViewMode('all')}
+            title="All floors"
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: camera.floorViewMode === 'all' ? 'var(--accent)' : undefined,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M7 1L1 4L7 7L13 4L7 1Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+              <path d="M1 7L7 10L13 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M1 10L7 13L13 10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
         </div>

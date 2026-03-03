@@ -1,13 +1,21 @@
-import { Application, Container, Sprite, Texture } from 'pixi.js'
-import { getTexture, getTextureSync, preloadSheets } from './TextureManager'
+import { Application, Container, Sprite } from 'pixi.js'
+import { getTextureSync, preloadSheets } from './TextureManager'
 import type { AppearanceData } from './appearances'
 import type { Appearance } from '../proto/appearances'
+import type { SpriteInfo } from '../proto/appearances'
 import type { OtbmMap, OtbmTile, OtbmItem } from './otbm'
 
 const TILE_SIZE = 32
 const CHUNK_SIZE = 32 // tiles per chunk side
 const CHUNK_PX = CHUNK_SIZE * TILE_SIZE
 const MAX_ELEVATION = 24
+const GROUND_LAYER = 7
+const CHUNK_CACHE_SIZE = 512 // max cached off-screen chunks (higher for multi-floor)
+const CHUNK_BUILD_BUDGET_MS = 4 // max ms per frame for building new chunks
+const PREFETCH_RING = 2 // extra chunks around viewport to pre-build
+const FLOOR_ABOVE_ALPHA = 0.3 // opacity for the transparent floor above
+
+export type FloorViewMode = 'single' | 'current-below' | 'all'
 
 // Discrete zoom levels where zoom * TILE_SIZE is always an integer (no sub-pixel gaps)
 const ZOOM_LEVELS = [
@@ -17,12 +25,6 @@ const ZOOM_LEVELS = [
 ]
 
 // ── Chunk index ─────────────────────────────────────────────────────
-
-interface ChunkKey {
-  cx: number
-  cy: number
-  z: number
-}
 
 function chunkKeyStr(cx: number, cy: number, z: number): string {
   return `${cx},${cy},${z}`
@@ -44,6 +46,135 @@ function buildChunkIndex(tiles: Map<string, OtbmTile>): Map<string, OtbmTile[]> 
   return index
 }
 
+// ── LRU chunk cache ─────────────────────────────────────────────────
+
+class ChunkCache {
+  private cache = new Map<string, Container>() // insertion-order = LRU order
+  private maxSize: number
+
+  constructor(maxSize: number) {
+    this.maxSize = maxSize
+  }
+
+  /** Remove from cache and return it (without destroying). Used to restore to screen. */
+  take(key: string): Container | undefined {
+    const container = this.cache.get(key)
+    if (container) {
+      this.cache.delete(key)
+    }
+    return container
+  }
+
+  /** Store a container in the cache. Evicts oldest if over capacity. */
+  set(key: string, container: Container): void {
+    // If already cached, remove old entry first
+    const existing = this.cache.get(key)
+    if (existing) {
+      existing.removeChildren()
+      existing.destroy()
+      this.cache.delete(key)
+    }
+    this.cache.set(key, container)
+    this.evict()
+  }
+
+  has(key: string): boolean {
+    return this.cache.has(key)
+  }
+
+  clear(): void {
+    for (const container of this.cache.values()) {
+      container.removeChildren()
+      container.destroy()
+    }
+    this.cache.clear()
+  }
+
+  private evict(): void {
+    while (this.cache.size > this.maxSize) {
+      const firstKey = this.cache.keys().next().value!
+      const container = this.cache.get(firstKey)!
+      container.removeChildren()
+      container.destroy()
+      this.cache.delete(firstKey)
+    }
+  }
+}
+
+// ── Sprite index calculation ────────────────────────────────────────
+
+function getSpriteIndex(
+  info: SpriteInfo,
+  xPattern: number,
+  yPattern: number,
+  zPattern: number = 0,
+  layer: number = 0,
+  animPhase: number = 0,
+): number {
+  const phases = info.animation?.spritesPhase?.length ?? 1
+  const index =
+    ((((animPhase % Math.max(1, phases)) * Math.max(1, info.patternDepth) + zPattern) *
+      Math.max(1, info.patternHeight) +
+      yPattern) *
+      Math.max(1, info.patternWidth) +
+      xPattern) *
+      Math.max(1, info.layers) +
+    layer
+  return info.spriteId[index] ?? info.spriteId[0] ?? 0
+}
+
+function getItemSpriteId(
+  appearance: Appearance,
+  item: OtbmItem,
+  tile: OtbmTile,
+): number | null {
+  const info = appearance.frameGroup?.[0]?.spriteInfo
+  if (!info || info.spriteId.length === 0) return null
+
+  const flags = appearance.flags
+  const pw = Math.max(1, info.patternWidth)
+  const ph = Math.max(1, info.patternHeight)
+  const pd = Math.max(1, info.patternDepth)
+
+  let xPattern = 0
+  let yPattern = 0
+  let zPattern = 0
+
+  if (flags?.cumulative && pw === 4 && ph === 2) {
+    // Stackable items: pattern based on count
+    const count = item.count ?? 1
+    if (count <= 0) {
+      xPattern = 0; yPattern = 0
+    } else if (count < 5) {
+      xPattern = count - 1; yPattern = 0
+    } else if (count < 10) {
+      xPattern = 0; yPattern = 1
+    } else if (count < 25) {
+      xPattern = 1; yPattern = 1
+    } else if (count < 50) {
+      xPattern = 2; yPattern = 1
+    } else {
+      xPattern = 3; yPattern = 1
+    }
+  } else if (flags?.hang) {
+    // Hangable items: pattern based on hook direction
+    // Without tile hook info, default to pattern 0 (hanging freely)
+    xPattern = 0
+  } else if (flags?.liquidcontainer || flags?.liquidpool) {
+    // Fluid items: pattern based on fluid type (stored in count)
+    const color = item.count ?? 0
+    xPattern = (color % 4) % pw
+    yPattern = Math.floor(color / 4) % ph
+  } else {
+    // Regular items: pattern based on tile position
+    xPattern = tile.x % pw
+    yPattern = tile.y % ph
+    zPattern = tile.z % pd
+  }
+
+  return getSpriteIndex(info, xPattern, yPattern, zPattern)
+}
+
 // ── MapRenderer ─────────────────────────────────────────────────────
 
 export class MapRenderer {
@@ -51,13 +182,14 @@ export class MapRenderer {
   private mapContainer: Container
   private appearances: AppearanceData
   private chunkIndex: Map<string, OtbmTile[]>
-  private mapData: OtbmMap
+  mapData: OtbmMap
 
   // Camera state
   private cameraX = 0 // world pixel position
   private cameraY = 0
   private _zoom = 1
   private _floor = 7
+  private _floorViewMode: FloorViewMode = 'single'
 
   // Interaction state
   private dragging = false
@@ -67,11 +199,16 @@ export class MapRenderer {
   private cameraStartY = 0
 
   // Chunk management
-  private activeChunks = new Map<string, Container>()
-  private chunkPool: Container[] = []
+  private activeChunks = new Map<string, Container>() // currently on-screen
+  private chunkCache = new ChunkCache(CHUNK_CACHE_SIZE) // off-screen LRU cache
+  private buildQueue: string[] = [] // chunks waiting to be built
+  private buildQueueSet = new Set<string>() // fast lookup for queue membership
+
+  // Floor container management
+  private floorContainers = new Map<number, Container>()
 
   // Callbacks for HUD updates
-  onCameraChange?: (x: number, y: number, zoom: number, floor: number) => void
+  onCameraChange?: (x: number, y: number, zoom: number, floor: number, floorViewMode: FloorViewMode) => void
 
   constructor(app: Application, appearances: AppearanceData, mapData: OtbmMap) {
     this.app = app
@@ -97,13 +234,21 @@ export class MapRenderer {
 
   get zoom(): number { return this._zoom }
   get floor(): number { return this._floor }
+  get floorViewMode(): FloorViewMode { return this._floorViewMode }
   get worldX(): number { return Math.floor(this.cameraX / TILE_SIZE) }
   get worldY(): number { return Math.floor(this.cameraY / TILE_SIZE) }
 
   setFloor(z: number): void {
     if (z < 0 || z > 15) return
     this._floor = z
-    this.rebuildAllChunks()
+    this.recycleAllChunks()
+    this.notifyCamera()
+  }
+
+  setFloorViewMode(mode: FloorViewMode): void {
+    if (mode === this._floorViewMode) return
+    this._floorViewMode = mode
+    this.recycleAllChunks()
     this.notifyCamera()
   }
 
@@ -111,6 +256,45 @@ export class MapRenderer {
     this.cameraX = x * TILE_SIZE - this.app.screen.width / (2 * this._zoom)
     this.cameraY = y * TILE_SIZE - this.app.screen.height / (2 * this._zoom)
     this.notifyCamera()
+  }
+
+  // ── Floor helpers ────────────────────────────────────────────────
+
+  /** Diagonal pixel offset for a given floor, matching RME's getDrawPosition. */
+  private getFloorOffset(z: number): number {
+    if (z <= GROUND_LAYER) {
+      return (GROUND_LAYER - z) * TILE_SIZE
+    }
+    return (this._floor - z) * TILE_SIZE
+  }
+
+  /** List of floors to render, in back-to-front order (highest Z first). */
+  private getVisibleFloors(): number[] {
+    if (this._floorViewMode === 'single') {
+      return [this._floor]
+    }
+
+    let startZ: number
+    let endZ: number
+
+    if (this._floor <= GROUND_LAYER) {
+      // Above ground: startZ = ground (Z=7), endZ = upper limit.
+      // Lower Z = higher elevation. 'current-below' stops at current floor,
+      // 'all' goes all the way up to Z=0.
+      startZ = GROUND_LAYER
+      endZ = this._floorViewMode === 'current-below' ? this._floor : 0
+    } else {
+      // Underground: render from floor+2 down to current floor
+      startZ = Math.min(15, this._floor + 2)
+      endZ = this._floor
+    }
+
+    // Back-to-front: highest Z first (drawn behind), lowest Z last (drawn in front)
+    const floors: number[] = []
+    for (let z = startZ; z >= endZ; z--) {
+      floors.push(z)
+    }
+    return floors
   }
 
   // ── Input ───────────────────────────────────────────────────────
@@ -178,7 +362,68 @@ export class MapRenderer {
   }
 
   private notifyCamera(): void {
-    this.onCameraChange?.(this.worldX, this.worldY, this._zoom, this._floor)
+    this.onCameraChange?.(this.worldX, this.worldY, this._zoom, this._floor, this._floorViewMode)
+  }
+
+  // ── Viewport range helpers ────────────────────────────────────
+
+  /** Visible chunk range for a floor at a given pixel offset. */
+  private getVisibleRangeForFloor(floorOffset: number) {
+    const screenW = this.app.screen.width
+    const screenH = this.app.screen.height
+    return {
+      startX: Math.floor((this.cameraX + floorOffset) / CHUNK_PX) - 1,
+      startY: Math.floor((this.cameraY + floorOffset) / CHUNK_PX) - 1,
+      endX: Math.floor((this.cameraX + floorOffset + screenW / this._zoom) / CHUNK_PX) + 1,
+      endY: Math.floor((this.cameraY + floorOffset + screenH / this._zoom) / CHUNK_PX) + 1,
+    }
+  }
+
+  // ── Floor container management ─────────────────────────────────
+
+  /** Ensure floor containers exist for visible floors with correct positions and alpha. */
+  private updateFloorContainers(visibleFloors: number[]): void {
+    const visibleSet = new Set(visibleFloors)
+
+    // Remove floor containers no longer visible
+    for (const [z, container] of this.floorContainers) {
+      if (!visibleSet.has(z)) {
+        this.mapContainer.removeChild(container)
+        container.destroy()
+        this.floorContainers.delete(z)
+      }
+    }
+
+    // Create/update floor containers in draw order (back-to-front)
+    for (const z of visibleFloors) {
+      let container = this.floorContainers.get(z)
+      if (!container) {
+        container = new Container()
+        this.floorContainers.set(z, container)
+      }
+
+      const offset = this.getFloorOffset(z)
+      container.position.set(-offset, -offset)
+
+      // Alpha: current floor and below = 1.0, floor above = transparent
+      if (z < this._floor) {
+        container.alpha = FLOOR_ABOVE_ALPHA
+      } else {
+        container.alpha = 1.0
+      }
+    }
+
+    // Re-add to mapContainer in correct Z-order (back-to-front)
+    // Remove all first, then re-add in order
+    for (const container of this.floorContainers.values()) {
+      if (container.parent === this.mapContainer) {
+        this.mapContainer.removeChild(container)
+      }
+    }
+    for (const z of visibleFloors) {
+      const container = this.floorContainers.get(z)!
+      this.mapContainer.addChild(container)
+    }
   }
 
   // ── Update loop ─────────────────────────────────────────────────
@@ -191,84 +436,164 @@ export class MapRenderer {
     )
     this.mapContainer.scale.set(this._zoom)
 
-    // Determine visible chunk range
-    const screenW = this.app.screen.width
-    const screenH = this.app.screen.height
+    const visibleFloors = this.getVisibleFloors()
 
-    const startX = Math.floor(this.cameraX / CHUNK_PX) - 1
-    const startY = Math.floor(this.cameraY / CHUNK_PX) - 1
-    const endX = Math.floor((this.cameraX + screenW / this._zoom) / CHUNK_PX) + 1
-    const endY = Math.floor((this.cameraY + screenH / this._zoom) / CHUNK_PX) + 1
+    // Update floor containers (positions, alpha, z-order)
+    this.updateFloorContainers(visibleFloors)
 
-    // Collect keys for visible chunks
-    const visibleKeys = new Set<string>()
-    for (let cy = startY; cy <= endY; cy++) {
-      for (let cx = startX; cx <= endX; cx++) {
-        visibleKeys.add(chunkKeyStr(cx, cy, this._floor))
+    // Collect all visible chunk keys across all floors
+    const allVisibleKeys = new Set<string>()
+    const allPrefetchKeys = new Set<string>()
+
+    for (const z of visibleFloors) {
+      const offset = this.getFloorOffset(z)
+      const { startX, startY, endX, endY } = this.getVisibleRangeForFloor(offset)
+
+      for (let cy = startY - PREFETCH_RING; cy <= endY + PREFETCH_RING; cy++) {
+        for (let cx = startX - PREFETCH_RING; cx <= endX + PREFETCH_RING; cx++) {
+          const key = chunkKeyStr(cx, cy, z)
+          if (cy >= startY && cy <= endY && cx >= startX && cx <= endX) {
+            allVisibleKeys.add(key)
+          } else {
+            allPrefetchKeys.add(key)
+          }
+        }
       }
     }
 
-    // Remove chunks that are no longer visible
+    // Move off-screen chunks to LRU cache
     for (const [key, container] of this.activeChunks) {
-      if (!visibleKeys.has(key)) {
-        this.mapContainer.removeChild(container)
-        container.removeChildren()
-        this.chunkPool.push(container)
+      if (!allVisibleKeys.has(key)) {
+        container.parent?.removeChild(container)
+        this.chunkCache.set(key, container)
         this.activeChunks.delete(key)
       }
     }
 
-    // Create chunks that are newly visible
-    for (const key of visibleKeys) {
-      if (this.activeChunks.has(key)) continue
+    // Build/restore visible chunks per floor
+    const frameStart = performance.now()
+    let budgetExhausted = false
 
+    for (const z of visibleFloors) {
+      if (budgetExhausted) break
+      const floorContainer = this.floorContainers.get(z)!
+      const offset = this.getFloorOffset(z)
+      const { startX, startY, endX, endY } = this.getVisibleRangeForFloor(offset)
+
+      for (let cy = startY; cy <= endY; cy++) {
+        if (budgetExhausted) break
+        for (let cx = startX; cx <= endX; cx++) {
+          const key = chunkKeyStr(cx, cy, z)
+          if (this.activeChunks.has(key)) continue
+
+          // Restore from cache
+          const cached = this.chunkCache.take(key)
+          if (cached) {
+            floorContainer.addChild(cached)
+            this.activeChunks.set(key, cached)
+            continue
+          }
+
+          // Build new
+          const tiles = this.chunkIndex.get(key)
+          if (!tiles || tiles.length === 0) continue
+
+          const container = new Container()
+          this.buildChunkSync(container, tiles)
+          floorContainer.addChild(container)
+          this.activeChunks.set(key, container)
+          this.preloadAndRebuild(container, tiles, floorContainer)
+
+          if (performance.now() - frameStart > CHUNK_BUILD_BUDGET_MS) {
+            budgetExhausted = true
+            break
+          }
+        }
+      }
+    }
+
+    // Queue prefetch chunks
+    for (const key of allPrefetchKeys) {
+      if (this.activeChunks.has(key) || this.chunkCache.has(key) || this.buildQueueSet.has(key)) continue
+      const tiles = this.chunkIndex.get(key)
+      if (tiles && tiles.length > 0) {
+        this.buildQueue.push(key)
+        this.buildQueueSet.add(key)
+      }
+    }
+
+    // Build prefetch chunks with remaining budget
+    this.processBuildQueue(frameStart)
+  }
+
+  private processBuildQueue(frameStart: number): void {
+    while (this.buildQueue.length > 0) {
+      if (performance.now() - frameStart > CHUNK_BUILD_BUDGET_MS) break
+
+      const key = this.buildQueue.shift()!
+      this.buildQueueSet.delete(key)
+
+      // Skip if already active/cached
+      if (this.activeChunks.has(key) || this.chunkCache.has(key)) continue
       const tiles = this.chunkIndex.get(key)
       if (!tiles || tiles.length === 0) continue
 
-      const container = this.chunkPool.pop() || new Container()
-      this.buildChunk(container, tiles, key)
-      this.mapContainer.addChild(container)
-      this.activeChunks.set(key, container)
+      // Pre-build into cache (not on screen yet)
+      const container = new Container()
+      this.buildChunkSync(container, tiles)
+      this.preloadAndRebuild(container, tiles, null)
+
+      // Store in cache for instant retrieval later
+      this.chunkCache.set(key, container)
     }
   }
 
-  private rebuildAllChunks(): void {
-    for (const [key, container] of this.activeChunks) {
-      this.mapContainer.removeChild(container)
+  recycleAllChunks(): void {
+    // Remove active chunks
+    for (const [_key, container] of this.activeChunks) {
+      container.parent?.removeChild(container)
       container.removeChildren()
-      this.chunkPool.push(container)
+      container.destroy()
     }
     this.activeChunks.clear()
+    this.chunkCache.clear()
+    this.buildQueue.length = 0
+    this.buildQueueSet.clear()
+
+    // Destroy floor containers
+    for (const [_z, container] of this.floorContainers) {
+      this.mapContainer.removeChild(container)
+      container.destroy()
+    }
+    this.floorContainers.clear()
   }
 
   // ── Chunk building ──────────────────────────────────────────────
 
-  private buildChunk(container: Container, tiles: OtbmTile[], _key: string): void {
-    // Collect sprite IDs for preloading
+  private buildChunkSync(container: Container, tiles: OtbmTile[]): void {
+    // Sort tiles by draw order: Y ascending, then X ascending.
+    const sorted = tiles.slice().sort((a, b) => a.y - b.y || a.x - b.x)
+    for (const tile of sorted) {
+      this.renderTile(container, tile)
+    }
+  }
+
+  private preloadAndRebuild(container: Container, tiles: OtbmTile[], floorContainer: Container | null): void {
     const spriteIds: number[] = []
     for (const tile of tiles) {
       for (const item of tile.items) {
         const appearance = this.appearances.objects.get(item.id)
-        const sid = appearance?.frameGroup?.[0]?.spriteInfo?.spriteId?.[0]
-        if (sid != null) spriteIds.push(sid)
+        if (!appearance) continue
+        const sid = getItemSpriteId(appearance, item, tile)
+        if (sid != null && sid !== 0) spriteIds.push(sid)
       }
     }
 
-    // Try synchronous first, async-load missing sheets
-    this.renderChunkTiles(container, tiles)
-
-    // Preload any missing sheets then re-render
     if (spriteIds.length > 0) {
       preloadSheets(spriteIds).then(() => {
         container.removeChildren()
-        this.renderChunkTiles(container, tiles)
+        this.buildChunkSync(container, tiles)
       })
-    }
-  }
-
-  private renderChunkTiles(container: Container, tiles: OtbmTile[]): void {
-    for (const tile of tiles) {
-      this.renderTile(container, tile)
     }
   }
 
@@ -297,14 +622,16 @@ export class MapRenderer {
     }
 
     let elevation = 0
+    // OTClient draws: ground → bottom (forward), common (REVERSE), top
+    common.reverse()
     const drawOrder = [...ground, ...bottom, ...common, ...top]
 
     for (const item of drawOrder) {
       const appearance = this.appearances.objects.get(item.id)
       if (!appearance) continue
 
-      const spriteId = appearance.frameGroup?.[0]?.spriteInfo?.spriteId?.[0]
-      if (spriteId == null) continue
+      const spriteId = getItemSpriteId(appearance, item, tile)
+      if (spriteId == null || spriteId === 0) continue
 
       const texture = getTextureSync(spriteId)
       if (!texture) continue
@@ -312,9 +639,10 @@ export class MapRenderer {
       const sprite = new Sprite(texture)
       sprite.roundPixels = true
 
-      // Position: anchor at bottom-right of sprite, offset by elevation
-      sprite.x = baseX + TILE_SIZE - texture.width
-      sprite.y = baseY + TILE_SIZE - texture.height - elevation
+      // Position: anchor at bottom-right of sprite, offset by elevation and displacement.
+      const shift = appearance.flags?.shift
+      sprite.x = baseX + TILE_SIZE - texture.width - elevation - (shift?.x ?? 0)
+      sprite.y = baseY + TILE_SIZE - texture.height - elevation - (shift?.y ?? 0)
 
       parent.addChild(sprite)
 
@@ -327,7 +655,7 @@ export class MapRenderer {
 
   destroy(): void {
     this.app.ticker.remove(this.update, this)
-    this.rebuildAllChunks()
+    this.recycleAllChunks()
     this.mapContainer.destroy({ children: true })
   }
 }
