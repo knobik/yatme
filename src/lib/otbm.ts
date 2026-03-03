@@ -79,6 +79,22 @@ export interface OtbmItem {
   items?: OtbmItem[]
 }
 
+export function deepCloneItem(item: OtbmItem): OtbmItem {
+  const clone: OtbmItem = { id: item.id }
+  if (item.count != null) clone.count = item.count
+  if (item.actionId != null) clone.actionId = item.actionId
+  if (item.uniqueId != null) clone.uniqueId = item.uniqueId
+  if (item.text != null) clone.text = item.text
+  if (item.description != null) clone.description = item.description
+  if (item.teleportDestination) clone.teleportDestination = { ...item.teleportDestination }
+  if (item.depotId != null) clone.depotId = item.depotId
+  if (item.houseDoorId != null) clone.houseDoorId = item.houseDoorId
+  if (item.charges != null) clone.charges = item.charges
+  if (item.duration != null) clone.duration = item.duration
+  if (item.items && item.items.length > 0) clone.items = item.items.map(deepCloneItem)
+  return clone
+}
+
 export interface OtbmTown {
   id: number
   name: string

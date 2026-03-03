@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { MapRenderer } from '../lib/MapRenderer'
 import type { MapMutator } from '../lib/MapMutator'
-import type { OtbmMap, OtbmItem } from '../lib/otbm'
+import { type OtbmMap, type OtbmItem, deepCloneItem } from '../lib/otbm'
 
 export type EditorTool = 'select' | 'draw' | 'erase'
 
@@ -26,22 +26,6 @@ export interface EditorToolsState {
   copy: () => void
   paste: () => void
   deleteSelection: () => void
-}
-
-function deepCloneItem(item: OtbmItem): OtbmItem {
-  const clone: OtbmItem = { id: item.id }
-  if (item.count != null) clone.count = item.count
-  if (item.actionId != null) clone.actionId = item.actionId
-  if (item.uniqueId != null) clone.uniqueId = item.uniqueId
-  if (item.text != null) clone.text = item.text
-  if (item.description != null) clone.description = item.description
-  if (item.teleportDestination) clone.teleportDestination = { ...item.teleportDestination }
-  if (item.depotId != null) clone.depotId = item.depotId
-  if (item.houseDoorId != null) clone.houseDoorId = item.houseDoorId
-  if (item.charges != null) clone.charges = item.charges
-  if (item.duration != null) clone.duration = item.duration
-  if (item.items && item.items.length > 0) clone.items = item.items.map(deepCloneItem)
-  return clone
 }
 
 export function useEditorTools(

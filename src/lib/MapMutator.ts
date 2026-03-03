@@ -1,31 +1,11 @@
-import type { OtbmMap, OtbmTile, OtbmItem } from './otbm'
+import { type OtbmMap, type OtbmTile, type OtbmItem, deepCloneItem } from './otbm'
 import type { AppearanceData } from './appearances'
-
-const CHUNK_SIZE = 32
+import { CHUNK_SIZE } from './constants'
+import { chunkKeyForTile } from './ChunkManager'
 const MAX_UNDO = 200
 
 function tileKey(x: number, y: number, z: number): string {
   return `${x},${y},${z}`
-}
-
-function chunkKeyForTile(x: number, y: number, z: number): string {
-  return `${Math.floor(x / CHUNK_SIZE)},${Math.floor(y / CHUNK_SIZE)},${z}`
-}
-
-function deepCloneItem(item: OtbmItem): OtbmItem {
-  const clone: OtbmItem = { id: item.id }
-  if (item.count != null) clone.count = item.count
-  if (item.actionId != null) clone.actionId = item.actionId
-  if (item.uniqueId != null) clone.uniqueId = item.uniqueId
-  if (item.text != null) clone.text = item.text
-  if (item.description != null) clone.description = item.description
-  if (item.teleportDestination) clone.teleportDestination = { ...item.teleportDestination }
-  if (item.depotId != null) clone.depotId = item.depotId
-  if (item.houseDoorId != null) clone.houseDoorId = item.houseDoorId
-  if (item.charges != null) clone.charges = item.charges
-  if (item.duration != null) clone.duration = item.duration
-  if (item.items && item.items.length > 0) clone.items = item.items.map(deepCloneItem)
-  return clone
 }
 
 function deepCloneItems(items: OtbmItem[]): OtbmItem[] {
