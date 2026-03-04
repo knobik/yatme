@@ -3,6 +3,7 @@
 import type { AutoBorder, GroundBrush } from './BrushTypes'
 import type { WallBrush, WallDoor } from './WallTypes'
 import type { CarpetBrush, TableBrush } from './CarpetTypes'
+import type { DoodadBrush } from './DoodadTypes'
 
 export class BrushRegistry {
   private brushesByName = new Map<string, GroundBrush>()
@@ -32,12 +33,18 @@ export class BrushRegistry {
   private tableBrushesByItemId = new Map<number, TableBrush>()
   readonly tableItemIds = new Set<number>()
 
+  // Doodad brush maps
+  private doodadBrushesByName = new Map<string, DoodadBrush>()
+  private doodadBrushesByItemId = new Map<number, DoodadBrush>()
+  readonly doodadItemIds = new Set<number>()
+
   constructor(
     brushes: GroundBrush[],
     borders: Map<number, AutoBorder>,
     wallBrushes: WallBrush[] = [],
     carpetBrushes: CarpetBrush[] = [],
     tableBrushes: TableBrush[] = [],
+    doodadBrushes: DoodadBrush[] = [],
   ) {
     // Register all ground brushes
     for (const brush of brushes) {
@@ -145,6 +152,25 @@ export class BrushRegistry {
         }
       }
     }
+
+    // Register doodad brushes
+    for (const db of doodadBrushes) {
+      this.doodadBrushesByName.set(db.name, db)
+      for (const alt of db.alternatives) {
+        for (const single of alt.singles) {
+          this.doodadBrushesByItemId.set(single.itemId, db)
+          this.doodadItemIds.add(single.itemId)
+        }
+        for (const comp of alt.composites) {
+          for (const tile of comp.tiles) {
+            for (const itemId of tile.itemIds) {
+              this.doodadBrushesByItemId.set(itemId, db)
+              this.doodadItemIds.add(itemId)
+            }
+          }
+        }
+      }
+    }
   }
 
   getBrushByName(name: string): GroundBrush | undefined {
@@ -223,5 +249,17 @@ export class BrushRegistry {
 
   isTableItem(itemId: number): boolean {
     return this.tableItemIds.has(itemId)
+  }
+
+  getDoodadBrushByName(name: string): DoodadBrush | undefined {
+    return this.doodadBrushesByName.get(name)
+  }
+
+  getDoodadBrushForItem(itemId: number): DoodadBrush | undefined {
+    return this.doodadBrushesByItemId.get(itemId)
+  }
+
+  isDoodadItem(itemId: number): boolean {
+    return this.doodadItemIds.has(itemId)
   }
 }

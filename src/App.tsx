@@ -10,7 +10,9 @@ import { useEditorTools } from './hooks/useEditorTools'
 import { loadBrushData } from './lib/brushes/BrushLoader'
 import { parseWallBrushesXml } from './lib/brushes/WallLoader'
 import { parseCarpetBrushesXml } from './lib/brushes/CarpetLoader'
+import { parseDoodadBrushesXml } from './lib/brushes/DoodadLoader'
 import type { CarpetBrush, TableBrush } from './lib/brushes/CarpetTypes'
+import type { DoodadBrush } from './lib/brushes/DoodadTypes'
 import { BrushRegistry } from './lib/brushes/BrushRegistry'
 import { Inspector } from './components/Inspector'
 import { ItemPalette } from './components/ItemPalette'
@@ -206,23 +208,27 @@ function App() {
         const wallBrushes = parseWallBrushesXml(wallsXml, nextId)
         console.log(`[WallLoader] Loaded ${wallBrushes.length} wall brushes`)
 
-        // Load carpet/table brushes from doodad XMLs
+        // Load carpet/table/doodad brushes from doodad XMLs
         const doodadFiles = ['doodads.xml', 'tiny_borders.xml', 'trees.xml']
         const allCarpets: CarpetBrush[] = []
         const allTables: TableBrush[] = []
+        const allDoodads: DoodadBrush[] = []
         for (const file of doodadFiles) {
           try {
             const xml = await fetch(`/materials/brushs/${file}`).then(r => r.text())
             const { carpets, tables } = parseCarpetBrushesXml(xml, nextId)
+            const doodads = parseDoodadBrushesXml(xml, nextId)
             allCarpets.push(...carpets)
             allTables.push(...tables)
+            allDoodads.push(...doodads)
           } catch (e) {
-            console.warn(`[CarpetLoader] Failed to load ${file}:`, e)
+            console.warn(`[BrushLoader] Failed to load ${file}:`, e)
           }
         }
         console.log(`[CarpetLoader] Loaded ${allCarpets.length} carpet brushes, ${allTables.length} table brushes`)
+        console.log(`[DoodadLoader] Loaded ${allDoodads.length} doodad brushes`)
 
-        brushRegistry = new BrushRegistry(brushData.brushes, brushData.borders, wallBrushes, allCarpets, allTables)
+        brushRegistry = new BrushRegistry(brushData.brushes, brushData.borders, wallBrushes, allCarpets, allTables, allDoodads)
         ;(window as any).__brushRegistry = brushRegistry
         if (!destroyed) setBrushRegistryState(brushRegistry)
       } catch (e) {

@@ -9,11 +9,15 @@ export class SelectionOverlay {
   readonly container: Container
   private _highlightGraphics: Graphics
   private _selectionGraphics: Graphics
+  private _brushCursorGraphics: Graphics
 
   private _selectedTileX = -1
   private _selectedTileY = -1
   private _selectedTileZ = -1
   private _selectionTiles: TilePos[] = []
+
+  // Brush cursor state
+  private _brushCursorKey = ''
 
   // Dirty tracking — avoid redrawing Graphics when nothing changed
   private _highlightDirty = false
@@ -26,8 +30,11 @@ export class SelectionOverlay {
     this._highlightGraphics.visible = false
     this._selectionGraphics = new Graphics()
     this._selectionGraphics.visible = false
+    this._brushCursorGraphics = new Graphics()
+    this._brushCursorGraphics.visible = false
     this.container.addChild(this._highlightGraphics)
     this.container.addChild(this._selectionGraphics)
+    this.container.addChild(this._brushCursorGraphics)
   }
 
   // ── Selection state ───────────────────────────────────────────
@@ -116,11 +123,44 @@ export class SelectionOverlay {
     this._selectionGraphics.visible = false
   }
 
+  // ── Brush cursor (hover preview) ─────────────────────────────
+
+  updateBrushCursor(tiles: TilePos[], floor: number): void {
+    // Build a cache key to avoid unnecessary redraws
+    const key = tiles.map(t => `${t.x},${t.y}`).join(';')
+    if (key === this._brushCursorKey) return
+    this._brushCursorKey = key
+
+    const g = this._brushCursorGraphics
+    g.clear()
+    if (tiles.length === 0) {
+      g.visible = false
+      return
+    }
+    for (const t of tiles) {
+      if (t.z !== floor) continue
+      const px = t.x * TILE_SIZE
+      const py = t.y * TILE_SIZE
+      g.rect(px, py, TILE_SIZE, TILE_SIZE)
+      g.stroke({ color: 0xc0d0e0, width: 1, alpha: 0.7 })
+      g.rect(px + 1, py + 1, TILE_SIZE - 2, TILE_SIZE - 2)
+      g.fill({ color: 0xc0d0e0, alpha: 0.1 })
+    }
+    g.visible = true
+  }
+
+  clearBrushCursor(): void {
+    this._brushCursorKey = ''
+    this._brushCursorGraphics.clear()
+    this._brushCursorGraphics.visible = false
+  }
+
   // ── Cleanup ───────────────────────────────────────────────────
 
   destroy(): void {
     this._highlightGraphics.destroy()
     this._selectionGraphics.destroy()
+    this._brushCursorGraphics.destroy()
     this.container.destroy()
   }
 }

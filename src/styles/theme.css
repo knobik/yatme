@@ -702,6 +702,11 @@ html, body, #root {
   color: #fff;
 }
 
+.brush-badge-doodad {
+  background: #c47a40;
+  color: #fff;
+}
+
 /* ── Context menu ───────────────────────────────────────────────── */
 
 .context-menu {

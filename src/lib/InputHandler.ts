@@ -18,6 +18,7 @@ export interface InputHost {
   onTileClick?: (tile: OtbmTile | null, worldX: number, worldY: number) => void
   onTileContextMenu?: (pos: TilePos, tile: OtbmTile | null, screenX: number, screenY: number) => void
   onItemDrop?: (pos: TilePos, itemId: number) => void
+  onTileHover?: (pos: TilePos) => void
 }
 
 /**
@@ -87,7 +88,15 @@ export function setupMapInput(
   }
 
   function onPointerMove(e: PointerEvent) {
-    if (!dragging) return
+    if (!dragging) {
+      // Hover: track tile under cursor for brush preview
+      if (host.onTileHover) {
+        const rect = canvas.getBoundingClientRect()
+        const pos = camera.getTileAt(e.clientX - rect.left, e.clientY - rect.top)
+        host.onTileHover(pos)
+      }
+      return
+    }
     const dx = e.clientX - dragStartX
     const dy = e.clientY - dragStartY
     dragDist = Math.sqrt(dx * dx + dy * dy)

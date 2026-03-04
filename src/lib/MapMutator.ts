@@ -5,6 +5,7 @@ import { chunkKeyForTile } from './ChunkManager'
 import type { GroundBrush } from './brushes/BrushTypes'
 import type { WallBrush } from './brushes/WallTypes'
 import type { CarpetBrush, TableBrush } from './brushes/CarpetTypes'
+import type { DoodadBrush, DoodadAlternative, DoodadComposite } from './brushes/DoodadTypes'
 import { CARPET_CENTER, TABLE_ALONE } from './brushes/CarpetTypes'
 import type { BrushRegistry } from './brushes/BrushRegistry'
 import { computeBorders } from './brushes/BorderSystem'
@@ -631,6 +632,155 @@ export class MapMutator {
       this.onTileChanged?.(x, y, z)
 
       this.updateNeighborBrush(x, y, z, registry, 'table')
+    })
+  }
+
+  // --- Doodad brush painting ---
+
+  paintDoodad(x: number, y: number, z: number, brush: DoodadBrush, registry: BrushRegistry): void {
+    // Select alternative (use first for v1; alternatives provide variation groups)
+    const alt = brush.alternatives[0]
+    if (!alt || alt.totalChance === 0) return
+
+    // Pre-clean: remove old doodad items from ALL possible composite tile positions
+    // so that switching between composite variants doesn't leave orphaned items
+    if (!brush.onDuplicate) {
+      this.cleanDoodadTiles(x, y, z, alt, brush, registry)
+    }
+
+    // Weighted random: composites and singles compete in the same pool
+    let roll = Math.random() * alt.totalChance
+    for (const comp of alt.composites) {
+      roll -= comp.chance
+      if (roll < 0) {
+        this.placeDoodadComposite(x, y, z, comp)
+        return
+      }
+    }
+    for (const single of alt.singles) {
+      roll -= single.chance
+      if (roll < 0) {
+        this.placeDoodadSingle(x, y, z, single.itemId)
+        return
+      }
+    }
+    // Fallback: place last single
+    if (alt.singles.length > 0) {
+      this.placeDoodadSingle(x, y, z, alt.singles[alt.singles.length - 1].itemId)
+    }
+  }
+
+  // Remove doodad items from all tiles that any composite in this alternative could cover
+  private cleanDoodadTiles(
+    x: number, y: number, z: number,
+    alt: DoodadAlternative,
+    brush: DoodadBrush,
+    registry: BrushRegistry,
+  ): void {
+    // Collect all unique tile offsets across all composites + the center tile
+    const offsets = new Set<string>()
+    offsets.add('0,0,0')
+    for (const comp of alt.composites) {
+      for (const ct of comp.tiles) {
+        offsets.add(`${ct.dx},${ct.dy},${ct.dz}`)
+      }
+    }
+
+    for (const key of offsets) {
+      const [dx, dy, dz] = key.split(',').map(Number)
+      const tx = x + dx
+      const ty = y + dy
+      const tz = z + dz
+      const tile = this.mapData.tiles.get(tileKey(tx, ty, tz))
+      if (!tile) continue
+
+      const oldItems = deepCloneItems(tile.items)
+      for (let i = tile.items.length - 1; i >= 0; i--) {
+        const db = registry.getDoodadBrushForItem(tile.items[i].id)
+        if (db && db.id === brush.id) {
+          tile.items.splice(i, 1)
+        }
+      }
+
+      if (!this.itemsEqual(oldItems, tile.items)) {
+        this.recordAction({
+          type: 'setTileItems', x: tx, y: ty, z: tz,
+          oldItems,
+          newItems: deepCloneItems(tile.items),
+        })
+        this.onTileChanged?.(tx, ty, tz)
+      }
+    }
+  }
+
+  private placeDoodadSingle(
+    x: number, y: number, z: number,
+    itemId: number,
+  ): void {
+    const tile = this.getOrCreateTile(x, y, z)
+    const oldItems = deepCloneItems(tile.items)
+
+    const layer = classifyItem(itemId, this.appearances)
+    const index = this.findInsertIndex(tile, layer)
+    tile.items.splice(index, 0, { id: itemId })
+
+    this.recordAction({
+      type: 'setTileItems', x, y, z,
+      oldItems,
+      newItems: deepCloneItems(tile.items),
+    })
+    this.onTileChanged?.(x, y, z)
+  }
+
+  private placeDoodadComposite(
+    x: number, y: number, z: number,
+    composite: DoodadComposite,
+  ): void {
+    for (const compTile of composite.tiles) {
+      const tx = x + compTile.dx
+      const ty = y + compTile.dy
+      const tz = z + compTile.dz
+
+      const tile = this.getOrCreateTile(tx, ty, tz)
+      const oldItems = deepCloneItems(tile.items)
+
+      for (const itemId of compTile.itemIds) {
+        const layer = classifyItem(itemId, this.appearances)
+        const index = this.findInsertIndex(tile, layer)
+        tile.items.splice(index, 0, { id: itemId })
+      }
+
+      this.recordAction({
+        type: 'setTileItems', x: tx, y: ty, z: tz,
+        oldItems,
+        newItems: deepCloneItems(tile.items),
+      })
+      this.onTileChanged?.(tx, ty, tz)
+    }
+  }
+
+  removeDoodadItems(x: number, y: number, z: number, brush: DoodadBrush, registry: BrushRegistry): void {
+    this.autoBatch('Remove doodad', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile) return
+
+      const oldItems = deepCloneItems(tile.items)
+
+      for (let i = tile.items.length - 1; i >= 0; i--) {
+        const db = registry.getDoodadBrushForItem(tile.items[i].id)
+        if (db && db.id === brush.id) {
+          tile.items.splice(i, 1)
+        }
+      }
+
+      if (!this.itemsEqual(oldItems, tile.items)) {
+        this.recordAction({
+          type: 'setTileItems', x, y, z,
+          oldItems,
+          newItems: deepCloneItems(tile.items),
+        })
+        this.onTileChanged?.(x, y, z)
+      }
     })
   }
 

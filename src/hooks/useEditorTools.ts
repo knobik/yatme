@@ -116,7 +116,8 @@ export function useEditorTools(
         const wallBrush = !groundBrush && !doorInfo ? registry?.getWallBrushForItem(itemId) ?? null : null
         const carpetBrush = !groundBrush && !doorInfo && !wallBrush ? registry?.getCarpetBrushForItem(itemId) ?? null : null
         const tableBrush = !groundBrush && !doorInfo && !wallBrush && !carpetBrush ? registry?.getTableBrushForItem(itemId) ?? null : null
-        mutator.beginBatch(groundBrush ? 'Paint ground' : doorInfo ? 'Place door' : wallBrush ? 'Paint wall' : carpetBrush ? 'Paint carpet' : tableBrush ? 'Paint table' : 'Draw items')
+        const doodadBrush = !groundBrush && !doorInfo && !wallBrush && !carpetBrush && !tableBrush ? registry?.getDoodadBrushForItem(itemId) ?? null : null
+        mutator.beginBatch(groundBrush ? 'Paint ground' : doorInfo ? 'Place door' : wallBrush ? 'Paint wall' : carpetBrush ? 'Paint carpet' : tableBrush ? 'Paint table' : doodadBrush ? 'Paint doodad' : 'Draw items')
         const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
         for (const t of tiles) {
           const key = `${t.x},${t.y}`
@@ -131,6 +132,9 @@ export function useEditorTools(
             mutator.paintCarpet(t.x, t.y, pos.z, carpetBrush, registry)
           } else if (tableBrush && registry) {
             mutator.paintTable(t.x, t.y, pos.z, tableBrush, registry)
+          } else if (doodadBrush && registry) {
+            if (brushSizeRef.current > 0 && Math.random() * doodadBrush.thicknessCeiling >= doodadBrush.thickness) continue
+            mutator.paintDoodad(t.x, t.y, pos.z, doodadBrush, registry)
           } else {
             mutator.addItem(t.x, t.y, pos.z, { id: itemId })
           }
@@ -177,6 +181,7 @@ export function useEditorTools(
         const wallBrush = !groundBrush && !doorInfo ? registry?.getWallBrushForItem(itemId) ?? null : null
         const carpetBrush = !groundBrush && !doorInfo && !wallBrush ? registry?.getCarpetBrushForItem(itemId) ?? null : null
         const tableBrush = !groundBrush && !doorInfo && !wallBrush && !carpetBrush ? registry?.getTableBrushForItem(itemId) ?? null : null
+        const doodadBrush = !groundBrush && !doorInfo && !wallBrush && !carpetBrush && !tableBrush ? registry?.getDoodadBrushForItem(itemId) ?? null : null
         const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
         let any = false
         for (const t of tiles) {
@@ -193,6 +198,9 @@ export function useEditorTools(
             mutator.paintCarpet(t.x, t.y, pos.z, carpetBrush, registry)
           } else if (tableBrush && registry) {
             mutator.paintTable(t.x, t.y, pos.z, tableBrush, registry)
+          } else if (doodadBrush && registry) {
+            if (brushSizeRef.current > 0 && Math.random() * doodadBrush.thicknessCeiling >= doodadBrush.thickness) continue
+            mutator.paintDoodad(t.x, t.y, pos.z, doodadBrush, registry)
           } else {
             mutator.addItem(t.x, t.y, pos.z, { id: itemId })
           }
@@ -263,10 +271,20 @@ export function useEditorTools(
       }
     }
 
+    renderer.onTileHover = (pos) => {
+      const tool = activeToolRef.current
+      const size = (tool === 'draw' || tool === 'erase' || tool === 'door') ? brushSizeRef.current : 0
+      const shape = brushShapeRef.current
+      const tiles = getTilesInBrush(pos.x, pos.y, size, shape)
+        .map(t => ({ x: t.x, y: t.y, z: pos.z }))
+      renderer.updateBrushCursor(tiles)
+    }
+
     return () => {
       renderer.onTilePointerDown = undefined
       renderer.onTilePointerMove = undefined
       renderer.onTilePointerUp = undefined
+      renderer.onTileHover = undefined
     }
   }, [renderer, mutator, mapData, brushRegistry])
 

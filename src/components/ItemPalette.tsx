@@ -6,7 +6,7 @@ import { getItemDisplayName } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
 import { itemCategory } from '../proto/appearances'
 
-type SmartBrushType = 'ground' | 'wall' | 'carpet' | 'table' | null
+type SmartBrushType = 'ground' | 'wall' | 'carpet' | 'table' | 'doodad' | null
 
 interface ItemPaletteProps {
   registry: ItemRegistry
@@ -108,6 +108,7 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
         else if (brushRegistry.getWallBrushForItem(id)) brush = 'wall'
         else if (brushRegistry.getCarpetBrushForItem(id)) brush = 'carpet'
         else if (brushRegistry.getTableBrushForItem(id)) brush = 'table'
+        else if (brushRegistry.getDoodadBrushForItem(id)) brush = 'doodad'
       }
       items.push({ id, name, category, brush })
     }

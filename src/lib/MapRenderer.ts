@@ -38,6 +38,7 @@ export class MapRenderer implements InputHost {
   onTilePointerUp?: (pos: { x: number; y: number; z: number }, event: PointerEvent) => void
   onTileContextMenu?: (pos: { x: number; y: number; z: number }, tile: OtbmTile | null, screenX: number, screenY: number) => void
   onItemDrop?: (pos: { x: number; y: number; z: number }, itemId: number) => void
+  onTileHover?: (pos: { x: number; y: number; z: number }) => void
 
   constructor(app: Application, appearances: AppearanceData, mapData: OtbmMap) {
     this.app = app
@@ -172,6 +173,15 @@ export class MapRenderer implements InputHost {
 
   clearSelectionOverlay(): void {
     this.selection.clearOverlay()
+  }
+
+  /** Update the brush cursor (hover preview). */
+  updateBrushCursor(tiles: { x: number; y: number; z: number }[]): void {
+    this.selection.updateBrushCursor(tiles, this.camera.floor)
+  }
+
+  clearBrushCursor(): void {
+    this.selection.clearBrushCursor()
   }
 
   /** Change the canvas cursor style. */
