@@ -29,9 +29,13 @@ const sheetIndex: SheetInfo[] = [];
 const sheetCache = new Map<string, HTMLImageElement>();
 const spriteCache = new Map<number, ImageBitmap>();
 
-export async function loadSpriteCatalog(catalogUrl = '/sprites-png/catalog-content.json'): Promise<void> {
-  const response = await fetch(catalogUrl);
-  const catalog = await response.json();
+export async function loadSpriteCatalog(
+  catalogUrl = '/sprites-png/catalog-content.json',
+  onProgress?: (fraction: number) => void,
+): Promise<void> {
+  const { fetchTextWithProgress } = await import('./fetchWithProgress');
+  const text = await fetchTextWithProgress(catalogUrl, onProgress);
+  const catalog = JSON.parse(text);
 
   sheetIndex.length = 0;
 

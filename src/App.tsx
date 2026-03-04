@@ -33,6 +33,7 @@ function App() {
   const appRef = useRef<Application | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingStatus, setLoadingStatus] = useState('Initializing...')
+  const [loadingProgress, setLoadingProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [camera, setCamera] = useState<CameraState>({ x: 0, y: 0, zoom: 1, floor: 7, floorViewMode: 'single', showTransparentUpper: false })
   const [mapInfo, setMapInfo] = useState<{ tiles: number; towns: string[] } | null>(null)
@@ -120,10 +121,36 @@ function App() {
     const app = new Application()
     appRef.current = app
 
+    // Weighted progress: each step has a weight proportional to its cost.
+    // The progress callback maps per-step fraction to overall 0→1 progress.
+    const stepWeights = [2, 15, 3, 55, 12, 8, 5] // renderer, appearances, sprites, otbm, items, brushes, setup
+    const totalWeight = stepWeights.reduce((a, b) => a + b, 0)
+    let currentStep = 0
+    const stepStarts: number[] = []
+    let acc = 0
+    for (const w of stepWeights) {
+      stepStarts.push(acc / totalWeight)
+      acc += w
+    }
+
+    function stepProgress(fraction: number) {
+      const start = stepStarts[currentStep]
+      const weight = stepWeights[currentStep] / totalWeight
+      setLoadingProgress(Math.min(start + fraction * weight, 1))
+    }
+
+    function nextStep() {
+      currentStep++
+      if (currentStep < stepWeights.length) {
+        setLoadingProgress(stepStarts[currentStep])
+      }
+    }
+
     async function init() {
       const container = containerRef.current!
 
       setLoadingStatus('Starting renderer...')
+      stepProgress(0)
       await app.init({
         resizeTo: container,
         backgroundColor: 0x07070a,
@@ -137,24 +164,29 @@ function App() {
       if (destroyed) { app.destroy(true); return }
       initialized = true
       container.appendChild(app.canvas as HTMLCanvasElement)
+      nextStep()
 
       setLoadingStatus('Loading appearances...')
-      const appearances = await loadAppearances()
+      const appearances = await loadAppearances(undefined, stepProgress)
       if (destroyed) return
       setAppearancesData(appearances)
+      nextStep()
 
       setLoadingStatus('Loading sprite catalog...')
-      await loadSpriteCatalog()
+      await loadSpriteCatalog(undefined, stepProgress)
       if (destroyed) return
+      nextStep()
 
-      setLoadingStatus('Parsing map data...')
-      const mapData = await loadOtbm()
+      setLoadingStatus('Loading map data...')
+      const mapData = await loadOtbm(undefined, stepProgress)
       if (destroyed) return
+      nextStep()
 
       setLoadingStatus('Loading item data...')
-      const registry = await loadItems()
+      const registry = await loadItems(undefined, stepProgress)
       if (destroyed) return
       setItemRegistry(registry)
+      nextStep()
 
       setMapInfo({
         tiles: mapData.tiles.size,
@@ -164,7 +196,7 @@ function App() {
       setLoadingStatus('Loading brush data...')
       let brushRegistry: BrushRegistry | null = null
       try {
-        const brushData = await loadBrushData()
+        const brushData = await loadBrushData(stepProgress)
         const nextId = { value: brushData.brushes.length + 1 }
 
         // Load wall brushes
@@ -179,6 +211,7 @@ function App() {
         console.warn('[App] Failed to load brush data, smart brushes disabled:', e)
       }
       if (destroyed) return
+      nextStep()
 
       setLoadingStatus('Building renderer...')
       const renderer = new MapRenderer(app, appearances, mapData)
@@ -228,6 +261,7 @@ function App() {
         showTransparentUpper: renderer.showTransparentUpper,
       })
 
+      setLoadingProgress(1)
       setMapData(mapData)
       setRendererReady(renderer)
       setMutatorReady(mutator)
@@ -339,6 +373,9 @@ function App() {
       } else if (e.key === 'e' && !e.ctrlKey) {
         e.preventDefault()
         toolsRef.current.setActiveTool('erase')
+      } else if (e.key === 'r' && !e.ctrlKey) {
+        e.preventDefault()
+        toolsRef.current.setActiveTool('door')
       } else if (e.key === ']') {
         e.preventDefault()
         const cur = toolsRef.current.brushSize
@@ -449,6 +486,20 @@ function App() {
         : [],
     }
 
+    // Door group — switch door open/closed
+    const doorGroup: ContextMenuGroup = {
+      items: topItem && brushRegistryState?.isDoorItem(topItem.id)
+        ? [{
+            label: brushRegistryState.getDoorInfo(topItem.id)?.open ? 'Close Door' : 'Open Door',
+            onClick: () => {
+              if (!mutatorReady || !brushRegistryState || !tile) return
+              const idx = tile.items.length - 1
+              mutatorReady.switchDoorItem(tilePos.x, tilePos.y, tilePos.z, idx, brushRegistryState)
+            },
+          }]
+        : [],
+    }
+
     // Teleport group — find first item with teleportDestination
     const teleportItem = tile?.items?.find(i => i.teleportDestination)
     const dest = teleportItem?.teleportDestination
@@ -472,7 +523,7 @@ function App() {
         : [],
     }
 
-    return [clipboardGroup, positionGroup, itemInfoGroup, teleportGroup]
+    return [clipboardGroup, positionGroup, itemInfoGroup, doorGroup, teleportGroup]
   }
 
   if (error) {
@@ -517,7 +568,7 @@ function App() {
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
       {/* Loading overlay */}
-      {loading && <LoadingOverlay status={loadingStatus} />}
+      {loading && <LoadingOverlay status={loadingStatus} progress={loadingProgress} />}
 
       {/* Toolbar — top center */}
       {!loading && appearancesData && (
@@ -547,6 +598,8 @@ function App() {
           onBrushSizeChange={tools.setBrushSize}
           brushShape={tools.brushShape}
           onBrushShapeChange={tools.setBrushShape}
+          activeDoorType={tools.activeDoorType}
+          onDoorTypeChange={tools.setActiveDoorType}
         />
       )}
 
@@ -767,7 +820,8 @@ function HudField({ label, value }: { label: string; value: string }) {
   )
 }
 
-function LoadingOverlay({ status }: { status: string }) {
+function LoadingOverlay({ status, progress }: { status: string; progress: number }) {
+  const pct = Math.round(progress * 100)
   return (
     <div style={{
       position: 'absolute',
@@ -805,25 +859,58 @@ function LoadingOverlay({ status }: { status: string }) {
         <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       </div>
 
-      <div style={{ textAlign: 'center' }}>
+      <div style={{
+        fontFamily: 'var(--font-display)',
+        fontSize: 'var(--text-xl)',
+        fontWeight: 600,
+        letterSpacing: 'var(--tracking-wide)',
+        textTransform: 'uppercase',
+        color: 'var(--text-primary)',
+      }}>
+        Tibia Map Editor
+      </div>
+
+      {/* Progress bar */}
+      <div style={{
+        width: 280,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-3)',
+      }}>
         <div style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 'var(--text-xl)',
-          fontWeight: 600,
-          letterSpacing: 'var(--tracking-wide)',
-          textTransform: 'uppercase',
-          color: 'var(--text-primary)',
-          marginBottom: 'var(--space-3)',
+          width: '100%',
+          height: 4,
+          background: 'var(--bg-elevated)',
+          borderRadius: 2,
+          overflow: 'hidden',
         }}>
-          Tibia Map Editor
+          <div style={{
+            height: '100%',
+            width: `${pct}%`,
+            background: 'var(--accent)',
+            borderRadius: 2,
+          }} />
         </div>
+
         <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 'var(--text-sm)',
-          color: 'var(--text-tertiary)',
-          animation: 'pulse-glow 2s ease-in-out infinite',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
         }}>
-          {status}
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--text-xs)',
+            color: 'var(--text-tertiary)',
+          }}>
+            {status}
+          </div>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--text-xs)',
+            color: 'var(--accent)',
+          }}>
+            {pct}%
+          </div>
         </div>
       </div>
     </div>

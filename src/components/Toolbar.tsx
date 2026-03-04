@@ -4,6 +4,10 @@ import type { ItemRegistry } from '../lib/items'
 import { getItemDisplayName } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
 import { HamburgerMenu, type MenuSection } from './HamburgerMenu'
+import {
+  DOOR_NORMAL, DOOR_LOCKED, DOOR_QUEST, DOOR_MAGIC,
+  DOOR_WINDOW, DOOR_HATCH_WINDOW,
+} from '../lib/brushes/WallTypes'
 
 interface ToolbarProps {
   activeTool: EditorTool
@@ -31,6 +35,8 @@ interface ToolbarProps {
   onBrushSizeChange: (size: number) => void
   brushShape: BrushShape
   onBrushShapeChange: (shape: BrushShape) => void
+  activeDoorType: number
+  onDoorTypeChange: (type: number) => void
 }
 
 const BRUSH_SIZES = [
@@ -75,6 +81,27 @@ const TOOLS: { id: EditorTool; label: string; shortcut: string; icon: JSX.Elemen
       </svg>
     ),
   },
+  {
+    id: 'door',
+    label: 'Door',
+    shortcut: 'R',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
+        <rect x="3" y="1.5" width="8" height="11" rx="0.5" stroke="currentColor" strokeWidth="1.2" />
+        <circle cx="9" cy="7" r="0.8" fill="currentColor" />
+        <line x1="7" y1="1.5" x2="7" y2="12.5" stroke="currentColor" strokeWidth="0.8" strokeDasharray="1.5 1" />
+      </svg>
+    ),
+  },
+]
+
+const DOOR_TYPES = [
+  { value: DOOR_NORMAL, label: 'Normal' },
+  { value: DOOR_LOCKED, label: 'Locked' },
+  { value: DOOR_QUEST, label: 'Quest' },
+  { value: DOOR_MAGIC, label: 'Magic' },
+  { value: DOOR_WINDOW, label: 'Window' },
+  { value: DOOR_HATCH_WINDOW, label: 'Hatch' },
 ]
 
 export function Toolbar({
@@ -103,6 +130,8 @@ export function Toolbar({
   onBrushSizeChange,
   brushShape,
   onBrushShapeChange,
+  activeDoorType,
+  onDoorTypeChange,
 }: ToolbarProps) {
   const itemName = selectedItemId != null && registry && appearances
     ? getItemDisplayName(selectedItemId, registry, appearances)
@@ -191,7 +220,7 @@ export function Toolbar({
         </button>
       </div>
 
-      {/* Brush size — only for draw/erase */}
+      {/* Brush size — for draw/erase */}
       {(activeTool === 'draw' || activeTool === 'erase') && (
         <>
           <div className="separator-v" style={{ height: 22, flexShrink: 0 }} />
@@ -237,6 +266,35 @@ export function Toolbar({
                 <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.4" />
               </svg>
             </button>
+          </div>
+        </>
+      )}
+
+      {/* Door type selector — only for door tool */}
+      {activeTool === 'door' && (
+        <>
+          <div className="separator-v" style={{ height: 22, flexShrink: 0 }} />
+          <div className="tool-group">
+            <span className="label" style={{ fontSize: 'var(--text-xs)', alignSelf: 'center', marginRight: 'var(--space-1)' }}>DOOR</span>
+            {DOOR_TYPES.map(({ value, label }) => (
+              <button
+                key={value}
+                className={`btn${activeDoorType === value ? ' tool-active' : ''}`}
+                onClick={() => onDoorTypeChange(value)}
+                title={`${label} door`}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  fontFamily: 'var(--font-condensed)',
+                  fontSize: 'var(--text-xs)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  padding: '4px 6px',
+                }}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </>
       )}

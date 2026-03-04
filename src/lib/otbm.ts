@@ -440,12 +440,12 @@ function parseTile(
 
 // ── Main parser ─────────────────────────────────────────────────────
 
-export async function loadOtbm(url = '/canary.otbm'): Promise<OtbmMap> {
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch OTBM: ${response.status}`)
-  }
-  const buffer = await response.arrayBuffer()
+export async function loadOtbm(
+  url = '/canary.otbm',
+  onProgress?: (fraction: number) => void,
+): Promise<OtbmMap> {
+  const { fetchWithProgress } = await import('./fetchWithProgress')
+  const buffer = await fetchWithProgress(url, onProgress)
   return parseOtbm(new Uint8Array(buffer))
 }
 

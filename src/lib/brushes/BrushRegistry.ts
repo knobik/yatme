@@ -1,7 +1,7 @@
 // Central registry mapping brush names and item IDs to GroundBrush objects.
 
 import type { AutoBorder, GroundBrush } from './BrushTypes'
-import type { WallBrush } from './WallTypes'
+import type { WallBrush, WallDoor } from './WallTypes'
 
 export class BrushRegistry {
   private brushesByName = new Map<string, GroundBrush>()
@@ -16,6 +16,10 @@ export class BrushRegistry {
   private wallBrushesByName = new Map<string, WallBrush>()
   private wallBrushesByItemId = new Map<number, WallBrush>()
   readonly wallItemIds = new Set<number>()
+
+  // Door item lookups
+  private doorItemInfo = new Map<number, WallDoor>()
+  readonly doorItemIds = new Set<number>()
 
   constructor(
     brushes: GroundBrush[],
@@ -81,6 +85,8 @@ export class BrushRegistry {
         for (const door of doors) {
           this.wallBrushesByItemId.set(door.id, wb)
           this.wallItemIds.add(door.id)
+          this.doorItemIds.add(door.id)
+          this.doorItemInfo.set(door.id, door)
         }
       }
     }
@@ -136,6 +142,14 @@ export class BrushRegistry {
 
   isWallItem(itemId: number): boolean {
     return this.wallItemIds.has(itemId)
+  }
+
+  isDoorItem(itemId: number): boolean {
+    return this.doorItemIds.has(itemId)
+  }
+
+  getDoorInfo(itemId: number): WallDoor | undefined {
+    return this.doorItemInfo.get(itemId)
   }
 
   // Pick a random ground item from a brush using weighted chance

@@ -265,19 +265,30 @@ export function parseGroundBrushesXml(
 }
 
 // Load all brush data from the server
-export async function loadBrushData(): Promise<{
+export async function loadBrushData(
+  onProgress?: (fraction: number) => void,
+): Promise<{
   borders: Map<number, AutoBorder>
   brushes: GroundBrush[]
 }> {
-  // Load borders
-  const bordersXml = await fetch('/materials/borders/borders.xml').then(r => r.text())
+  const { fetchTextWithProgress } = await import('../fetchWithProgress')
+
+  // Load borders (~33% of brush loading)
+  const bordersXml = await fetchTextWithProgress(
+    '/materials/borders/borders.xml',
+    onProgress ? (f) => onProgress(f * 0.33) : undefined,
+  )
   const borders = parseBordersXml(bordersXml)
 
-  // Load ground brushes from grounds.xml (contains all ground brush definitions)
-  const groundsXml = await fetch('/materials/brushs/grounds.xml').then(r => r.text())
+  // Load ground brushes (~67% of brush loading)
+  const groundsXml = await fetchTextWithProgress(
+    '/materials/brushs/grounds.xml',
+    onProgress ? (f) => onProgress(0.33 + f * 0.67) : undefined,
+  )
   const nextId = { value: 1 }
   const brushes = parseGroundBrushesXml(groundsXml, borders, nextId)
 
+  onProgress?.(1)
   console.log(`[BrushLoader] Loaded ${borders.size} borders, ${brushes.length} ground brushes`)
 
   return { borders, brushes }

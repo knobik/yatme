@@ -6,7 +6,8 @@ import type { GroundBrush } from './brushes/BrushTypes'
 import type { WallBrush } from './brushes/WallTypes'
 import type { BrushRegistry } from './brushes/BrushRegistry'
 import { computeBorders } from './brushes/BorderSystem'
-import { doWalls } from './brushes/WallSystem'
+import { doWalls, getWallAlignment } from './brushes/WallSystem'
+import { findDoorForAlignment, switchDoor } from './brushes/DoorSystem'
 const MAX_UNDO = 200
 
 function tileKey(x: number, y: number, z: number): string {
@@ -443,6 +444,97 @@ export class MapMutator {
           this.onTileChanged?.(nx, ny, z)
         }
       }
+    })
+  }
+
+  // --- Door brush painting ---
+
+  paintDoor(x: number, y: number, z: number, doorType: number, registry: BrushRegistry): void {
+    this.autoBatch('Place door', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile) return
+
+      // Find the first wall item on this tile
+      let wallIdx = -1
+      let wallBrush: WallBrush | null = null
+      for (let i = 0; i < tile.items.length; i++) {
+        const wb = registry.getWallBrushForItem(tile.items[i].id)
+        if (wb) {
+          wallIdx = i
+          wallBrush = wb
+          break
+        }
+      }
+      if (wallIdx < 0 || !wallBrush) return // no wall on tile
+
+      // Get current wall alignment
+      const alignment = getWallAlignment(wallBrush, tile.items[wallIdx].id)
+      if (alignment < 0) return
+
+      // Find door item for this alignment and type (default closed)
+      const doorId = findDoorForAlignment(wallBrush, alignment, doorType, false)
+      if (!doorId) return // no door defined for this alignment
+
+      // Replace wall item with door item
+      const oldItems = deepCloneItems(tile.items)
+      tile.items[wallIdx] = { id: doorId }
+
+      this.recordAction({
+        type: 'setTileItems', x, y, z,
+        oldItems,
+        newItems: deepCloneItems(tile.items),
+      })
+      this.onTileChanged?.(x, y, z)
+
+      // Re-align 4 cardinal neighbors (door is a wall item, neighbors should adjust)
+      const neighborOffsets: [number, number][] = [
+        [0, -1], [-1, 0], [1, 0], [0, 1],
+      ]
+      for (const [dx, dy] of neighborOffsets) {
+        const nx = x + dx
+        const ny = y + dy
+        if (nx < 0 || ny < 0) continue
+
+        const neighborTile = this.mapData.tiles.get(`${nx},${ny},${z}`)
+        if (!neighborTile) continue
+
+        const hasWalls = neighborTile.items.some(item => registry.isWallItem(item.id))
+        if (!hasWalls) continue
+
+        const neighborOld = deepCloneItems(neighborTile.items)
+        const neighborWalls = doWalls(nx, ny, z, this.mapData, registry)
+        this.replaceWallItems(neighborTile, neighborWalls, registry)
+
+        if (!this.itemsEqual(neighborOld, neighborTile.items)) {
+          this.recordAction({
+            type: 'setTileItems', x: nx, y: ny, z,
+            oldItems: neighborOld,
+            newItems: deepCloneItems(neighborTile.items),
+          })
+          this.onTileChanged?.(nx, ny, z)
+        }
+      }
+    })
+  }
+
+  switchDoorItem(x: number, y: number, z: number, itemIndex: number, registry: BrushRegistry): void {
+    this.autoBatch('Switch door', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile || itemIndex < 0 || itemIndex >= tile.items.length) return
+
+      const item = tile.items[itemIndex]
+      const newId = switchDoor(item.id, registry)
+      if (!newId || newId === item.id) return
+
+      const oldItems = deepCloneItems(tile.items)
+      tile.items[itemIndex] = { ...tile.items[itemIndex], id: newId }
+
+      this.recordAction({
+        type: 'setTileItems', x, y, z,
+        oldItems,
+        newItems: deepCloneItems(tile.items),
+      })
+      this.onTileChanged?.(x, y, z)
     })
   }
 

@@ -12,13 +12,12 @@ export interface ItemInfo {
 
 export type ItemRegistry = Map<number, ItemInfo>
 
-export async function loadItems(url = '/items.xml'): Promise<ItemRegistry> {
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch items.xml: ${response.status}`)
-  }
-
-  const text = await response.text()
+export async function loadItems(
+  url = '/items.xml',
+  onProgress?: (fraction: number) => void,
+): Promise<ItemRegistry> {
+  const { fetchTextWithProgress } = await import('./fetchWithProgress')
+  const text = await fetchTextWithProgress(url, onProgress)
   const parser = new DOMParser()
   const doc = parser.parseFromString(text, 'text/xml')
   const registry: ItemRegistry = new Map()

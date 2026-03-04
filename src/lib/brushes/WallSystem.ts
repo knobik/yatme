@@ -11,6 +11,7 @@ import {
   WALL_HALF_TYPES,
   WALLTILE_NORTH, WALLTILE_WEST, WALLTILE_EAST, WALLTILE_SOUTH,
 } from './WallTypes'
+import { findDoorForAlignment } from './DoorSystem'
 
 // Check if a neighbor tile has a wall matching the given brush (same brush or friend)
 function hasMatchingWall(
@@ -75,7 +76,7 @@ function pickWallItem(brush: WallBrush, alignment: number): number {
 }
 
 // Get the wall alignment (0-16) of an item by finding which alignment slot it belongs to
-function getWallAlignment(brush: WallBrush, itemId: number): number {
+export function getWallAlignment(brush: WallBrush, itemId: number): number {
   // Check wall items
   for (let a = 0; a < brush.wallItems.length; a++) {
     for (const item of brush.wallItems[a].items) {
@@ -150,6 +151,9 @@ export function doWalls(
       continue
     }
 
+    // Check if this item is a door (needs special handling to preserve door type)
+    const doorInfo = registry.getDoorInfo(item.id)
+
     // Two-pass alignment: try full types first, then half types as fallback
     let newId = 0
     for (let pass = 0; pass < 2 && !newId; pass++) {
@@ -163,8 +167,16 @@ export function doWalls(
         break
       }
 
-      // Try to pick a new item for this alignment
-      newId = pickWallItem(wallBrush, alignment)
+      // For doors, find the equivalent door for the new alignment
+      if (doorInfo) {
+        newId = findDoorForAlignment(wallBrush, alignment, doorInfo.type, doorInfo.open)
+        if (!newId) {
+          // No door for this alignment — fall back to regular wall
+          newId = pickWallItem(wallBrush, alignment)
+        }
+      } else {
+        newId = pickWallItem(wallBrush, alignment)
+      }
     }
 
     if (newId) {

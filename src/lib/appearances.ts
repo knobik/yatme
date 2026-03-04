@@ -15,13 +15,12 @@ function buildLookup(list: Appearance[]): Map<number, Appearance> {
   return map;
 }
 
-export async function loadAppearances(url = '/appearances.dat'): Promise<AppearanceData> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch appearances.dat: ${response.status}`);
-  }
-
-  const buffer = await response.arrayBuffer();
+export async function loadAppearances(
+  url = '/appearances.dat',
+  onProgress?: (fraction: number) => void,
+): Promise<AppearanceData> {
+  const { fetchWithProgress } = await import('./fetchWithProgress');
+  const buffer = await fetchWithProgress(url, onProgress);
   const decoded = Appearances.decode(new Uint8Array(buffer));
 
   return {

@@ -3,8 +3,9 @@ import type { MapRenderer } from '../lib/MapRenderer'
 import type { MapMutator } from '../lib/MapMutator'
 import { type OtbmMap, type OtbmItem, deepCloneItem } from '../lib/otbm'
 import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
+import { DOOR_NORMAL } from '../lib/brushes/WallTypes'
 
-export type EditorTool = 'select' | 'draw' | 'erase'
+export type EditorTool = 'select' | 'draw' | 'erase' | 'door'
 export type BrushShape = 'square' | 'circle'
 
 function getTilesInBrush(cx: number, cy: number, size: number, shape: BrushShape): { x: number; y: number }[] {
@@ -47,6 +48,8 @@ export interface EditorToolsState {
   setBrushSize: (size: number) => void
   brushShape: BrushShape
   setBrushShape: (shape: BrushShape) => void
+  activeDoorType: number
+  setActiveDoorType: (type: number) => void
 }
 
 export function useEditorTools(
@@ -63,6 +66,7 @@ export function useEditorTools(
   const [canRedo, setCanRedo] = useState(false)
   const [brushSize, setBrushSize] = useState(0)
   const [brushShape, setBrushShape] = useState<BrushShape>('square')
+  const [activeDoorType, setActiveDoorType] = useState<number>(DOOR_NORMAL)
 
   // Refs for pointer handling (avoid stale closures)
   const activeToolRef = useRef(activeTool)
@@ -71,12 +75,14 @@ export function useEditorTools(
   const brushSizeRef = useRef(brushSize)
   const brushShapeRef = useRef(brushShape)
   const brushRegistryRef = useRef(brushRegistry)
+  const activeDoorTypeRef = useRef(activeDoorType)
   activeToolRef.current = activeTool
   selectedItemIdRef.current = selectedItemId
   selectionRef.current = selection
   brushSizeRef.current = brushSize
   brushShapeRef.current = brushShape
   brushRegistryRef.current = brushRegistry
+  activeDoorTypeRef.current = activeDoorType
 
   // Drag state for tools
   const paintedTilesRef = useRef(new Set<string>())
@@ -106,14 +112,17 @@ export function useEditorTools(
         paintedTilesRef.current.clear()
         const registry = brushRegistryRef.current
         const groundBrush = registry?.getBrushForItem(itemId) ?? null
-        const wallBrush = !groundBrush ? registry?.getWallBrushForItem(itemId) ?? null : null
-        mutator.beginBatch(groundBrush ? 'Paint ground' : wallBrush ? 'Paint wall' : 'Draw items')
+        const doorInfo = !groundBrush ? registry?.getDoorInfo(itemId) ?? null : null
+        const wallBrush = !groundBrush && !doorInfo ? registry?.getWallBrushForItem(itemId) ?? null : null
+        mutator.beginBatch(groundBrush ? 'Paint ground' : doorInfo ? 'Place door' : wallBrush ? 'Paint wall' : 'Draw items')
         const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
         for (const t of tiles) {
           const key = `${t.x},${t.y}`
           paintedTilesRef.current.add(key)
           if (groundBrush && registry) {
             mutator.paintGround(t.x, t.y, pos.z, groundBrush, registry)
+          } else if (doorInfo && registry) {
+            mutator.paintDoor(t.x, t.y, pos.z, doorInfo.type, registry)
           } else if (wallBrush && registry) {
             mutator.paintWall(t.x, t.y, pos.z, wallBrush, registry)
           } else {
@@ -131,6 +140,19 @@ export function useEditorTools(
           mutator.removeTopItem(t.x, t.y, pos.z)
         }
         mutator.flushChunkUpdates()
+      } else if (tool === 'door') {
+        const registry = brushRegistryRef.current
+        if (!registry) return
+        const doorType = activeDoorTypeRef.current
+        paintedTilesRef.current.clear()
+        mutator.beginBatch('Place door')
+        const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
+        for (const t of tiles) {
+          const key = `${t.x},${t.y}`
+          paintedTilesRef.current.add(key)
+          mutator.paintDoor(t.x, t.y, pos.z, doorType, registry)
+        }
+        mutator.flushChunkUpdates()
       } else if (tool === 'select') {
         selectStartRef.current = pos
       }
@@ -145,7 +167,8 @@ export function useEditorTools(
         if (itemId == null) return
         const registry = brushRegistryRef.current
         const groundBrush = registry?.getBrushForItem(itemId) ?? null
-        const wallBrush = !groundBrush ? registry?.getWallBrushForItem(itemId) ?? null : null
+        const doorInfo = !groundBrush ? registry?.getDoorInfo(itemId) ?? null : null
+        const wallBrush = !groundBrush && !doorInfo ? registry?.getWallBrushForItem(itemId) ?? null : null
         const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
         let any = false
         for (const t of tiles) {
@@ -154,6 +177,8 @@ export function useEditorTools(
           paintedTilesRef.current.add(key)
           if (groundBrush && registry) {
             mutator.paintGround(t.x, t.y, pos.z, groundBrush, registry)
+          } else if (doorInfo && registry) {
+            mutator.paintDoor(t.x, t.y, pos.z, doorInfo.type, registry)
           } else if (wallBrush && registry) {
             mutator.paintWall(t.x, t.y, pos.z, wallBrush, registry)
           } else {
@@ -170,6 +195,20 @@ export function useEditorTools(
           if (paintedTilesRef.current.has(key)) continue
           paintedTilesRef.current.add(key)
           mutator.removeTopItem(t.x, t.y, pos.z)
+          any = true
+        }
+        if (any) mutator.flushChunkUpdates()
+      } else if (tool === 'door') {
+        const registry = brushRegistryRef.current
+        if (!registry) return
+        const doorType = activeDoorTypeRef.current
+        const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
+        let any = false
+        for (const t of tiles) {
+          const key = `${t.x},${t.y}`
+          if (paintedTilesRef.current.has(key)) continue
+          paintedTilesRef.current.add(key)
+          mutator.paintDoor(t.x, t.y, pos.z, doorType, registry)
           any = true
         }
         if (any) mutator.flushChunkUpdates()
@@ -195,7 +234,7 @@ export function useEditorTools(
       const tool = activeToolRef.current
       isDraggingRef.current = false
 
-      if (tool === 'draw' || tool === 'erase') {
+      if (tool === 'draw' || tool === 'erase' || tool === 'door') {
         paintedTilesRef.current.clear()
         mutator.commitBatch()
       } else if (tool === 'select') {
@@ -226,6 +265,7 @@ export function useEditorTools(
       case 'select': renderer.setCursorStyle('default'); break
       case 'draw': renderer.setCursorStyle('crosshair'); break
       case 'erase': renderer.setCursorStyle('crosshair'); break
+      case 'door': renderer.setCursorStyle('crosshair'); break
     }
   }, [renderer, activeTool])
 
@@ -317,5 +357,7 @@ export function useEditorTools(
     setBrushSize,
     brushShape,
     setBrushShape,
+    activeDoorType,
+    setActiveDoorType,
   }
 }
