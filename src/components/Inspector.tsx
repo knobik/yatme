@@ -8,6 +8,7 @@ import type { MapMutator } from '../lib/MapMutator'
 import { classifyItem } from '../lib/MapMutator'
 import { getItemDisplayName } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
+import { parsePositionString } from '../lib/position'
 
 interface InspectorProps {
   tilePos: { x: number; y: number; z: number } | null
@@ -259,6 +260,7 @@ export function Inspector({
                     key={`${tileVersion}-edit-${i}`}
                     item={item}
                     appearances={appearances}
+                    registry={registry}
                     onApply={(props) => handleApplyProperties(i, props)}
                     onCancel={() => setEditingIndex(null)}
                   />
@@ -458,17 +460,38 @@ function ItemRow({
 function PropertyEditor({
   item,
   appearances,
+  registry,
   onApply,
   onCancel,
 }: {
   item: OtbmItem
   appearances: AppearanceData
+  registry: ItemRegistry
   onApply: (props: Partial<OtbmItem>) => void
   onCancel: () => void
 }) {
   const [actionId, setActionId] = useState(item.actionId != null ? String(item.actionId) : '')
   const [uniqueId, setUniqueId] = useState(item.uniqueId != null ? String(item.uniqueId) : '')
-  const [count, setCount] = useState(item.count != null ? String(item.count) : '')
+  const appearance = appearances.objects.get(item.id)
+  const flags = appearance?.flags
+
+  // Derive which fields to show based on item flags and registry
+  const itemInfo = registry.get(item.id)
+  const defaultCharges = itemInfo?.charges
+  const isCharged = defaultCharges != null && defaultCharges > 0
+  const isStackable = !!flags?.cumulative && !isCharged
+  const isWriteable = !!(flags?.write || flags?.writeOnce || itemInfo?.writeable)
+  const hasDuration = item.duration != null
+  const isTeleport = item.teleportDestination != null || itemInfo?.itemType === 'teleport'
+  const isDepot = item.depotId != null || itemInfo?.itemType === 'depot'
+  const isDoor = item.houseDoorId != null || itemInfo?.itemType === 'door'
+  const hasDescription = item.description != null
+
+  // RME stores count and charges in the same "subtype" field.
+  // For stackable items it's "count", for charged items it's "charges".
+  // Both map to item.count in our model.
+  const subtypeDefault = isStackable ? '1' : isCharged ? String(defaultCharges) : ''
+  const [subtype, setSubtype] = useState(item.count != null ? String(item.count) : subtypeDefault)
   const [charges, setCharges] = useState(item.charges != null ? String(item.charges) : '')
   const [duration, setDuration] = useState(item.duration != null ? String(item.duration) : '')
   const [text, setText] = useState(item.text ?? '')
@@ -494,7 +517,7 @@ function PropertyEditor({
     onApply({
       actionId: parseNum(actionId),
       uniqueId: parseNum(uniqueId),
-      count: parseNum(count),
+      count: parseNum(subtype),
       charges: parseNum(charges),
       duration: parseNum(duration),
       text: text || undefined,
@@ -509,9 +532,19 @@ function PropertyEditor({
     })
   }
 
-  const appearance = appearances.objects.get(item.id)
-  const flags = appearance?.flags
   const itemFlags = flags ? getItemFlags(flags) : []
+
+  // Group subtype (count/charges) and duration into one row
+  // Stackable → "COUNT", Charged → "CHARGES" — both use subtype field
+  // OTBM_ATTR_CHARGES (u16) is separate and only shown if present
+  const hasSubtype = isStackable || isCharged
+  const subtypeLabel = isCharged ? 'CHARGES' : 'COUNT'
+  const hasU16Charges = item.charges != null
+  const numericFields = [
+    hasSubtype && { label: subtypeLabel, value: subtype, onChange: setSubtype },
+    hasU16Charges && { label: 'CHARGES', value: charges, onChange: setCharges },
+    hasDuration && { label: 'DURATION', value: duration, onChange: setDuration },
+  ].filter(Boolean) as { label: string; value: string; onChange: (v: string) => void }[]
 
   return (
     <div className="item-properties">
@@ -528,26 +561,44 @@ function PropertyEditor({
         <PropField label="ACTION ID" value={actionId} onChange={setActionId} />
         <PropField label="UNIQUE ID" value={uniqueId} onChange={setUniqueId} />
       </div>
-      <div className="item-prop-row">
-        <PropField label="COUNT" value={count} onChange={setCount} />
-        <PropField label="CHARGES" value={charges} onChange={setCharges} />
-        <PropField label="DURATION" value={duration} onChange={setDuration} />
-      </div>
-      <div className="item-prop-row">
-        <PropField label="TEXT" value={text} onChange={setText} wide />
-      </div>
-      <div className="item-prop-row">
-        <PropField label="DESCRIPTION" value={description} onChange={setDescription} wide />
-      </div>
-      <div className="item-prop-row">
-        <PropField label="DEPOT ID" value={depotId} onChange={setDepotId} />
-        <PropField label="DOOR ID" value={doorId} onChange={setDoorId} />
-      </div>
-      <div className="item-prop-row">
-        <PropField label="DEST X" value={destX} onChange={setDestX} />
-        <PropField label="DEST Y" value={destY} onChange={setDestY} />
-        <PropField label="DEST Z" value={destZ} onChange={setDestZ} />
-      </div>
+      {numericFields.length > 0 && (
+        <div className="item-prop-row">
+          {numericFields.map(f => (
+            <PropField key={f.label} label={f.label} value={f.value} onChange={f.onChange} />
+          ))}
+        </div>
+      )}
+      {isWriteable && (
+        <div className="item-prop-row">
+          <PropField label="TEXT" value={text} onChange={setText} wide />
+        </div>
+      )}
+      {hasDescription && (
+        <div className="item-prop-row">
+          <PropField label="DESCRIPTION" value={description} onChange={setDescription} wide />
+        </div>
+      )}
+      {(isDepot || isDoor) && (
+        <div className="item-prop-row">
+          {isDepot && <PropField label="DEPOT ID" value={depotId} onChange={setDepotId} />}
+          {isDoor && <PropField label="DOOR ID" value={doorId} onChange={setDoorId} />}
+        </div>
+      )}
+      {isTeleport && (
+        <div className="item-prop-row" onPaste={(e) => {
+          const pos = parsePositionString(e.clipboardData.getData('text'))
+          if (pos) {
+            e.preventDefault()
+            setDestX(pos.x)
+            setDestY(pos.y)
+            setDestZ(pos.z)
+          }
+        }}>
+          <PropField label="DEST X" value={destX} onChange={setDestX} />
+          <PropField label="DEST Y" value={destY} onChange={setDestY} />
+          <PropField label="DEST Z" value={destZ} onChange={setDestZ} />
+        </div>
+      )}
       <div className="item-prop-actions">
         <button className="btn" onClick={onCancel}>Cancel</button>
         <button className="btn border-accent bg-accent text-fg-inverse hover:border-accent-hover hover:bg-accent-hover hover:text-fg-inverse" onClick={handleApply}>Apply</button>
@@ -591,23 +642,26 @@ const TILE_FLAGS = [
 
 // ── Item Flags ────────────────────────────────────────────────────
 
-/** Skip internal/rendering-only flags that aren't useful in the inspector */
-const HIDDEN_FLAGS = new Set(['shift', 'npcsaledata', 'noMovementAnimation', 'defaultAction', 'lenshelp', 'cyclopediaitem', 'skillwheelGem', 'transparencylevel'])
+/** Only show flags that RME displays in its properties window */
+const SHOWN_FLAGS: [string, string][] = [
+  ['cumulative', 'Stackable'],
+  ['unmove', 'Movable'],       // unmove=true means NOT movable, inverted below
+  ['take', 'Pickupable'],
+  ['hang', 'Hangable'],
+  ['unsight', 'Block Missiles'],
+  ['avoid', 'Block Pathfinder'],
+  ['height', 'Has Elevation'],
+]
 
 function getItemFlags(flags: Record<string, unknown>): string[] {
   const result: string[] = []
-  for (const [key, value] of Object.entries(flags)) {
-    if (HIDDEN_FLAGS.has(key)) continue
-    if (value === false || value === undefined || value === 0) continue
-    if (Array.isArray(value) && value.length === 0) continue
-
-    if (value === true) {
-      result.push(key)
-    } else if (typeof value === 'object' && value !== null) {
-      const inner = Object.values(value as Record<string, unknown>).filter(v => v !== undefined && v !== 0)
-      result.push(inner.length > 0 ? `${key}(${inner.join(',')})` : key)
-    } else {
-      result.push(`${key}(${value})`)
+  for (const [key, label] of SHOWN_FLAGS) {
+    const value = (flags as Record<string, unknown>)[key]
+    if (key === 'unmove') {
+      // unmove=false or absent means movable
+      if (!value) result.push(label)
+    } else if (value && value !== false && value !== 0) {
+      result.push(label)
     }
   }
   return result

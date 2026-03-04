@@ -362,6 +362,11 @@ function App() {
       }
 
       renderer.onTileContextMenu = (pos, tile, screenX, screenY) => {
+        // Right-click switches back to select tool (context menu still opens)
+        const currentTool = toolsRef.current.activeTool
+        if (currentTool === 'draw' || currentTool === 'erase') {
+          toolsRef.current.setActiveTool('select')
+        }
         setContextMenu({ x: screenX, y: screenY, tilePos: pos, tile })
       }
 

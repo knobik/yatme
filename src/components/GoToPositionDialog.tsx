@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { parsePositionString } from '../lib/position'
 
 interface GoToPositionDialogProps {
   currentX: number
@@ -40,23 +41,13 @@ export function GoToPositionDialog({
     return () => document.removeEventListener('keydown', handler, true)
   }, [onClose])
 
-  // Intercept paste to parse position strings like {x=123, y=456, z=7}
   function handlePaste(e: React.ClipboardEvent) {
-    const text = e.clipboardData.getData('text').trim()
-
-    // Try {x=123, y=456, z=7} format (from "Copy Position")
-    const eqMatch = text.match(/x\s*=\s*(\d+).*y\s*=\s*(\d+).*z\s*=\s*(\d+)/)
-    // Try {x: 123, y: 456, z: 7} or {"x": 123, ...} JSON-like format
-    const colonMatch = text.match(/x["\s]*:\s*(\d+).*y["\s]*:\s*(\d+).*z["\s]*:\s*(\d+)/)
-    // Try plain comma-separated: 123, 456, 7
-    const csvMatch = text.match(/^(\d+)\s*,\s*(\d+)\s*,\s*(\d+)$/)
-
-    const match = eqMatch || colonMatch || csvMatch
-    if (match) {
+    const pos = parsePositionString(e.clipboardData.getData('text'))
+    if (pos) {
       e.preventDefault()
-      setX(match[1])
-      setY(match[2])
-      setZ(match[3])
+      setX(pos.x)
+      setY(pos.y)
+      setZ(pos.z)
     }
   }
 

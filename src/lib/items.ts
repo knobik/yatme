@@ -1,13 +1,21 @@
 import type { AppearanceData } from './appearances'
 
+export type ItemType = 'depot' | 'mailbox' | 'trashholder' | 'container' | 'door' | 'magicfield' | 'teleport' | 'bed' | 'key'
+
 export interface ItemInfo {
   id: number
   name: string
   article?: string
   primaryType?: string
+  itemType?: ItemType
   weight?: number
   containerSize?: number
   description?: string
+  charges?: number
+  rotateTo?: number
+  writeable?: boolean
+  maxTextLen?: number
+  floorChange?: string
 }
 
 export type ItemRegistry = Map<number, ItemInfo>
@@ -32,9 +40,15 @@ export async function loadItems(
 
     // Extract top-level <attribute> children (skip nested sub-attributes)
     let primaryType: string | undefined
+    let itemType: ItemType | undefined
     let weight: number | undefined
     let containerSize: number | undefined
     let description: string | undefined
+    let charges: number | undefined
+    let rotateTo: number | undefined
+    let writeable: boolean | undefined
+    let maxTextLen: number | undefined
+    let floorChange: string | undefined
 
     for (const attr of el.children) {
       if (attr.tagName !== 'attribute') continue
@@ -55,10 +69,31 @@ export async function loadItems(
         case 'description':
           description = value
           break
+        case 'charges':
+          charges = parseInt(value, 10)
+          break
+        case 'type': {
+          const validTypes = ['depot', 'mailbox', 'trashholder', 'container', 'door', 'magicfield', 'teleport', 'bed', 'key']
+          if (validTypes.includes(value.toLowerCase())) itemType = value.toLowerCase() as ItemType
+          break
+        }
+        case 'rotateto':
+          rotateTo = parseInt(value, 10)
+          break
+        case 'writeable':
+          writeable = value === '1' || value.toLowerCase() === 'true'
+          break
+        case 'maxtextlen':
+        case 'maxtextlength':
+          maxTextLen = parseInt(value, 10)
+          break
+        case 'floorchange':
+          floorChange = value.toLowerCase()
+          break
       }
     }
 
-    const info: Omit<ItemInfo, 'id'> = { name, article, primaryType, weight, containerSize, description }
+    const info: Omit<ItemInfo, 'id'> = { name, article, primaryType, itemType, weight, containerSize, description, charges, rotateTo, writeable, maxTextLen, floorChange }
 
     if (idStr) {
       const id = parseInt(idStr, 10)
