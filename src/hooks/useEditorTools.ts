@@ -8,6 +8,13 @@ import { DOOR_NORMAL } from '../lib/brushes/WallTypes'
 export type EditorTool = 'select' | 'draw' | 'erase' | 'door'
 export type BrushShape = 'square' | 'circle'
 
+export interface SelectedItemInfo {
+  x: number
+  y: number
+  z: number
+  itemIndex: number
+}
+
 function getTilesInBrush(cx: number, cy: number, size: number, shape: BrushShape): { x: number; y: number }[] {
   if (size === 0) return [{ x: cx, y: cy }]
   const tiles: { x: number; y: number }[] = []
@@ -33,6 +40,10 @@ export interface EditorToolsState {
   setActiveTool: (tool: EditorTool) => void
   selectedItemId: number | null
   setSelectedItemId: (id: number | null) => void
+  /** Single-item selection (click) — mutually exclusive with `selection` */
+  selectedItem: SelectedItemInfo | null
+  setSelectedItem: (item: SelectedItemInfo | null) => void
+  /** Multi-tile selection (shift+drag) — mutually exclusive with `selectedItem` */
   selection: { x: number; y: number; z: number }[]
   clipboard: ClipboardData | null
   canUndo: boolean
@@ -57,9 +68,11 @@ export function useEditorTools(
   mutator: MapMutator | null,
   mapData: OtbmMap | null,
   brushRegistry: BrushRegistry | null = null,
+  onRequestEditItem?: (x: number, y: number, z: number, itemIndex: number) => void,
 ): EditorToolsState {
   const [activeTool, setActiveTool] = useState<EditorTool>('select')
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null)
+  const [selectedItem, setSelectedItem] = useState<SelectedItemInfo | null>(null)
   const [selection, setSelection] = useState<{ x: number; y: number; z: number }[]>([])
   const [clipboard, setClipboard] = useState<ClipboardData | null>(null)
   const [canUndo, setCanUndo] = useState(false)
@@ -71,23 +84,28 @@ export function useEditorTools(
   // Refs for pointer handling (avoid stale closures)
   const activeToolRef = useRef(activeTool)
   const selectedItemIdRef = useRef(selectedItemId)
+  const selectedItemRef = useRef(selectedItem)
   const selectionRef = useRef(selection)
   const brushSizeRef = useRef(brushSize)
   const brushShapeRef = useRef(brushShape)
   const brushRegistryRef = useRef(brushRegistry)
   const activeDoorTypeRef = useRef(activeDoorType)
+  const onRequestEditItemRef = useRef(onRequestEditItem)
   activeToolRef.current = activeTool
   selectedItemIdRef.current = selectedItemId
+  selectedItemRef.current = selectedItem
   selectionRef.current = selection
   brushSizeRef.current = brushSize
   brushShapeRef.current = brushShape
   brushRegistryRef.current = brushRegistry
   activeDoorTypeRef.current = activeDoorType
+  onRequestEditItemRef.current = onRequestEditItem
 
   // Drag state for tools
   const paintedTilesRef = useRef(new Set<string>())
   const selectStartRef = useRef<{ x: number; y: number; z: number } | null>(null)
   const isDraggingRef = useRef(false)
+  const isShiftDragRef = useRef(false)
 
   // Wire up mutator undo/redo callback
   useEffect(() => {
@@ -102,7 +120,7 @@ export function useEditorTools(
   useEffect(() => {
     if (!renderer || !mutator) return
 
-    renderer.onTilePointerDown = (pos, _event) => {
+    renderer.onTilePointerDown = (pos, event) => {
       const tool = activeToolRef.current
       isDraggingRef.current = true
 
@@ -165,6 +183,7 @@ export function useEditorTools(
         mutator.flushChunkUpdates()
       } else if (tool === 'select') {
         selectStartRef.current = pos
+        isShiftDragRef.current = event.shiftKey
       }
     }
 
@@ -233,6 +252,9 @@ export function useEditorTools(
         }
         if (any) mutator.flushChunkUpdates()
       } else if (tool === 'select') {
+        // Plain drag without shift: do nothing
+        if (!isShiftDragRef.current) return
+        // Shift+drag: rectangle selection
         const start = selectStartRef.current
         if (!start) return
         const minX = Math.min(start.x, pos.x)
@@ -245,8 +267,11 @@ export function useEditorTools(
             tiles.push({ x, y, z: pos.z })
           }
         }
+        // Clear single-item selection when doing multi-tile selection
+        setSelectedItem(null)
+        selectedItemRef.current = null
         setSelection(tiles)
-        renderer.updateSelectionOverlay(tiles)
+        renderer.highlightTiles(tiles)
       }
     }
 
@@ -259,15 +284,37 @@ export function useEditorTools(
         mutator.commitBatch()
       } else if (tool === 'select') {
         const start = selectStartRef.current
-        if (start && start.x === pos.x && start.y === pos.y) {
-          // Single click in select mode — select single tile + open inspector
+        const wasClick = start && start.x === pos.x && start.y === pos.y
+
+        if (wasClick && !isShiftDragRef.current) {
+          // Single click (no shift) — select top item on tile + open inspector
           const key = `${pos.x},${pos.y},${pos.z}`
           const tile = mapData?.tiles.get(key) ?? null
+
+          // Find top item index (last item = visually on top)
+          if (tile && tile.items.length > 0) {
+            const topIdx = tile.items.length - 1
+            const newSel: SelectedItemInfo = { x: pos.x, y: pos.y, z: pos.z, itemIndex: topIdx }
+            setSelectedItem(newSel)
+            selectedItemRef.current = newSel
+            renderer.highlightItem(pos.x, pos.y, pos.z, topIdx)
+          } else {
+            setSelectedItem(null)
+            selectedItemRef.current = null
+            renderer.clearItemHighlight()
+          }
+
+          // Clear multi-tile selection
+          setSelection([])
+          selectionRef.current = []
+
+          // Open inspector
           renderer.onTileClick?.(tile, pos.x, pos.y)
-          setSelection([{ x: pos.x, y: pos.y, z: pos.z }])
-          renderer.updateSelectionOverlay([{ x: pos.x, y: pos.y, z: pos.z }])
         }
+        // If shift+drag ended, rectangle was already built during move
+
         selectStartRef.current = null
+        isShiftDragRef.current = false
       }
     }
 
@@ -318,10 +365,31 @@ export function useEditorTools(
       }
     }
 
+    renderer.onTileDoubleClick = (pos, _event) => {
+      if (activeToolRef.current !== 'select') return
+      const key = `${pos.x},${pos.y},${pos.z}`
+      const tile = mapData?.tiles.get(key) ?? null
+      if (!tile || tile.items.length === 0) return
+      const topIdx = tile.items.length - 1
+
+      // Select the top item
+      const newSel: SelectedItemInfo = { x: pos.x, y: pos.y, z: pos.z, itemIndex: topIdx }
+      setSelectedItem(newSel)
+      selectedItemRef.current = newSel
+      setSelection([])
+      selectionRef.current = []
+
+      // Open inspector with edit mode
+      renderer.onTileClick?.(tile, pos.x, pos.y)
+      renderer.highlightItem(pos.x, pos.y, pos.z, topIdx)
+      onRequestEditItemRef.current?.(pos.x, pos.y, pos.z, topIdx)
+    }
+
     return () => {
       renderer.onTilePointerDown = undefined
       renderer.onTilePointerMove = undefined
       renderer.onTilePointerUp = undefined
+      renderer.onTileDoubleClick = undefined
       renderer.onTileHover = undefined
       renderer.clearGhostPreview()
     }
@@ -344,17 +412,40 @@ export function useEditorTools(
     renderer.clearGhostPreview()
   }, [renderer, selectedItemId, activeTool])
 
+  // Clear selections when switching away from select tool
+  useEffect(() => {
+    if (activeTool !== 'select') {
+      setSelectedItem(null)
+      selectedItemRef.current = null
+      setSelection([])
+      selectionRef.current = []
+      renderer?.clearItemHighlight()
+    }
+  }, [activeTool, renderer])
+
   const undo = useCallback(() => { mutator?.undo() }, [mutator])
   const redo = useCallback(() => { mutator?.redo() }, [mutator])
 
   const copy = useCallback(() => {
+    if (!mapData) return
+    const singleItem = selectedItemRef.current
     const sel = selectionRef.current
-    if (!mapData || sel.length === 0) return
-    const minX = Math.min(...sel.map(s => s.x))
-    const minY = Math.min(...sel.map(s => s.y))
-    const z = sel[0].z
+
+    // Build tile list from either selection mode
+    let tilesToCopy: { x: number; y: number; z: number }[]
+    if (singleItem) {
+      tilesToCopy = [{ x: singleItem.x, y: singleItem.y, z: singleItem.z }]
+    } else if (sel.length > 0) {
+      tilesToCopy = sel
+    } else {
+      return
+    }
+
+    const minX = Math.min(...tilesToCopy.map(s => s.x))
+    const minY = Math.min(...tilesToCopy.map(s => s.y))
+    const z = tilesToCopy[0].z
     const tiles: ClipboardData['tiles'] = []
-    for (const s of sel) {
+    for (const s of tilesToCopy) {
       const tile = mapData.tiles.get(`${s.x},${s.y},${s.z}`)
       if (tile && tile.items.length > 0) {
         tiles.push({
@@ -371,10 +462,11 @@ export function useEditorTools(
 
   const paste = useCallback(() => {
     if (!clipboard || !mutator || !renderer) return
+    const singleItem = selectedItemRef.current
     const sel = selectionRef.current
-    // Paste at the first selected tile, or at clipboard origin if no selection
-    const targetX = sel.length > 0 ? sel[0].x : clipboard.originX
-    const targetY = sel.length > 0 ? sel[0].y : clipboard.originY
+    // Paste at the selected tile (single item or first in selection), or at clipboard origin
+    const targetX = singleItem ? singleItem.x : sel.length > 0 ? sel[0].x : clipboard.originX
+    const targetY = singleItem ? singleItem.y : sel.length > 0 ? sel[0].y : clipboard.originY
     const targetZ = renderer.floor
 
     mutator.beginBatch('Paste')
@@ -389,17 +481,43 @@ export function useEditorTools(
   }, [clipboard, mutator, renderer])
 
   const deleteSelection = useCallback(() => {
+    const singleItem = selectedItemRef.current
     const sel = selectionRef.current
-    if (!mutator || !renderer || sel.length === 0) return
-    mutator.beginBatch('Delete selection')
-    for (const s of sel) {
-      mutator.setTileItems(s.x, s.y, s.z, [])
+    if (!mutator || !renderer) return
+
+    if (singleItem) {
+      // Single-item mode: remove only the selected item
+      mutator.removeItem(singleItem.x, singleItem.y, singleItem.z, singleItem.itemIndex)
+
+      // After deletion, select the new top item at the same position
+      const tile = mapData?.tiles.get(`${singleItem.x},${singleItem.y},${singleItem.z}`)
+      if (tile && tile.items.length > 0) {
+        const newTopIdx = tile.items.length - 1
+        const newSel: SelectedItemInfo = {
+          x: singleItem.x, y: singleItem.y, z: singleItem.z,
+          itemIndex: newTopIdx,
+        }
+        setSelectedItem(newSel)
+        selectedItemRef.current = newSel
+        renderer.highlightItem(singleItem.x, singleItem.y, singleItem.z, newTopIdx)
+      } else {
+        // Tile is empty, clear selection
+        setSelectedItem(null)
+        selectedItemRef.current = null
+        renderer.clearItemHighlight()
+      }
+    } else if (sel.length > 0) {
+      // Multi-tile mode: clear all items from all selected tiles
+      mutator.beginBatch('Delete selection')
+      for (const s of sel) {
+        mutator.setTileItems(s.x, s.y, s.z, [])
+      }
+      mutator.commitBatch()
+      setSelection([])
+      selectionRef.current = []
+      renderer.clearItemHighlight()
     }
-    mutator.commitBatch()
-    setSelection([])
-    selectionRef.current = []
-    renderer.clearSelectionOverlay()
-  }, [mutator, renderer])
+  }, [mutator, renderer, mapData])
 
   const cut = useCallback(() => {
     copy()
@@ -407,9 +525,11 @@ export function useEditorTools(
   }, [copy, deleteSelection])
 
   const selectTiles = useCallback((tiles: { x: number; y: number; z: number }[]) => {
+    setSelectedItem(null)
+    selectedItemRef.current = null
     setSelection(tiles)
     selectionRef.current = tiles
-    renderer?.updateSelectionOverlay(tiles)
+    renderer?.highlightTiles(tiles)
   }, [renderer])
 
   return {
@@ -417,6 +537,8 @@ export function useEditorTools(
     setActiveTool,
     selectedItemId,
     setSelectedItemId,
+    selectedItem,
+    setSelectedItem,
     selection,
     clipboard,
     canUndo,

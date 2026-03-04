@@ -18,6 +18,8 @@ interface InspectorProps {
   onClose: () => void
   onSelectAsBrush: (itemId: number) => void
   offset?: boolean
+  initialEditIndex?: number | null
+  onEditIndexConsumed?: () => void
 }
 
 export function Inspector({
@@ -30,6 +32,8 @@ export function Inspector({
   onClose,
   onSelectAsBrush,
   offset,
+  initialEditIndex,
+  onEditIndexConsumed,
 }: InspectorProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -42,6 +46,14 @@ export function Inspector({
   useEffect(() => {
     setEditingIndex(null)
   }, [tilePos?.x, tilePos?.y, tilePos?.z])
+
+  // Open property editor on double-click request from outside
+  useEffect(() => {
+    if (initialEditIndex != null && initialEditIndex >= 0) {
+      setEditingIndex(initialEditIndex)
+      onEditIndexConsumed?.()
+    }
+  }, [initialEditIndex, onEditIndexConsumed])
 
   // Delete hovered item on Delete key (capture phase — runs before App handler)
   useEffect(() => {

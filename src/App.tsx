@@ -66,7 +66,13 @@ function App() {
     tile: OtbmTile | null
   } | null>(null)
 
-  const tools = useEditorTools(rendererReady, mutatorReady, mapData, brushRegistryState)
+  const [editItemIndex, setEditItemIndex] = useState<number | null>(null)
+
+  const handleRequestEditItem = useCallback((_x: number, _y: number, _z: number, itemIndex: number) => {
+    setEditItemIndex(itemIndex)
+  }, [])
+
+  const tools = useEditorTools(rendererReady, mutatorReady, mapData, brushRegistryState, handleRequestEditItem)
   const toolsRef = useRef(tools)
   toolsRef.current = tools
 
@@ -402,6 +408,8 @@ function App() {
         } else if (selectedTilePos) {
           setSelectedTilePos(null)
           rendererRef.current?.deselectTile()
+          toolsRef.current.setSelectedItem(null)
+          toolsRef.current.selectTiles([])
         }
       } else if (e.key === 'p' || e.key === 'P') {
         e.preventDefault()
@@ -440,7 +448,9 @@ function App() {
 
     const isInSelection = currentTools.selection.some(
       s => s.x === tilePos.x && s.y === tilePos.y && s.z === tilePos.z,
-    )
+    ) || (currentTools.selectedItem?.x === tilePos.x
+       && currentTools.selectedItem?.y === tilePos.y
+       && currentTools.selectedItem?.z === tilePos.z)
 
     // Clipboard group
     const clipboardGroup: ContextMenuGroup = {
@@ -629,7 +639,7 @@ function App() {
           onPaste={tools.paste}
           onDelete={tools.deleteSelection}
           canPaste={!!tools.clipboard}
-          hasSelection={tools.selection.length > 0}
+          hasSelection={tools.selection.length > 0 || tools.selectedItem !== null}
           onGoToPosition={() => setShowGoToDialog(true)}
           showPalette={showPalette}
           onTogglePalette={() => setShowPalette(prev => !prev)}
@@ -694,6 +704,8 @@ function App() {
           onClose={handleCloseInspector}
           onSelectAsBrush={handleSelectAsBrush}
           offset={showPalette}
+          initialEditIndex={editItemIndex}
+          onEditIndexConsumed={() => setEditItemIndex(null)}
         />
       )}
 

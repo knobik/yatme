@@ -323,6 +323,28 @@ export class ChunkManager {
     }
   }
 
+  /** In-place rebuild of specific active chunks (no destroy/flicker). Used for highlight changes. */
+  rebuildChunksForHighlight(chunkKeys: Iterable<string>): void {
+    for (const key of chunkKeys) {
+      const container = this.activeChunks.get(key)
+      if (!container) continue
+      const tiles = this.chunkIndex.get(key)
+      if (!tiles) continue
+
+      container.removeChildren()
+      const animSprites: AnimatedSpriteRef[] = []
+      for (const tile of tiles) {
+        this.tileRenderer.renderTile(container, tile, this._animElapsed, animSprites)
+      }
+      if (animSprites.length > 0) {
+        this._chunkAnimSprites.set(key, animSprites)
+      }
+      if (container.isCachedAsTexture) {
+        container.updateCacheTexture()
+      }
+    }
+  }
+
   /** Destroy all active & cached chunks, reset queues. */
   recycleAll(): void {
     for (const container of this.activeChunks.values()) {

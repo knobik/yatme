@@ -15,7 +15,29 @@ export class TileRenderer {
   private _top: OtbmItem[] = []
   private _drawOrder: OtbmItem[] = []
 
+  // Highlight state: tile key → item indices (null = all items on tile)
+  private _highlightedTiles = new Map<string, number[] | null>()
+
   constructor(private appearances: AppearanceData) {}
+
+  // ── Highlight API ───────────────────────────────────────────────
+
+  setHighlight(tileKey: string, itemIndices: number[] | null): void {
+    this._highlightedTiles.set(tileKey, itemIndices)
+  }
+
+  /** Clear all highlights. Returns the set of tile keys that were highlighted. */
+  clearHighlight(): Set<string> {
+    const keys = new Set(this._highlightedTiles.keys())
+    this._highlightedTiles.clear()
+    return keys
+  }
+
+  get highlightedTileKeys(): ReadonlyMap<string, number[] | null> {
+    return this._highlightedTiles
+  }
+
+  // ── Tile rendering ──────────────────────────────────────────────
 
   renderTile(
     parent: Container,
@@ -52,6 +74,22 @@ export class TileRenderer {
     for (let i = 0; i < common.length; i++) drawOrder.push(common[i])
     for (let i = 0; i < top.length; i++) drawOrder.push(top[i])
 
+    // Check highlight state for this tile
+    const tileKey = `${tile.x},${tile.y},${tile.z}`
+    const highlightIndices = this._highlightedTiles.get(tileKey)
+    const highlightAll = highlightIndices === null
+    // Build set of highlighted items by reference for O(1) lookup
+    let highlightSet: Set<OtbmItem> | null = null
+    if (highlightIndices !== undefined && !highlightAll) {
+      highlightSet = new Set<OtbmItem>()
+      for (const idx of highlightIndices) {
+        if (idx >= 0 && idx < tile.items.length) {
+          highlightSet.add(tile.items[idx])
+        }
+      }
+    }
+    const hasHighlight = highlightIndices !== undefined
+
     for (const item of drawOrder) {
       const appearance = this.appearances.objects.get(item.id)
       if (!appearance) continue
@@ -70,6 +108,17 @@ export class TileRenderer {
       sprite.y = baseY + TILE_SIZE - texture.height - elevation - (shift?.y ?? 0)
 
       parent.addChild(sprite)
+
+      // RME-style darkening: add a black-tinted copy right after the item sprite
+      if (hasHighlight && (highlightAll || highlightSet?.has(item))) {
+        const dark = new Sprite(texture)
+        dark.tint = 0x000000
+        dark.alpha = 0.35
+        dark.roundPixels = true
+        dark.x = sprite.x
+        dark.y = sprite.y
+        parent.addChild(dark)
+      }
 
       if (animSprites) {
         const info = appearance.frameGroup?.[0]?.spriteInfo

@@ -1,5 +1,5 @@
 import { Application, Container } from 'pixi.js'
-import { ChunkManager, buildChunkIndex } from './ChunkManager'
+import { ChunkManager, buildChunkIndex, chunkKeyForTile } from './ChunkManager'
 import { Camera } from './Camera'
 import { TileRenderer } from './TileRenderer'
 import { SelectionOverlay } from './SelectionOverlay'
@@ -36,6 +36,7 @@ export class MapRenderer implements InputHost {
   // Callbacks (InputHost interface + camera change)
   onCameraChange?: (x: number, y: number, zoom: number, floor: number, floorViewMode: FloorViewMode, showTransparentUpper: boolean) => void
   onTileClick?: (tile: OtbmTile | null, worldX: number, worldY: number) => void
+  onTileDoubleClick?: (pos: { x: number; y: number; z: number }, event: MouseEvent) => void
   onTilePointerDown?: (pos: { x: number; y: number; z: number }, event: PointerEvent) => void
   onTilePointerMove?: (pos: { x: number; y: number; z: number }, event: PointerEvent) => void
   onTilePointerUp?: (pos: { x: number; y: number; z: number }, event: PointerEvent) => void
@@ -86,7 +87,6 @@ export class MapRenderer implements InputHost {
       () => this.notifyCamera(),
       (x, y, z, tile) => {
         this.selection.select(x, y, z)
-        this.selection.updateHighlight(this.camera.floor, this.camera.getFloorOffset(this.camera.floor))
         this.onTileClick?.(tile, x, y)
       },
     )
@@ -170,13 +170,44 @@ export class MapRenderer implements InputHost {
     this.chunkManager.updateChunkIndex(tile)
   }
 
-  /** Set multi-tile selection overlay. */
-  updateSelectionOverlay(tiles: { x: number; y: number; z: number }[]): void {
-    this.selection.updateOverlay(tiles, this.camera.floor)
+  /** Highlight a single item on a tile (RME-style darkening integrated into chunk rendering). */
+  highlightItem(x: number, y: number, z: number, itemIndex: number): void {
+    const affectedChunks = this._collectHighlightChunkKeys()
+    this.tileRenderer.clearHighlight()
+    const tileKey = `${x},${y},${z}`
+    this.tileRenderer.setHighlight(tileKey, [itemIndex])
+    affectedChunks.add(chunkKeyForTile(x, y, z))
+    this.chunkManager.rebuildChunksForHighlight(affectedChunks)
   }
 
-  clearSelectionOverlay(): void {
-    this.selection.clearOverlay()
+  /** Highlight all items on multiple tiles (RME-style darkening for shift+drag). */
+  highlightTiles(positions: { x: number; y: number; z: number }[]): void {
+    const affectedChunks = this._collectHighlightChunkKeys()
+    this.tileRenderer.clearHighlight()
+    for (const pos of positions) {
+      const tileKey = `${pos.x},${pos.y},${pos.z}`
+      this.tileRenderer.setHighlight(tileKey, null)
+      affectedChunks.add(chunkKeyForTile(pos.x, pos.y, pos.z))
+    }
+    this.chunkManager.rebuildChunksForHighlight(affectedChunks)
+  }
+
+  clearItemHighlight(): void {
+    const affectedChunks = this._collectHighlightChunkKeys()
+    this.tileRenderer.clearHighlight()
+    if (affectedChunks.size > 0) {
+      this.chunkManager.rebuildChunksForHighlight(affectedChunks)
+    }
+  }
+
+  /** Collect chunk keys for all currently highlighted tiles. */
+  private _collectHighlightChunkKeys(): Set<string> {
+    const keys = new Set<string>()
+    for (const tileKey of this.tileRenderer.highlightedTileKeys.keys()) {
+      const parts = tileKey.split(',')
+      keys.add(chunkKeyForTile(+parts[0], +parts[1], +parts[2]))
+    }
+    return keys
   }
 
   /** Update the brush cursor (hover preview). */
@@ -272,7 +303,7 @@ export class MapRenderer implements InputHost {
 
     this.chunkManager.update(visibleFloors)
 
-    this.selection.updateHighlight(this.camera.floor, this.camera.getFloorOffset(this.camera.floor))
+    this.selection.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────

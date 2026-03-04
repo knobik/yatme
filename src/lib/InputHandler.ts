@@ -16,6 +16,7 @@ export interface InputHost {
   onTilePointerMove?: (pos: TilePos, event: PointerEvent) => void
   onTilePointerUp?: (pos: TilePos, event: PointerEvent) => void
   onTileClick?: (tile: OtbmTile | null, worldX: number, worldY: number) => void
+  onTileDoubleClick?: (pos: TilePos, event: MouseEvent) => void
   onTileContextMenu?: (pos: TilePos, tile: OtbmTile | null, screenX: number, screenY: number) => void
   onItemDrop?: (pos: TilePos, itemId: number) => void
   onTileHover?: (pos: TilePos) => void
@@ -163,6 +164,14 @@ export function setupMapInput(
     onCameraChange()
   }
 
+  function onDblClick(e: MouseEvent) {
+    if (host.onTileDoubleClick) {
+      const rect = canvas.getBoundingClientRect()
+      const pos = camera.getTileAt(e.clientX - rect.left, e.clientY - rect.top)
+      host.onTileDoubleClick(pos, e)
+    }
+  }
+
   function onDragOver(e: DragEvent) {
     if (e.dataTransfer?.types.includes('application/x-tibia-item')) {
       e.preventDefault()
@@ -185,6 +194,7 @@ export function setupMapInput(
   canvas.addEventListener('pointerdown', onPointerDown)
   canvas.addEventListener('pointermove', onPointerMove)
   canvas.addEventListener('pointerup', onPointerUp)
+  canvas.addEventListener('dblclick', onDblClick)
   canvas.addEventListener('wheel', onWheel, { passive: false })
   canvas.addEventListener('dragover', onDragOver)
   canvas.addEventListener('drop', onDrop)
@@ -194,6 +204,7 @@ export function setupMapInput(
     canvas.removeEventListener('pointerdown', onPointerDown)
     canvas.removeEventListener('pointermove', onPointerMove)
     canvas.removeEventListener('pointerup', onPointerUp)
+    canvas.removeEventListener('dblclick', onDblClick)
     canvas.removeEventListener('wheel', onWheel)
     canvas.removeEventListener('dragover', onDragOver)
     canvas.removeEventListener('drop', onDrop)
