@@ -44,8 +44,8 @@
   --bg-base: #0b0b0f;
   --bg-surface: #111116;
   --bg-elevated: #18181e;
-  --bg-hover: #1f1f27;
-  --bg-active: #26262f;
+  --bg-hover: #2a2a34;
+  --bg-active: #333340;
 
   /* Glass: frosted panel overlays */
   --glass-bg: rgba(14, 14, 20, 0.82);
@@ -63,7 +63,7 @@
   --text-primary: #e4e2de;
   --text-secondary: #908d85;
   --text-tertiary: #5c5a54;
-  --text-disabled: #3a3935;
+  --text-disabled: #605e58;
   --text-inverse: #0b0b0f;
 
   /* Accent — warm amber/gold (Tibia torchlight) */
@@ -806,6 +806,41 @@ html, body, #root {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--text-tertiary);
+}
+
+/* ── Section filter tabs ───────────────────────────────────────── */
+
+.section-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 var(--space-3) var(--space-2);
+}
+
+.section-tab {
+  flex: 1;
+  padding: 6px 0;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-tertiary);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.section-tab:hover {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
+.section-tab.active {
+  color: var(--accent-text);
+  background: var(--bg-active);
+  border-color: var(--accent);
 }
 
 /* ── Context menu ───────────────────────────────────────────────── */

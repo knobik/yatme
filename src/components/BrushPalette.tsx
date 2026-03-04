@@ -20,22 +20,20 @@ interface BrushPaletteProps {
 
 const COLS = 4
 const CELL_HEIGHT = 64
-const HEADER_HEIGHT = 28
 const BUFFER_ROWS = 2
 
-// Row descriptor for mixed virtual list
-type VirtualRow =
-  | { kind: 'header'; label: string; count: number }
-  | { kind: 'items'; items: { id: number; name: string }[] }
+type CategoryType = 'all' | 'terrain' | 'doodad' | 'items' | 'raw'
 
-const SECTION_LABELS: Record<string, string> = {
-  terrain: 'TERRAIN',
-  doodad: 'DOODAD',
-  items: 'ITEMS',
-  raw: 'RAW',
-}
+const CATEGORIES: { id: CategoryType; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'terrain', label: 'Terrain' },
+  { id: 'doodad', label: 'Doodad' },
+  { id: 'items', label: 'Items' },
+  { id: 'raw', label: 'Raw' },
+]
 
 export function BrushPalette({ tilesets, registry, appearances, brushRegistry, onClose, selectedItemId, onItemSelect }: BrushPaletteProps) {
+  const [activeCategory, setActiveCategory] = useState<CategoryType>('all')
   const [selectedTileset, setSelectedTileset] = useState<string>('ALL')
   const [tilesetSearch, setTilesetSearch] = useState('')
   const [tilesetOpen, setTilesetOpen] = useState(false)
@@ -82,7 +80,7 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
     return cache
   }, [appearances, brushRegistry])
 
-  // Build the "ALL" item list (same as old ItemPalette)
+  // Build the "ALL" item list
   const allItems = useMemo(() => {
     const items: { id: number; name: string }[] = []
     for (const [id] of appearances.objects) {
@@ -96,86 +94,99 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
     return items
   }, [appearances, registry])
 
-  // Resolve names for a list of item IDs
-  const resolveNames = useCallback((ids: number[]) => {
-    return ids.map(id => ({ id, name: getItemDisplayName(id, registry, appearances) }))
-  }, [registry, appearances])
+  // Filter tilesets that have content in the active category
+  const categoryTilesets = useMemo(() => {
+    if (activeCategory === 'all') return tilesets
+    return tilesets.filter(t => t.sections.some(s => s.type === activeCategory))
+  }, [tilesets, activeCategory])
 
-  // Search filter function
-  const filterBySearch = useCallback((items: { id: number; name: string }[], query: string) => {
-    if (query.length < 2) return items
-    const isNumeric = /^\d+$/.test(query)
-    if (isNumeric) {
-      const searchId = parseInt(query, 10)
-      return items.filter(item => item.id === searchId || item.id.toString().includes(query))
+  // Reset tileset selection when category changes (if current tileset isn't in the new category)
+  useEffect(() => {
+    if (selectedTileset === 'ALL') return
+    const stillValid = categoryTilesets.some(t => t.name === selectedTileset)
+    if (!stillValid) setSelectedTileset('ALL')
+  }, [categoryTilesets, selectedTileset])
+
+  // Build item list based on category + tileset selection
+  const tilesetItems = useMemo(() => {
+    if (selectedTileset === 'ALL' && activeCategory === 'all') return allItems
+
+    // "All tilesets" within a specific category — collect all items from that category across all tilesets
+    if (selectedTileset === 'ALL') {
+      const seen = new Set<number>()
+      const items: { id: number; name: string }[] = []
+      for (const t of categoryTilesets) {
+        for (const s of t.sections) {
+          if (s.type !== activeCategory) continue
+          for (const id of s.itemIds) {
+            if (seen.has(id)) continue
+            seen.add(id)
+            items.push({ id, name: getItemDisplayName(id, registry, appearances) })
+          }
+        }
+      }
+      return items
     }
-    const lower = query.toLowerCase()
-    return items.filter(item => item.name.toLowerCase().includes(lower))
-  }, [])
 
-  // Build virtual rows — either flat (ALL/search) or sectioned (specific tileset, no search)
-  const { rows, totalHeight, totalItemCount } = useMemo(() => {
-    const isSearching = debouncedSearch.length >= 2
-    const tileset = selectedTileset !== 'ALL' ? tilesets.find(t => t.name === selectedTileset) : null
+    // Specific tileset selected
+    const tileset = tilesets.find(t => t.name === selectedTileset)
+    if (!tileset) return []
 
-    // Case 1: "ALL" mode or searching within a tileset — flat list
-    if (!tileset || isSearching) {
-      let items: { id: number; name: string }[]
-      if (!tileset) {
-        items = allItems
+    if (activeCategory === 'all') {
+      return tileset.itemIds.map(id => ({
+        id,
+        name: getItemDisplayName(id, registry, appearances),
+      }))
+    }
+
+    // Specific tileset + specific category
+    const section = tileset.sections.find(s => s.type === activeCategory)
+    if (!section) return []
+    return section.itemIds.map(id => ({
+      id,
+      name: getItemDisplayName(id, registry, appearances),
+    }))
+  }, [selectedTileset, activeCategory, tilesets, categoryTilesets, allItems, registry, appearances])
+
+  // Filter by search
+  const filteredItems = useMemo(() => {
+    let items = tilesetItems
+    if (debouncedSearch.length >= 2) {
+      const isNumeric = /^\d+$/.test(debouncedSearch)
+      if (isNumeric) {
+        const searchId = parseInt(debouncedSearch, 10)
+        items = items.filter(item => item.id === searchId || item.id.toString().includes(debouncedSearch))
       } else {
-        items = resolveNames(tileset.itemIds)
-      }
-      if (isSearching) items = filterBySearch(items, debouncedSearch)
-
-      const rows: VirtualRow[] = []
-      for (let i = 0; i < items.length; i += COLS) {
-        rows.push({ kind: 'items', items: items.slice(i, i + COLS) })
-      }
-      return {
-        rows,
-        totalHeight: rows.length * CELL_HEIGHT,
-        totalItemCount: items.length,
+        const lower = debouncedSearch.toLowerCase()
+        items = items.filter(item => item.name.toLowerCase().includes(lower))
       }
     }
+    return items
+  }, [tilesetItems, debouncedSearch])
 
-    // Case 2: Specific tileset, no search — sectioned list
-    const rows: VirtualRow[] = []
-    let height = 0
-    let count = 0
-    const hasSections = tileset.sections.length > 1
-
-    for (const section of tileset.sections) {
-      const items = resolveNames(section.itemIds)
-      if (items.length === 0) continue
-      count += items.length
-
-      if (hasSections) {
-        rows.push({ kind: 'header', label: SECTION_LABELS[section.type] ?? section.type.toUpperCase(), count: items.length })
-        height += HEADER_HEIGHT
-      }
-
-      for (let i = 0; i < items.length; i += COLS) {
-        rows.push({ kind: 'items', items: items.slice(i, i + COLS) })
-        height += CELL_HEIGHT
-      }
-    }
-
-    return { rows, totalHeight: height, totalItemCount: count }
-  }, [selectedTileset, tilesets, allItems, debouncedSearch, resolveNames, filterBySearch])
-
-  // Filter tileset list for dropdown
-  const filteredTilesets = useMemo(() => {
-    if (!tilesetSearch) return tilesets
+  // Filter tileset dropdown list by search
+  const filteredDropdownTilesets = useMemo(() => {
+    if (!tilesetSearch) return categoryTilesets
     const lower = tilesetSearch.toLowerCase()
-    return tilesets.filter(t => t.name.toLowerCase().includes(lower))
-  }, [tilesets, tilesetSearch])
+    return categoryTilesets.filter(t => t.name.toLowerCase().includes(lower))
+  }, [categoryTilesets, tilesetSearch])
+
+  // Get item count for a tileset within the active category
+  const getTilesetCount = useCallback((tileset: ResolvedTileset) => {
+    if (activeCategory === 'all') return tileset.itemIds.length
+    const section = tileset.sections.find(s => s.type === activeCategory)
+    return section?.itemIds.length ?? 0
+  }, [activeCategory])
 
   // Reset scroll when filter changes
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0
     setScrollTop(0)
-  }, [selectedTileset, debouncedSearch])
+  }, [selectedTileset, activeCategory, debouncedSearch])
+
+  // Virtual scrolling calculations
+  const totalRows = Math.ceil(filteredItems.length / COLS)
+  const totalHeight = totalRows * CELL_HEIGHT
 
   const handleScroll = useCallback(() => {
     if (scrollRef.current) {
@@ -183,51 +194,12 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
     }
   }, [])
 
-  // Virtual scrolling with mixed heights
   const viewportHeight = scrollRef.current?.clientHeight ?? 400
+  const startRow = Math.max(0, Math.floor(scrollTop / CELL_HEIGHT) - BUFFER_ROWS)
+  const endRow = Math.min(totalRows, Math.ceil((scrollTop + viewportHeight) / CELL_HEIGHT) + BUFFER_ROWS)
+  const visibleItems = filteredItems.slice(startRow * COLS, endRow * COLS)
 
-  // Compute cumulative heights and find visible range
-  const { visibleRows, offsetTop } = useMemo(() => {
-    // Check if all rows are uniform height (no headers) for fast path
-    const hasHeaders = rows.some(r => r.kind === 'header')
-
-    if (!hasHeaders) {
-      // Fast path: uniform CELL_HEIGHT rows
-      const startRow = Math.max(0, Math.floor(scrollTop / CELL_HEIGHT) - BUFFER_ROWS)
-      const endRow = Math.min(rows.length, Math.ceil((scrollTop + viewportHeight) / CELL_HEIGHT) + BUFFER_ROWS)
-      return {
-        visibleRows: rows.slice(startRow, endRow),
-        offsetTop: startRow * CELL_HEIGHT,
-      }
-    }
-
-    // Mixed heights: scan for visible range
-    let cumHeight = 0
-    let startIdx = -1
-    let startOffset = 0
-    let endIdx = rows.length
-
-    for (let i = 0; i < rows.length; i++) {
-      const rowHeight = rows[i].kind === 'header' ? HEADER_HEIGHT : CELL_HEIGHT
-      if (startIdx === -1 && cumHeight + rowHeight > scrollTop - BUFFER_ROWS * CELL_HEIGHT) {
-        startIdx = i
-        startOffset = cumHeight
-      }
-      cumHeight += rowHeight
-      if (cumHeight > scrollTop + viewportHeight + BUFFER_ROWS * CELL_HEIGHT) {
-        endIdx = i + 1
-        break
-      }
-    }
-
-    if (startIdx === -1) startIdx = 0
-    return {
-      visibleRows: rows.slice(startIdx, endIdx),
-      offsetTop: startOffset,
-    }
-  }, [rows, scrollTop, viewportHeight])
-
-  const selectedLabel = selectedTileset === 'ALL' ? 'All Items' : selectedTileset
+  const selectedLabel = selectedTileset === 'ALL' ? 'All Tilesets' : selectedTileset
 
   return (
     <div className="panel palette">
@@ -237,7 +209,7 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
           BRUSHES
         </span>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>
-          {totalItemCount.toLocaleString()}
+          {filteredItems.length.toLocaleString()}
         </span>
         <div style={{ flex: 1 }} />
         <button className="btn btn-icon" onClick={onClose} title="Close (Esc)" style={{ border: 'none', background: 'transparent', width: 22, height: 22 }}>
@@ -245,6 +217,19 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
             <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         </button>
+      </div>
+
+      {/* Category tabs */}
+      <div className="section-tabs">
+        {CATEGORIES.map(cat => (
+          <button
+            key={cat.id}
+            className={`section-tab${activeCategory === cat.id ? ' active' : ''}`}
+            onClick={() => setActiveCategory(cat.id)}
+          >
+            {cat.label}
+          </button>
+        ))}
       </div>
 
       {/* Tileset dropdown */}
@@ -274,16 +259,16 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
                   className={`tileset-option${selectedTileset === 'ALL' ? ' active' : ''}`}
                   onClick={() => { setSelectedTileset('ALL'); setTilesetOpen(false); setTilesetSearch('') }}
                 >
-                  All Items
+                  All Tilesets
                 </button>
-                {filteredTilesets.map(t => (
+                {filteredDropdownTilesets.map(t => (
                   <button
                     key={t.name}
                     className={`tileset-option${selectedTileset === t.name ? ' active' : ''}`}
                     onClick={() => { setSelectedTileset(t.name); setTilesetOpen(false); setTilesetSearch('') }}
                   >
                     {t.name}
-                    <span className="tileset-option-count">{t.itemIds.length}</span>
+                    <span className="tileset-option-count">{getTilesetCount(t)}</span>
                   </button>
                 ))}
               </div>
@@ -313,67 +298,50 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
       >
         <div style={{ height: totalHeight, position: 'relative' }}>
           <div
+            className="item-grid"
             style={{
               position: 'absolute',
-              top: offsetTop,
+              top: startRow * CELL_HEIGHT,
               left: 0,
               right: 0,
             }}
           >
-            {visibleRows.map((row, i) => {
-              if (row.kind === 'header') {
-                return (
-                  <div
-                    key={`hdr-${row.label}-${i}`}
-                    className="palette-section-header"
-                  >
-                    <span className="palette-section-label">{row.label}</span>
-                    <span className="palette-section-count">{row.count}</span>
-                  </div>
-                )
-              }
-
+            {visibleItems.map((item) => {
+              const brush = brushTypeCache.get(item.id) ?? null
               return (
-                <div key={`row-${row.items[0]?.id}-${i}`} className="item-grid">
-                  {row.items.map((item) => {
-                    const brush = brushTypeCache.get(item.id) ?? null
-                    return (
-                      <div
-                        key={item.id}
-                        className={`item-cell${item.id === selectedItemId ? ' selected' : ''}`}
-                        onClick={() => onItemSelect?.(item.id)}
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData('application/x-tibia-item', String(item.id))
-                          e.dataTransfer.effectAllowed = 'copy'
-                          const canvas = e.currentTarget.querySelector('canvas')
-                          if (canvas) {
-                            const ghost = canvas.cloneNode(true) as HTMLCanvasElement
-                            const ctx = ghost.getContext('2d')
-                            if (ctx) ctx.drawImage(canvas, 0, 0)
-                            ghost.style.position = 'fixed'
-                            ghost.style.left = '-9999px'
-                            document.body.appendChild(ghost)
-                            e.dataTransfer.setDragImage(ghost, 18, 18)
-                            requestAnimationFrame(() => document.body.removeChild(ghost))
-                          }
-                        }}
-                        title={`${item.name} (ID: ${item.id})`}
-                      >
-                        <div style={{ position: 'relative' }}>
-                          <ItemSprite itemId={item.id} appearances={appearances} size={36} />
-                          {brush && (
-                            <span className={`brush-badge brush-badge-${brush}`} title={`Smart brush: ${brush}`}>
-                              <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
-                                <path d="M15.2 0.8a2.7 2.7 0 0 0-3.8 0L4 8.2l-.2.6L2.4 13a.5.5 0 0 0 .6.6l4.2-1.4.6-.2L15.2 4.6a2.7 2.7 0 0 0 0-3.8zM5.4 9L11 3.4l1.6 1.6L7 11 5.4 9z"/>
-                              </svg>
-                            </span>
-                          )}
-                        </div>
-                        <span className="item-name">{item.name}</span>
-                      </div>
-                    )
-                  })}
+                <div
+                  key={item.id}
+                  className={`item-cell${item.id === selectedItemId ? ' selected' : ''}`}
+                  onClick={() => onItemSelect?.(item.id)}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/x-tibia-item', String(item.id))
+                    e.dataTransfer.effectAllowed = 'copy'
+                    const canvas = e.currentTarget.querySelector('canvas')
+                    if (canvas) {
+                      const ghost = canvas.cloneNode(true) as HTMLCanvasElement
+                      const ctx = ghost.getContext('2d')
+                      if (ctx) ctx.drawImage(canvas, 0, 0)
+                      ghost.style.position = 'fixed'
+                      ghost.style.left = '-9999px'
+                      document.body.appendChild(ghost)
+                      e.dataTransfer.setDragImage(ghost, 18, 18)
+                      requestAnimationFrame(() => document.body.removeChild(ghost))
+                    }
+                  }}
+                  title={`${item.name} (ID: ${item.id})`}
+                >
+                  <div style={{ position: 'relative' }}>
+                    <ItemSprite itemId={item.id} appearances={appearances} size={36} />
+                    {brush && (
+                      <span className={`brush-badge brush-badge-${brush}`} title={`Smart brush: ${brush}`}>
+                        <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
+                          <path d="M15.2 0.8a2.7 2.7 0 0 0-3.8 0L4 8.2l-.2.6L2.4 13a.5.5 0 0 0 .6.6l4.2-1.4.6-.2L15.2 4.6a2.7 2.7 0 0 0 0-3.8zM5.4 9L11 3.4l1.6 1.6L7 11 5.4 9z"/>
+                        </svg>
+                      </span>
+                    )}
+                  </div>
+                  <span className="item-name">{item.name}</span>
                 </div>
               )
             })}

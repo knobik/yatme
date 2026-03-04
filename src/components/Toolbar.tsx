@@ -199,7 +199,7 @@ export function Toolbar({
           onClick={onUndo}
           disabled={!canUndo}
           title="Undo (Ctrl+Z)"
-          style={{ border: 'none', background: 'transparent', opacity: canUndo ? 1 : 0.3 }}
+          style={{ border: 'none', background: 'transparent', opacity: canUndo ? 1 : 0.45 }}
         >
           <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
             <path d="M3 5H9C10.66 5 12 6.34 12 8C12 9.66 10.66 11 9 11H6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
@@ -211,7 +211,7 @@ export function Toolbar({
           onClick={onRedo}
           disabled={!canRedo}
           title="Redo (Ctrl+Y)"
-          style={{ border: 'none', background: 'transparent', opacity: canRedo ? 1 : 0.3 }}
+          style={{ border: 'none', background: 'transparent', opacity: canRedo ? 1 : 0.45 }}
         >
           <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
             <path d="M11 5H5C3.34 5 2 6.34 2 8C2 9.66 3.34 11 5 11H8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
