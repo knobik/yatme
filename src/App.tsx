@@ -6,7 +6,7 @@ import { loadOtbm, type OtbmMap, type OtbmTile } from './lib/otbm'
 import { MapRenderer, type FloorViewMode } from './lib/MapRenderer'
 import { MapMutator } from './lib/MapMutator'
 import { loadItems, type ItemRegistry } from './lib/items'
-import { useEditorTools } from './hooks/useEditorTools'
+import { useEditorTools, deriveHighlights } from './hooks/useEditorTools'
 import { loadBrushData } from './lib/brushes/BrushLoader'
 import { parseWallBrushesXml } from './lib/brushes/WallLoader'
 import { parseCarpetBrushesXml } from './lib/brushes/CarpetLoader'
@@ -115,10 +115,9 @@ function App() {
   const inspectorAnchorRef = useRef<number | null>(null)
 
   const handleSelectItem = useCallback((index: number, e: React.MouseEvent) => {
-    if (!selectedTilePos) return
+    if (!selectedTilePos || !mapData) return
     const { x, y, z } = selectedTilePos
     const renderer = rendererRef.current
-    const tiles = tools.selection // preserve multi-tile selection
 
     if (e.ctrlKey || e.metaKey) {
       // Toggle item in/out of selection
@@ -134,10 +133,11 @@ function App() {
       )
       const newItems = [...otherTiles, ...otherOnTile]
       tools.setSelectedItems(newItems)
-      if (newItems.length === 0 && tiles.length === 0) {
+      if (newItems.length === 0) {
         renderer?.clearItemHighlight()
       } else {
-        renderer?.highlightCombined(newItems, tiles)
+        // Use deriveHighlights logic via setHighlights
+        renderer?.setHighlights(deriveHighlights(newItems, mapData))
       }
       inspectorAnchorRef.current = alreadySelected ? null : index
     } else if (e.shiftKey && inspectorAnchorRef.current !== null) {
@@ -149,14 +149,14 @@ function App() {
         rangeItems.push({ x, y, z, itemIndex: i })
       }
       tools.setSelectedItems(rangeItems)
-      renderer?.highlightCombined(rangeItems, tiles)
+      renderer?.setHighlights(deriveHighlights(rangeItems, mapData))
     } else {
-      // Plain click — select single item, clear multi-tile selection
+      // Plain click — select single item
       tools.setSelectedItems([{ x, y, z, itemIndex: index }])
-      renderer?.highlightCombined([{ x, y, z, itemIndex: index }], tiles)
+      renderer?.setHighlights([{ pos: { x, y, z }, indices: [index] }])
       inspectorAnchorRef.current = index
     }
-  }, [selectedTilePos, tools])
+  }, [selectedTilePos, tools, mapData])
 
   const handleClosePalette = useCallback(() => {
     setShowPalette(false)
@@ -543,9 +543,7 @@ function App() {
     const renderer = rendererRef.current
     const currentTools = toolsRef.current
 
-    const isInSelection = currentTools.selection.some(
-      s => s.x === tilePos.x && s.y === tilePos.y && s.z === tilePos.z,
-    ) || currentTools.selectedItems.some(
+    const isInSelection = currentTools.selectedItems.some(
       i => i.x === tilePos.x && i.y === tilePos.y && i.z === tilePos.z
     )
 
@@ -719,7 +717,7 @@ function App() {
           onPaste={tools.paste}
           onDelete={tools.deleteSelection}
           canPaste={!!tools.clipboard}
-          hasSelection={tools.selection.length > 0 || tools.selectedItems.length > 0}
+          hasSelection={tools.hasSelection}
           onGoToPosition={() => setShowGoToDialog(true)}
           onOpenSettings={() => setShowSettingsModal(true)}
           showPalette={showPalette}

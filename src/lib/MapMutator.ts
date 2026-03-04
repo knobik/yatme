@@ -205,23 +205,23 @@ export class MapMutator {
       const tile = this.getOrCreateTile(x, y, z)
       const oldItems = deepCloneItems(tile.items)
 
-      const hasGround = pasteItems.some(it => classifyItem(it.id, this.appearances) === 'ground')
+      // Classify each pasted item once
+      const classified = pasteItems.map(item => ({ item, layer: classifyItem(item.id, this.appearances) }))
+      const pasteGround = classified.find(c => c.layer === 'ground')
 
-      if (hasGround) {
+      if (pasteGround) {
         // Replace existing ground with pasted ground
         const groundIdx = tile.items.findIndex(it => classifyItem(it.id, this.appearances) === 'ground')
-        const pasteGround = pasteItems.find(it => classifyItem(it.id, this.appearances) === 'ground')!
         if (groundIdx >= 0) {
-          tile.items[groundIdx] = deepCloneItem(pasteGround)
+          tile.items[groundIdx] = deepCloneItem(pasteGround.item)
         } else {
-          tile.items.splice(0, 0, deepCloneItem(pasteGround))
+          tile.items.splice(0, 0, deepCloneItem(pasteGround.item))
         }
       }
 
       // Append all non-ground items using proper layer insertion
-      for (const item of pasteItems) {
-        if (classifyItem(item.id, this.appearances) === 'ground') continue
-        const layer = classifyItem(item.id, this.appearances)
+      for (const { item, layer } of classified) {
+        if (layer === 'ground') continue
         const index = this.findInsertIndex(tile, layer)
         tile.items.splice(index, 0, deepCloneItem(item))
       }

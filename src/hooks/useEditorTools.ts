@@ -41,32 +41,67 @@ function toggleItemInSelection(
   return [...items, newItem]
 }
 
-function toggleTileInSelection(
+/** Expand tile positions to per-item SelectedItemInfo entries. */
+function selectAllItemsOnTiles(
   tiles: { x: number; y: number; z: number }[],
-  tile: { x: number; y: number; z: number },
-): { x: number; y: number; z: number }[] {
-  const idx = tiles.findIndex(t => t.x === tile.x && t.y === tile.y && t.z === tile.z)
-  if (idx >= 0) {
-    return tiles.filter((_, i) => i !== idx)
+  mapData: OtbmMap,
+): SelectedItemInfo[] {
+  const result: SelectedItemInfo[] = []
+  for (const t of tiles) {
+    const tile = mapData.tiles.get(`${t.x},${t.y},${t.z}`)
+    if (!tile) continue
+    for (let i = 0; i < tile.items.length; i++) {
+      result.push({ x: t.x, y: t.y, z: t.z, itemIndex: i })
+    }
   }
-  return [...tiles, tile]
+  return result
 }
 
-/** Merge new rectangle tiles into existing selection, deduplicating by position. */
-function mergeTileSelections(
-  existing: { x: number; y: number; z: number }[],
-  newTiles: { x: number; y: number; z: number }[],
-): { x: number; y: number; z: number }[] {
-  const set = new Set(existing.map(t => `${t.x},${t.y},${t.z}`))
+/** Merge new per-item entries into existing selection, deduplicating. */
+function mergeItemSelections(
+  existing: SelectedItemInfo[],
+  newItems: SelectedItemInfo[],
+): SelectedItemInfo[] {
+  const set = new Set(existing.map(i => `${i.x},${i.y},${i.z},${i.itemIndex}`))
   const merged = [...existing]
-  for (const t of newTiles) {
-    const key = `${t.x},${t.y},${t.z}`
+  for (const item of newItems) {
+    const key = `${item.x},${item.y},${item.z},${item.itemIndex}`
     if (!set.has(key)) {
       set.add(key)
-      merged.push(t)
+      merged.push(item)
     }
   }
   return merged
+}
+
+/** Derive highlight entries from selectedItems: whole-tile (null) when all items selected, specific indices otherwise. */
+export function deriveHighlights(
+  items: SelectedItemInfo[],
+  mapData: OtbmMap,
+): { pos: { x: number; y: number; z: number }; indices: number[] | null }[] {
+  if (items.length === 0) return []
+  // Group by tile
+  const byTile = new Map<string, { pos: { x: number; y: number; z: number }; indices: number[] }>()
+  for (const item of items) {
+    const key = `${item.x},${item.y},${item.z}`
+    let entry = byTile.get(key)
+    if (!entry) {
+      entry = { pos: { x: item.x, y: item.y, z: item.z }, indices: [] }
+      byTile.set(key, entry)
+    }
+    entry.indices.push(item.itemIndex)
+  }
+  // Check if all items on each tile are selected
+  const result: { pos: { x: number; y: number; z: number }; indices: number[] | null }[] = []
+  for (const [key, entry] of byTile) {
+    const tile = mapData.tiles.get(key)
+    if (tile && entry.indices.length >= tile.items.length) {
+      result.push({ pos: entry.pos, indices: null }) // whole tile
+    } else {
+      result.push({ pos: entry.pos, indices: entry.indices })
+    }
+  }
+  return result
 }
 
 export interface ClipboardData {
@@ -76,16 +111,20 @@ export interface ClipboardData {
   tiles: { dx: number; dy: number; items: OtbmItem[] }[]
 }
 
+function getClipboardFootprint(cb: ClipboardData, targetX: number, targetY: number, targetZ: number): { x: number; y: number; z: number }[] {
+  return cb.tiles.map(t => ({ x: targetX + t.dx, y: targetY + t.dy, z: targetZ }))
+}
+
 export interface EditorToolsState {
   activeTool: EditorTool
   setActiveTool: (tool: EditorTool) => void
   selectedItemId: number | null
   setSelectedItemId: (id: number | null) => void
-  /** Per-item selections (click / Ctrl+Click) */
+  /** Unified per-item selections */
   selectedItems: SelectedItemInfo[]
   setSelectedItems: (items: SelectedItemInfo[]) => void
-  /** Multi-tile selection (shift+drag / Ctrl+Shift+drag) */
-  selection: { x: number; y: number; z: number }[]
+  /** Whether any items are selected */
+  hasSelection: boolean
   clipboard: ClipboardData | null
   canUndo: boolean
   canRedo: boolean
@@ -117,7 +156,6 @@ export function useEditorTools(
   const [activeTool, setActiveTool] = useState<EditorTool>('select')
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null)
   const [selectedItems, setSelectedItems] = useState<SelectedItemInfo[]>([])
-  const [selection, setSelection] = useState<{ x: number; y: number; z: number }[]>([])
   const [clipboard, setClipboard] = useState<ClipboardData | null>(null)
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
@@ -130,7 +168,6 @@ export function useEditorTools(
   const activeToolRef = useRef(activeTool)
   const selectedItemIdRef = useRef(selectedItemId)
   const selectedItemsRef = useRef(selectedItems)
-  const selectionRef = useRef(selection)
   const brushSizeRef = useRef(brushSize)
   const brushShapeRef = useRef(brushShape)
   const brushRegistryRef = useRef(brushRegistry)
@@ -140,7 +177,6 @@ export function useEditorTools(
   activeToolRef.current = activeTool
   selectedItemIdRef.current = selectedItemId
   selectedItemsRef.current = selectedItems
-  selectionRef.current = selection
   brushSizeRef.current = brushSize
   brushShapeRef.current = brushShape
   brushRegistryRef.current = brushRegistry
@@ -158,8 +194,8 @@ export function useEditorTools(
   const isDraggingRef = useRef(false)
   const isShiftDragRef = useRef(false)
   const isCtrlDragRef = useRef(false)
-  // For Ctrl+Shift+Drag: snapshot of selection at drag start to merge with
-  const selectionSnapshotRef = useRef<{ x: number; y: number; z: number }[]>([])
+  // For Ctrl+Shift+Drag: snapshot of selectedItems at drag start to merge with
+  const selectedItemsSnapshotRef = useRef<SelectedItemInfo[]>([])
 
   // For drag-move: move selected items by dragging
   const isDragMovingRef = useRef(false)
@@ -167,20 +203,13 @@ export function useEditorTools(
   const dragMoveLastPosRef = useRef<{ x: number; y: number; z: number } | null>(null)
   const hoverPosRef = useRef<{ x: number; y: number; z: number } | null>(null)
 
-  /** Apply combined highlights from both selectedItems and selection to the renderer. */
-  const applyHighlights = (
-    r: MapRenderer,
-    items: SelectedItemInfo[],
-    tiles: { x: number; y: number; z: number }[],
-  ) => {
-    if (items.length === 0 && tiles.length === 0) {
+  /** Apply highlights from selectedItems to the renderer. */
+  const applyHighlights = (r: MapRenderer, items: SelectedItemInfo[]) => {
+    if (!mapData) return
+    if (items.length === 0) {
       r.clearItemHighlight()
-    } else if (items.length === 0) {
-      r.highlightTiles(tiles)
-    } else if (tiles.length === 0 && items.length === 1) {
-      r.highlightItem(items[0].x, items[0].y, items[0].z, items[0].itemIndex)
     } else {
-      r.highlightCombined(items, tiles)
+      r.setHighlights(deriveHighlights(items, mapData))
     }
   }
 
@@ -201,10 +230,7 @@ export function useEditorTools(
       // Paste preview mode: click commits paste and exits paste mode
       if (isPastingRef.current && clipboardRef.current) {
         executePasteAt(pos.x, pos.y, renderer.floor)
-        isPastingRef.current = false
-        setIsPasting(false)
-        renderer.clearDragPreview()
-        renderer.updateBrushCursor([])
+        cancelPaste()
         return
       }
 
@@ -279,14 +305,10 @@ export function useEditorTools(
           const tileKey = `${pos.x},${pos.y},${pos.z}`
           const tile = mapData?.tiles.get(tileKey) ?? null
 
-          // Check if clicking an already-selected tile (per-item or multi-tile selection)
-          const hasSelectedItem = selectedItemsRef.current.some(
+          // Check if clicking an already-selected tile
+          const isAlreadySelected = selectedItemsRef.current.some(
             s => s.x === pos.x && s.y === pos.y && s.z === pos.z
           )
-          const hasSelectedTile = selectionRef.current.some(
-            s => s.x === pos.x && s.y === pos.y && s.z === pos.z
-          )
-          const isAlreadySelected = hasSelectedItem || hasSelectedTile
 
           if (!isAlreadySelected && tile && tile.items.length > 0) {
             // Select top item immediately so drag can begin in same gesture
@@ -294,9 +316,7 @@ export function useEditorTools(
             const newSel: SelectedItemInfo = { x: pos.x, y: pos.y, z: pos.z, itemIndex: topIdx }
             setSelectedItems([newSel])
             selectedItemsRef.current = [newSel]
-            setSelection([])
-            selectionRef.current = []
-            renderer.highlightItem(pos.x, pos.y, pos.z, topIdx)
+            renderer.setHighlights([{ pos: { x: pos.x, y: pos.y, z: pos.z }, indices: [topIdx] }])
           }
 
           // Begin drag-move if tile has any selection
@@ -317,12 +337,12 @@ export function useEditorTools(
             const newItems = toggleItemInSelection(selectedItemsRef.current, newItem)
             setSelectedItems(newItems)
             selectedItemsRef.current = newItems
-            applyHighlights(renderer, newItems, selectionRef.current)
+            applyHighlights(renderer, newItems)
           }
         } else if (ctrlKey && event.shiftKey) {
           // Ctrl+Shift: boundbox mode, do NOT clear existing selection (append mode)
-          // Snapshot current selection to merge with during drag
-          selectionSnapshotRef.current = [...selectionRef.current]
+          // Snapshot current selectedItems to merge with during drag
+          selectedItemsSnapshotRef.current = [...selectedItemsRef.current]
         } else if (event.shiftKey && !ctrlKey) {
           // Shift (no Ctrl): boundbox mode, clear existing selection first
           // (clearing happens naturally as rectangle replaces during move)
@@ -407,16 +427,12 @@ export function useEditorTools(
               renderer.clearDragPreview()
               return
             }
-            // Collect source tiles from both selection types
+            // Collect unique source tile positions from selectedItems
             const sourceTiles: { x: number; y: number; z: number }[] = []
             const seen = new Set<string>()
             for (const s of selectedItemsRef.current) {
               const key = `${s.x},${s.y},${s.z}`
               if (!seen.has(key)) { seen.add(key); sourceTiles.push({ x: s.x, y: s.y, z: s.z }) }
-            }
-            for (const t of selectionRef.current) {
-              const key = `${t.x},${t.y},${t.z}`
-              if (!seen.has(key)) { seen.add(key); sourceTiles.push(t) }
             }
             renderer.updateDragPreview(sourceTiles, dx, dy)
           }
@@ -438,20 +454,20 @@ export function useEditorTools(
           }
         }
 
-        if (isCtrlDragRef.current) {
-          // Ctrl+Shift+Drag: append rectangle to existing selection
-          const merged = mergeTileSelections(selectionSnapshotRef.current, rectTiles)
-          setSelection(merged)
-          selectionRef.current = merged
-          // Keep selectedItems, highlight combined
-          applyHighlights(renderer, selectedItemsRef.current, merged)
-        } else {
-          // Shift+Drag: replace selection with rectangle
-          setSelectedItems([])
-          selectedItemsRef.current = []
-          setSelection(rectTiles)
-          selectionRef.current = rectTiles
-          renderer.highlightTiles(rectTiles)
+        if (mapData) {
+          const rectItems = selectAllItemsOnTiles(rectTiles, mapData)
+          if (isCtrlDragRef.current) {
+            // Ctrl+Shift+Drag: append rectangle to existing selection
+            const merged = mergeItemSelections(selectedItemsSnapshotRef.current, rectItems)
+            setSelectedItems(merged)
+            selectedItemsRef.current = merged
+            applyHighlights(renderer, merged)
+          } else {
+            // Shift+Drag: replace selection with rectangle
+            setSelectedItems(rectItems)
+            selectedItemsRef.current = rectItems
+            applyHighlights(renderer, rectItems)
+          }
         }
       }
     }
@@ -482,27 +498,7 @@ export function useEditorTools(
             const dx = target.x - origin.x
             const dy = target.y - origin.y
 
-            // Build a unified set of per-item selections to move.
-            // If we have multi-tile selection, expand it to per-item (all non-ground items).
-            const itemsToMove: SelectedItemInfo[] = [...selectedItemsRef.current]
-            const tileSelection = selectionRef.current
-
-            if (tileSelection.length > 0) {
-              const alreadyCovered = new Set(
-                itemsToMove.map(s => `${s.x},${s.y},${s.z}`)
-              )
-              for (const tilePos of tileSelection) {
-                const key = `${tilePos.x},${tilePos.y},${tilePos.z}`
-                if (alreadyCovered.has(key)) continue
-                const tile = mapData?.tiles.get(key)
-                if (!tile) continue
-                // Select all non-ground items (skip index 0 if it's ground)
-                for (let i = 0; i < tile.items.length; i++) {
-                  itemsToMove.push({ x: tilePos.x, y: tilePos.y, z: tilePos.z, itemIndex: i })
-                }
-              }
-            }
-
+            const itemsToMove = selectedItemsRef.current
             if (itemsToMove.length === 0) {
               selectStartRef.current = null
               isShiftDragRef.current = false
@@ -520,7 +516,7 @@ export function useEditorTools(
             }
 
             mutator.beginBatch('Move items')
-            const newSelection: { x: number; y: number; z: number }[] = []
+            const newItems: SelectedItemInfo[] = []
 
             for (const [, tileItems] of byTile) {
               // Deduplicate indices and sort descending
@@ -542,21 +538,30 @@ export function useEditorTools(
               // Add items to target tile
               const destX = srcX + dx
               const destY = srcY + dy
-              for (const item of removed) {
-                mutator.addItem(destX, destY, srcZ, item)
+              const destKey = `${destX},${destY},${srcZ}`
+              const destTile = mapData?.tiles.get(destKey)
+              const baseIndex = destTile ? destTile.items.length : 0
+              for (let ri = 0; ri < removed.length; ri++) {
+                mutator.addItem(destX, destY, srcZ, removed[ri])
+                newItems.push({ x: destX, y: destY, z: srcZ, itemIndex: baseIndex + ri })
               }
-
-              newSelection.push({ x: destX, y: destY, z: srcZ })
             }
 
             mutator.commitBatch()
 
-            // Update selection to new positions (use tile selection for multi-tile moves)
-            setSelectedItems([])
-            selectedItemsRef.current = []
-            setSelection(newSelection)
-            selectionRef.current = newSelection
-            applyHighlights(renderer, [], newSelection)
+            // Update selection to new positions - expand to all items on dest tiles
+            if (mapData) {
+              const destTilePositions: { x: number; y: number; z: number }[] = []
+              const seen = new Set<string>()
+              for (const item of newItems) {
+                const key = `${item.x},${item.y},${item.z}`
+                if (!seen.has(key)) { seen.add(key); destTilePositions.push({ x: item.x, y: item.y, z: item.z }) }
+              }
+              const expandedItems = selectAllItemsOnTiles(destTilePositions, mapData)
+              setSelectedItems(expandedItems)
+              selectedItemsRef.current = expandedItems
+              applyHighlights(renderer, expandedItems)
+            }
           }
           // Same tile — selection already happened in pointerDown, just open inspector
           selectStartRef.current = null
@@ -581,8 +586,6 @@ export function useEditorTools(
             setSelectedItems([])
             selectedItemsRef.current = []
             renderer.clearItemHighlight()
-            setSelection([])
-            selectionRef.current = []
           }
 
           // Open inspector (if click-to-inspect is enabled)
@@ -597,11 +600,36 @@ export function useEditorTools(
             renderer.onTileClick?.(tile, pos.x, pos.y)
           }
         } else if (wasClick && ctrlKey && shiftKey) {
-          // Ctrl+Shift+Click (no drag) — toggle entire tile in/out of selection
-          const newSelection = toggleTileInSelection(selectionRef.current, pos)
-          setSelection(newSelection)
-          selectionRef.current = newSelection
-          applyHighlights(renderer, selectedItemsRef.current, newSelection)
+          // Ctrl+Shift+Click (no drag) — toggle all items for tile in/out of selection
+          if (mapData) {
+            const tileKey = `${pos.x},${pos.y},${pos.z}`
+            const tile = mapData.tiles.get(tileKey)
+            const tileItemCount = tile?.items.length ?? 0
+            // Check if all items on this tile are already selected
+            const currentOnTile = selectedItemsRef.current.filter(
+              s => s.x === pos.x && s.y === pos.y && s.z === pos.z
+            )
+            let newItems: SelectedItemInfo[]
+            if (currentOnTile.length >= tileItemCount && tileItemCount > 0) {
+              // All selected — remove them
+              newItems = selectedItemsRef.current.filter(
+                s => !(s.x === pos.x && s.y === pos.y && s.z === pos.z)
+              )
+            } else {
+              // Not all selected — add all items for this tile
+              const otherItems = selectedItemsRef.current.filter(
+                s => !(s.x === pos.x && s.y === pos.y && s.z === pos.z)
+              )
+              const tileItems: SelectedItemInfo[] = []
+              for (let i = 0; i < tileItemCount; i++) {
+                tileItems.push({ x: pos.x, y: pos.y, z: pos.z, itemIndex: i })
+              }
+              newItems = [...otherItems, ...tileItems]
+            }
+            setSelectedItems(newItems)
+            selectedItemsRef.current = newItems
+            applyHighlights(renderer, newItems)
+          }
         }
         // If shift+drag ended, rectangle was already built during move
 
@@ -618,9 +646,7 @@ export function useEditorTools(
       if (isPastingRef.current && clipboardRef.current) {
         const cb = clipboardRef.current
         renderer.updatePastePreview(cb, pos.x, pos.y, renderer.floor)
-        // Show brush cursor outline around paste footprint
-        const footprint = cb.tiles.map(t => ({ x: pos.x + t.dx, y: pos.y + t.dy, z: renderer.floor }))
-        renderer.updateBrushCursor(footprint)
+        renderer.updateBrushCursor(getClipboardFootprint(cb, pos.x, pos.y, renderer.floor))
         renderer.clearGhostPreview()
         return
       }
@@ -682,12 +708,10 @@ export function useEditorTools(
       const newSel: SelectedItemInfo = { x: pos.x, y: pos.y, z: pos.z, itemIndex: topIdx }
       setSelectedItems([newSel])
       selectedItemsRef.current = [newSel]
-      setSelection([])
-      selectionRef.current = []
 
       // Open inspector with edit mode
       renderer.onTileClick?.(tile, pos.x, pos.y)
-      renderer.highlightItem(pos.x, pos.y, pos.z, topIdx)
+      renderer.setHighlights([{ pos: { x: pos.x, y: pos.y, z: pos.z }, indices: [topIdx] }])
       onRequestEditItemRef.current?.(pos.x, pos.y, pos.z, topIdx)
     }
 
@@ -723,15 +747,11 @@ export function useEditorTools(
     if (activeTool !== 'select') {
       setSelectedItems([])
       selectedItemsRef.current = []
-      setSelection([])
-      selectionRef.current = []
       renderer?.clearItemHighlight()
     }
     // Cancel paste mode on any tool change
     if (isPastingRef.current) {
-      isPastingRef.current = false
-      setIsPasting(false)
-      renderer?.clearDragPreview()
+      cancelPaste()
     }
   }, [activeTool, renderer])
 
@@ -741,54 +761,36 @@ export function useEditorTools(
   const copy = useCallback(() => {
     if (!mapData) return
     const items = selectedItemsRef.current
-    const sel = selectionRef.current
+    if (items.length === 0) return
 
-    // Build tile list from either selection mode
-    let tilesToCopy: { x: number; y: number; z: number }[]
-    if (items.length > 0) {
-      // Deduplicate tile positions from selected items
-      const seen = new Set<string>()
-      tilesToCopy = []
-      for (const item of items) {
-        const key = `${item.x},${item.y},${item.z}`
-        if (!seen.has(key)) {
-          seen.add(key)
-          tilesToCopy.push({ x: item.x, y: item.y, z: item.z })
-        }
+    // Group selected items by tile
+    const byTile = new Map<string, { pos: { x: number; y: number; z: number }; indices: Set<number> }>()
+    for (const item of items) {
+      const key = `${item.x},${item.y},${item.z}`
+      let entry = byTile.get(key)
+      if (!entry) {
+        entry = { pos: { x: item.x, y: item.y, z: item.z }, indices: new Set() }
+        byTile.set(key, entry)
       }
-    } else if (sel.length > 0) {
-      tilesToCopy = sel
-    } else {
-      return
+      entry.indices.add(item.itemIndex)
     }
 
-    const minX = Math.min(...tilesToCopy.map(s => s.x))
-    const minY = Math.min(...tilesToCopy.map(s => s.y))
-    const z = tilesToCopy[0].z
+    const positions = [...byTile.values()].map(e => e.pos)
+    const minX = Math.min(...positions.map(p => p.x))
+    const minY = Math.min(...positions.map(p => p.y))
+    const z = positions[0].z
     const tiles: ClipboardData['tiles'] = []
 
-    // Build a lookup of selected item indices per tile (for per-item copy)
-    const selectedIndicesByTile = new Map<string, Set<number>>()
-    if (items.length > 0) {
-      for (const item of items) {
-        const key = `${item.x},${item.y},${item.z}`
-        let set = selectedIndicesByTile.get(key)
-        if (!set) { set = new Set(); selectedIndicesByTile.set(key, set) }
-        set.add(item.itemIndex)
-      }
-    }
-
-    for (const s of tilesToCopy) {
-      const tile = mapData.tiles.get(`${s.x},${s.y},${s.z}`)
+    for (const [key, entry] of byTile) {
+      const tile = mapData.tiles.get(key)
       if (tile && tile.items.length > 0) {
-        const indices = selectedIndicesByTile.get(`${s.x},${s.y},${s.z}`)
-        const copiedItems = indices
-          ? tile.items.filter((_, i) => indices.has(i)).map(deepCloneItem)
-          : tile.items.map(deepCloneItem)
+        const copiedItems = tile.items
+          .filter((_, i) => entry.indices.has(i))
+          .map(deepCloneItem)
         if (copiedItems.length > 0) {
           tiles.push({
-            dx: s.x - minX,
-            dy: s.y - minY,
+            dx: entry.pos.x - minX,
+            dy: entry.pos.y - minY,
             items: copiedItems,
           })
         }
@@ -803,30 +805,30 @@ export function useEditorTools(
     isPastingRef.current = false
     setIsPasting(false)
     renderer?.clearDragPreview()
+    renderer?.updateBrushCursor([])
   }, [renderer])
 
   const executePasteAt = useCallback((targetX: number, targetY: number, targetZ: number) => {
     const cb = clipboardRef.current
-    if (!cb || !mutator || !renderer) return
+    if (!cb || !mutator || !renderer || !mapData) return
     mutator.beginBatch('Paste')
-    const pastedTiles: { x: number; y: number; z: number }[] = []
+    const pastedTilePositions: { x: number; y: number; z: number }[] = []
     for (const t of cb.tiles) {
       const tx = targetX + t.dx
       const ty = targetY + t.dy
       mutator.mergePasteItems(tx, ty, targetZ, t.items)
       const tile = mutator.getTile(tx, ty, targetZ)
       if (tile) renderer.updateChunkIndex(tile)
-      pastedTiles.push({ x: tx, y: ty, z: targetZ })
+      pastedTilePositions.push({ x: tx, y: ty, z: targetZ })
     }
     mutator.commitBatch()
 
-    // Select the pasted tiles
-    setSelectedItems([])
-    selectedItemsRef.current = []
-    setSelection(pastedTiles)
-    selectionRef.current = pastedTiles
-    applyHighlights(renderer, [], pastedTiles)
-  }, [mutator, renderer])
+    // Select the pasted tiles (expand to per-item)
+    const pastedItems = selectAllItemsOnTiles(pastedTilePositions, mapData)
+    setSelectedItems(pastedItems)
+    selectedItemsRef.current = pastedItems
+    applyHighlights(renderer, pastedItems)
+  }, [mutator, renderer, mapData])
 
   const paste = useCallback(() => {
     if (!clipboard || !renderer) return
@@ -837,49 +839,51 @@ export function useEditorTools(
     }
     isPastingRef.current = true
     setIsPasting(true)
+    // Clear current selection highlights
+    setSelectedItems([])
+    selectedItemsRef.current = []
+    renderer.clearItemHighlight()
     // Show preview at current hover position immediately
     const hover = hoverPosRef.current
     if (hover) {
       renderer.updatePastePreview(clipboard, hover.x, hover.y, renderer.floor)
-      // Show brush cursor outline around paste footprint
-      const footprint = clipboard.tiles.map(t => ({ x: hover.x + t.dx, y: hover.y + t.dy, z: renderer.floor }))
-      renderer.updateBrushCursor(footprint)
+      renderer.updateBrushCursor(getClipboardFootprint(clipboard, hover.x, hover.y, renderer.floor))
     }
   }, [clipboard, renderer, cancelPaste])
 
   const deleteSelection = useCallback(() => {
     const items = selectedItemsRef.current
-    const sel = selectionRef.current
-    if (!mutator || !renderer) return
-    if (items.length === 0 && sel.length === 0) return
+    if (!mutator || !renderer || !mapData) return
+    if (items.length === 0) return
 
     mutator.beginBatch('Delete selection')
 
-    // Build set of whole-tile positions so we skip per-item removal for those
-    const wholeTileSet = new Set(sel.map(s => `${s.x},${s.y},${s.z}`))
-
-    // Clear all items from whole-tile selections
-    for (const s of sel) {
-      mutator.setTileItems(s.x, s.y, s.z, [])
+    // Group by tile, sort indices descending per tile for safe removal
+    const byTile = new Map<string, SelectedItemInfo[]>()
+    for (const item of items) {
+      const key = `${item.x},${item.y},${item.z}`
+      const list = byTile.get(key) ?? []
+      list.push(item)
+      byTile.set(key, list)
     }
 
-    // Remove individual ctrl-clicked items (skip tiles already wiped above)
-    // Sort by itemIndex descending so indices stay valid during removal
-    const itemsToRemove = items
-      .filter(i => !wholeTileSet.has(`${i.x},${i.y},${i.z}`))
-      .sort((a, b) => {
-        const tileCompare = `${a.x},${a.y},${a.z}`.localeCompare(`${b.x},${b.y},${b.z}`)
-        if (tileCompare !== 0) return tileCompare
-        return b.itemIndex - a.itemIndex // descending
-      })
-    for (const item of itemsToRemove) {
-      mutator.removeItem(item.x, item.y, item.z, item.itemIndex)
+    for (const [key, tileItems] of byTile) {
+      const tile = mapData.tiles.get(key)
+      if (!tile) continue
+      // Check if all items on tile are selected → wipe whole tile
+      if (tileItems.length >= tile.items.length) {
+        mutator.setTileItems(tileItems[0].x, tileItems[0].y, tileItems[0].z, [])
+      } else {
+        // Remove individual items, descending index order
+        const indices = [...new Set(tileItems.map(t => t.itemIndex))].sort((a, b) => b - a)
+        for (const idx of indices) {
+          mutator.removeItem(tileItems[0].x, tileItems[0].y, tileItems[0].z, idx)
+        }
+      }
     }
 
     mutator.commitBatch()
 
-    setSelection([])
-    selectionRef.current = []
     setSelectedItems([])
     selectedItemsRef.current = []
     renderer.clearItemHighlight()
@@ -891,12 +895,17 @@ export function useEditorTools(
   }, [copy, deleteSelection])
 
   const selectTiles = useCallback((tiles: { x: number; y: number; z: number }[]) => {
-    setSelectedItems([])
-    selectedItemsRef.current = []
-    setSelection(tiles)
-    selectionRef.current = tiles
-    renderer?.highlightTiles(tiles)
-  }, [renderer])
+    if (!mapData) {
+      setSelectedItems([])
+      selectedItemsRef.current = []
+      renderer?.clearItemHighlight()
+      return
+    }
+    const items = selectAllItemsOnTiles(tiles, mapData)
+    setSelectedItems(items)
+    selectedItemsRef.current = items
+    if (renderer) applyHighlights(renderer, items)
+  }, [renderer, mapData])
 
   return {
     activeTool,
@@ -905,7 +914,7 @@ export function useEditorTools(
     setSelectedItemId,
     selectedItems,
     setSelectedItems,
-    selection,
+    hasSelection: selectedItems.length > 0,
     clipboard,
     canUndo,
     canRedo,

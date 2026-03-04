@@ -11,6 +11,7 @@ import { getTextureSync, getTexture } from './TextureManager'
 import { type FloorViewMode, ZOOM_LEVELS } from './constants'
 import type { AppearanceData } from './appearances'
 import type { OtbmMap, OtbmTile, OtbmItem } from './otbm'
+import type { ClipboardData } from '../hooks/useEditorTools'
 
 export { type FloorViewMode } from './constants'
 
@@ -202,56 +203,15 @@ export class MapRenderer implements InputHost {
     if (!v) this.selection.clearSelectionBorder()
   }
 
-  /** Highlight a single item on a tile (RME-style glow integrated into chunk rendering). */
-  highlightItem(x: number, y: number, z: number, itemIndex: number): void {
-    const affectedChunks = this._collectHighlightChunkKeys()
-    this.tileRenderer.clearHighlight()
-    const tileKey = `${x},${y},${z}`
-    this.tileRenderer.setHighlight(tileKey, [itemIndex])
-    affectedChunks.add(chunkKeyForTile(x, y, z))
-    this.chunkManager.rebuildChunksForHighlight(affectedChunks)
-    if (this._showSelectionBorder) {
-      this.selection.updateSelectionBorder([{ x, y, z }], this.camera.floor)
-    }
-  }
-
-  /** Highlight all items on multiple tiles (RME-style glow for shift+drag). */
-  highlightTiles(positions: { x: number; y: number; z: number }[]): void {
-    const affectedChunks = this._collectHighlightChunkKeys()
-    this.tileRenderer.clearHighlight()
-    for (const pos of positions) {
-      const tileKey = `${pos.x},${pos.y},${pos.z}`
-      this.tileRenderer.setHighlight(tileKey, null)
-      affectedChunks.add(chunkKeyForTile(pos.x, pos.y, pos.z))
-    }
-    this.chunkManager.rebuildChunksForHighlight(affectedChunks)
-    if (this._showSelectionBorder) {
-      this.selection.updateSelectionBorder(positions, this.camera.floor)
-    }
-  }
-
-  /** Highlight a combination of per-item selections and whole-tile selections. */
-  highlightCombined(
-    items: { x: number; y: number; z: number; itemIndex: number }[],
-    tiles: { x: number; y: number; z: number }[],
-  ): void {
+  /** Set highlights for tiles/items. Each entry: null indices = whole tile, array = specific items. */
+  setHighlights(highlights: { pos: { x: number; y: number; z: number }; indices: number[] | null }[]): void {
     const affectedChunks = this._collectHighlightChunkKeys()
     this.tileRenderer.clearHighlight()
 
-    // Whole tiles first (null = all items highlighted)
-    for (const t of tiles) {
-      this.tileRenderer.setHighlight(`${t.x},${t.y},${t.z}`, null)
-      affectedChunks.add(chunkKeyForTile(t.x, t.y, t.z))
-    }
-
-    // Per-item highlights (skip tiles already fully highlighted)
-    for (const item of items) {
-      const key = `${item.x},${item.y},${item.z}`
-      const existing = this.tileRenderer.highlightedTileKeys.get(key)
-      if (existing === null) continue // already fully highlighted as whole tile
-      const indices = existing ? [...existing, item.itemIndex] : [item.itemIndex]
-      this.tileRenderer.setHighlight(key, indices)
-      affectedChunks.add(chunkKeyForTile(item.x, item.y, item.z))
+    for (const h of highlights) {
+      const tileKey = `${h.pos.x},${h.pos.y},${h.pos.z}`
+      this.tileRenderer.setHighlight(tileKey, h.indices)
+      affectedChunks.add(chunkKeyForTile(h.pos.x, h.pos.y, h.pos.z))
     }
 
     if (affectedChunks.size > 0) {
@@ -259,13 +219,8 @@ export class MapRenderer implements InputHost {
     }
 
     if (this._showSelectionBorder) {
-      const allPositions = [...tiles]
-      const tileSet = new Set(tiles.map(t => `${t.x},${t.y},${t.z}`))
-      for (const item of items) {
-        const key = `${item.x},${item.y},${item.z}`
-        if (!tileSet.has(key)) allPositions.push({ x: item.x, y: item.y, z: item.z })
-      }
-      this.selection.updateSelectionBorder(allPositions, this.camera.floor)
+      const positions = highlights.map(h => h.pos)
+      this.selection.updateSelectionBorder(positions, this.camera.floor)
     }
   }
 
@@ -309,9 +264,9 @@ export class MapRenderer implements InputHost {
   }
 
   /** Show a ghost preview of clipboard tiles at a target position. */
-  updatePastePreview(clipboard: { originX: number; originY: number; tiles: { dx: number; dy: number; items: import('./otbm').OtbmItem[] }[] }, targetX: number, targetY: number, targetZ: number): void {
+  updatePastePreview(clipboard: ClipboardData, targetX: number, targetY: number, targetZ: number): void {
     // Build a temporary tileMap with clipboard data at their original positions
-    const tempMap = new Map<string, import('./otbm').OtbmTile>()
+    const tempMap = new Map<string, OtbmTile>()
     const tilePositions: { x: number; y: number; z: number }[] = []
     for (const t of clipboard.tiles) {
       const x = clipboard.originX + t.dx
