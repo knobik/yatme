@@ -146,7 +146,7 @@ export class SelectionOverlay {
     tileMap: Map<string, OtbmTile>,
     appearances: AppearanceData,
   ): void {
-    if (tiles.length === 0 || (dx === 0 && dy === 0)) {
+    if (tiles.length === 0) {
       this.clearDragPreview()
       return
     }

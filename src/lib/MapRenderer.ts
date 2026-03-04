@@ -308,6 +308,24 @@ export class MapRenderer implements InputHost {
     this.selection.clearDragPreview()
   }
 
+  /** Show a ghost preview of clipboard tiles at a target position. */
+  updatePastePreview(clipboard: { originX: number; originY: number; tiles: { dx: number; dy: number; items: import('./otbm').OtbmItem[] }[] }, targetX: number, targetY: number, targetZ: number): void {
+    // Build a temporary tileMap with clipboard data at their original positions
+    const tempMap = new Map<string, import('./otbm').OtbmTile>()
+    const tilePositions: { x: number; y: number; z: number }[] = []
+    for (const t of clipboard.tiles) {
+      const x = clipboard.originX + t.dx
+      const y = clipboard.originY + t.dy
+      const key = `${x},${y},${targetZ}`
+      tempMap.set(key, { x, y, z: targetZ, flags: 0, items: t.items })
+      tilePositions.push({ x, y, z: targetZ })
+    }
+    // Compute offset from original positions to target
+    const dx = targetX - clipboard.originX
+    const dy = targetY - clipboard.originY
+    this.selection.updateDragPreview(tilePositions, dx, dy, this.camera.floor, tempMap, this.appearances)
+  }
+
   /** Update the ghost sprite preview for the brush cursor. */
   updateGhostPreview(itemId: number | null, tiles: { x: number; y: number; z: number }[]): void {
     if (itemId == null || tiles.length === 0) {

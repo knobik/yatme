@@ -102,6 +102,8 @@ export interface EditorToolsState {
   setBrushShape: (shape: BrushShape) => void
   activeDoorType: number
   setActiveDoorType: (type: number) => void
+  isPasting: boolean
+  cancelPaste: () => void
 }
 
 export function useEditorTools(
@@ -122,6 +124,7 @@ export function useEditorTools(
   const [brushSize, setBrushSize] = useState(0)
   const [brushShape, setBrushShape] = useState<BrushShape>('square')
   const [activeDoorType, setActiveDoorType] = useState<number>(DOOR_NORMAL)
+  const [isPasting, setIsPasting] = useState(false)
 
   // Refs for pointer handling (avoid stale closures)
   const activeToolRef = useRef(activeTool)
@@ -144,6 +147,10 @@ export function useEditorTools(
   activeDoorTypeRef.current = activeDoorType
   onRequestEditItemRef.current = onRequestEditItem
   clickToInspectRef.current = clickToInspect
+
+  const isPastingRef = useRef(false)
+  const clipboardRef = useRef<ClipboardData | null>(null)
+  clipboardRef.current = clipboard
 
   // Drag state for tools
   const paintedTilesRef = useRef(new Set<string>())
@@ -191,6 +198,16 @@ export function useEditorTools(
     if (!renderer || !mutator) return
 
     renderer.onTilePointerDown = (pos, event) => {
+      // Paste preview mode: click commits paste and exits paste mode
+      if (isPastingRef.current && clipboardRef.current) {
+        executePasteAt(pos.x, pos.y, renderer.floor)
+        isPastingRef.current = false
+        setIsPasting(false)
+        renderer.clearDragPreview()
+        renderer.updateBrushCursor([])
+        return
+      }
+
       const tool = activeToolRef.current
       isDraggingRef.current = true
 
@@ -386,6 +403,10 @@ export function useEditorTools(
           if (origin) {
             const dx = pos.x - origin.x
             const dy = pos.y - origin.y
+            if (dx === 0 && dy === 0) {
+              renderer.clearDragPreview()
+              return
+            }
             // Collect source tiles from both selection types
             const sourceTiles: { x: number; y: number; z: number }[] = []
             const seen = new Set<string>()
@@ -592,6 +613,18 @@ export function useEditorTools(
 
     renderer.onTileHover = (pos) => {
       hoverPosRef.current = pos
+
+      // Paste preview mode: show clipboard ghost at hover position
+      if (isPastingRef.current && clipboardRef.current) {
+        const cb = clipboardRef.current
+        renderer.updatePastePreview(cb, pos.x, pos.y, renderer.floor)
+        // Show brush cursor outline around paste footprint
+        const footprint = cb.tiles.map(t => ({ x: pos.x + t.dx, y: pos.y + t.dy, z: renderer.floor }))
+        renderer.updateBrushCursor(footprint)
+        renderer.clearGhostPreview()
+        return
+      }
+
       const tool = activeToolRef.current
       const size = (tool === 'draw' || tool === 'erase' || tool === 'door') ? brushSizeRef.current : 0
       const shape = brushShapeRef.current
@@ -694,6 +727,12 @@ export function useEditorTools(
       selectionRef.current = []
       renderer?.clearItemHighlight()
     }
+    // Cancel paste mode on any tool change
+    if (isPastingRef.current) {
+      isPastingRef.current = false
+      setIsPasting(false)
+      renderer?.clearDragPreview()
+    }
   }, [activeTool, renderer])
 
   const undo = useCallback(() => { mutator?.undo() }, [mutator])
@@ -727,14 +766,32 @@ export function useEditorTools(
     const minY = Math.min(...tilesToCopy.map(s => s.y))
     const z = tilesToCopy[0].z
     const tiles: ClipboardData['tiles'] = []
+
+    // Build a lookup of selected item indices per tile (for per-item copy)
+    const selectedIndicesByTile = new Map<string, Set<number>>()
+    if (items.length > 0) {
+      for (const item of items) {
+        const key = `${item.x},${item.y},${item.z}`
+        let set = selectedIndicesByTile.get(key)
+        if (!set) { set = new Set(); selectedIndicesByTile.set(key, set) }
+        set.add(item.itemIndex)
+      }
+    }
+
     for (const s of tilesToCopy) {
       const tile = mapData.tiles.get(`${s.x},${s.y},${s.z}`)
       if (tile && tile.items.length > 0) {
-        tiles.push({
-          dx: s.x - minX,
-          dy: s.y - minY,
-          items: tile.items.map(deepCloneItem),
-        })
+        const indices = selectedIndicesByTile.get(`${s.x},${s.y},${s.z}`)
+        const copiedItems = indices
+          ? tile.items.filter((_, i) => indices.has(i)).map(deepCloneItem)
+          : tile.items.map(deepCloneItem)
+        if (copiedItems.length > 0) {
+          tiles.push({
+            dx: s.x - minX,
+            dy: s.y - minY,
+            items: copiedItems,
+          })
+        }
       }
     }
     if (tiles.length > 0) {
@@ -742,26 +799,53 @@ export function useEditorTools(
     }
   }, [mapData])
 
-  const paste = useCallback(() => {
-    if (!clipboard || !mutator || !renderer) return
-    const items = selectedItemsRef.current
-    const sel = selectionRef.current
-    // Paste at the selected tile, or at hover position, or at clipboard origin
-    const hover = hoverPosRef.current
-    const targetX = items.length > 0 ? items[0].x : sel.length > 0 ? sel[0].x : hover ? hover.x : clipboard.originX
-    const targetY = items.length > 0 ? items[0].y : sel.length > 0 ? sel[0].y : hover ? hover.y : clipboard.originY
-    const targetZ = renderer.floor
+  const cancelPaste = useCallback(() => {
+    isPastingRef.current = false
+    setIsPasting(false)
+    renderer?.clearDragPreview()
+  }, [renderer])
 
+  const executePasteAt = useCallback((targetX: number, targetY: number, targetZ: number) => {
+    const cb = clipboardRef.current
+    if (!cb || !mutator || !renderer) return
     mutator.beginBatch('Paste')
-    for (const t of clipboard.tiles) {
-      const tileItems = t.items.map(deepCloneItem)
-      mutator.setTileItems(targetX + t.dx, targetY + t.dy, targetZ, tileItems)
-      // Update chunk index for any new tiles
-      const tile = mutator.getTile(targetX + t.dx, targetY + t.dy, targetZ)
+    const pastedTiles: { x: number; y: number; z: number }[] = []
+    for (const t of cb.tiles) {
+      const tx = targetX + t.dx
+      const ty = targetY + t.dy
+      mutator.mergePasteItems(tx, ty, targetZ, t.items)
+      const tile = mutator.getTile(tx, ty, targetZ)
       if (tile) renderer.updateChunkIndex(tile)
+      pastedTiles.push({ x: tx, y: ty, z: targetZ })
     }
     mutator.commitBatch()
-  }, [clipboard, mutator, renderer])
+
+    // Select the pasted tiles
+    setSelectedItems([])
+    selectedItemsRef.current = []
+    setSelection(pastedTiles)
+    selectionRef.current = pastedTiles
+    applyHighlights(renderer, [], pastedTiles)
+  }, [mutator, renderer])
+
+  const paste = useCallback(() => {
+    if (!clipboard || !renderer) return
+    // Toggle paste preview mode
+    if (isPastingRef.current) {
+      cancelPaste()
+      return
+    }
+    isPastingRef.current = true
+    setIsPasting(true)
+    // Show preview at current hover position immediately
+    const hover = hoverPosRef.current
+    if (hover) {
+      renderer.updatePastePreview(clipboard, hover.x, hover.y, renderer.floor)
+      // Show brush cursor outline around paste footprint
+      const footprint = clipboard.tiles.map(t => ({ x: hover.x + t.dx, y: hover.y + t.dy, z: renderer.floor }))
+      renderer.updateBrushCursor(footprint)
+    }
+  }, [clipboard, renderer, cancelPaste])
 
   const deleteSelection = useCallback(() => {
     const items = selectedItemsRef.current
@@ -838,5 +922,7 @@ export function useEditorTools(
     setBrushShape,
     activeDoorType,
     setActiveDoorType,
+    isPasting,
+    cancelPaste,
   }
 }

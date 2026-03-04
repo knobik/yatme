@@ -199,6 +199,38 @@ export class MapMutator {
     })
   }
 
+  /** RME-style paste merge: replace ground if pasted tile has one, append non-ground items. */
+  mergePasteItems(x: number, y: number, z: number, pasteItems: OtbmItem[]): void {
+    this.autoBatch('Paste', () => {
+      const tile = this.getOrCreateTile(x, y, z)
+      const oldItems = deepCloneItems(tile.items)
+
+      const hasGround = pasteItems.some(it => classifyItem(it.id, this.appearances) === 'ground')
+
+      if (hasGround) {
+        // Replace existing ground with pasted ground
+        const groundIdx = tile.items.findIndex(it => classifyItem(it.id, this.appearances) === 'ground')
+        const pasteGround = pasteItems.find(it => classifyItem(it.id, this.appearances) === 'ground')!
+        if (groundIdx >= 0) {
+          tile.items[groundIdx] = deepCloneItem(pasteGround)
+        } else {
+          tile.items.splice(0, 0, deepCloneItem(pasteGround))
+        }
+      }
+
+      // Append all non-ground items using proper layer insertion
+      for (const item of pasteItems) {
+        if (classifyItem(item.id, this.appearances) === 'ground') continue
+        const layer = classifyItem(item.id, this.appearances)
+        const index = this.findInsertIndex(tile, layer)
+        tile.items.splice(index, 0, deepCloneItem(item))
+      }
+
+      this.recordAction({ type: 'setTileItems', x, y, z, oldItems, newItems: deepCloneItems(tile.items) })
+      this.onTileChanged?.(x, y, z)
+    })
+  }
+
   // --- Undo / Redo ---
 
   canUndo(): boolean { return this.undoStack.length > 0 }

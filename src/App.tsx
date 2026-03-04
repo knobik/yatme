@@ -362,6 +362,11 @@ function App() {
       }
 
       renderer.onTileContextMenu = (pos, tile, screenX, screenY) => {
+        // Right-click cancels paste mode without opening context menu
+        if (toolsRef.current.isPasting) {
+          toolsRef.current.cancelPaste()
+          return
+        }
         // Right-click switches back to select tool (context menu still opens)
         const currentTool = toolsRef.current.activeTool
         if (currentTool === 'draw' || currentTool === 'erase') {
@@ -477,7 +482,9 @@ function App() {
         toolsRef.current.deleteSelection()
       } else if (e.key === 'Escape') {
         e.preventDefault()
-        if (showGoToDialog) {
+        if (toolsRef.current.isPasting) {
+          toolsRef.current.cancelPaste()
+        } else if (showGoToDialog) {
           setShowGoToDialog(false)
         } else if (contextMenu) {
           setContextMenu(null)
