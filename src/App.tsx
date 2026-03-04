@@ -9,6 +9,8 @@ import { loadItems, type ItemRegistry } from './lib/items'
 import { useEditorTools } from './hooks/useEditorTools'
 import { loadBrushData } from './lib/brushes/BrushLoader'
 import { parseWallBrushesXml } from './lib/brushes/WallLoader'
+import { parseCarpetBrushesXml } from './lib/brushes/CarpetLoader'
+import type { CarpetBrush, TableBrush } from './lib/brushes/CarpetTypes'
 import { BrushRegistry } from './lib/brushes/BrushRegistry'
 import { Inspector } from './components/Inspector'
 import { ItemPalette } from './components/ItemPalette'
@@ -204,7 +206,23 @@ function App() {
         const wallBrushes = parseWallBrushesXml(wallsXml, nextId)
         console.log(`[WallLoader] Loaded ${wallBrushes.length} wall brushes`)
 
-        brushRegistry = new BrushRegistry(brushData.brushes, brushData.borders, wallBrushes)
+        // Load carpet/table brushes from doodad XMLs
+        const doodadFiles = ['doodads.xml', 'tiny_borders.xml', 'trees.xml']
+        const allCarpets: CarpetBrush[] = []
+        const allTables: TableBrush[] = []
+        for (const file of doodadFiles) {
+          try {
+            const xml = await fetch(`/materials/brushs/${file}`).then(r => r.text())
+            const { carpets, tables } = parseCarpetBrushesXml(xml, nextId)
+            allCarpets.push(...carpets)
+            allTables.push(...tables)
+          } catch (e) {
+            console.warn(`[CarpetLoader] Failed to load ${file}:`, e)
+          }
+        }
+        console.log(`[CarpetLoader] Loaded ${allCarpets.length} carpet brushes, ${allTables.length} table brushes`)
+
+        brushRegistry = new BrushRegistry(brushData.brushes, brushData.borders, wallBrushes, allCarpets, allTables)
         ;(window as any).__brushRegistry = brushRegistry
         if (!destroyed) setBrushRegistryState(brushRegistry)
       } catch (e) {

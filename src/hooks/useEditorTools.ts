@@ -114,7 +114,9 @@ export function useEditorTools(
         const groundBrush = registry?.getBrushForItem(itemId) ?? null
         const doorInfo = !groundBrush ? registry?.getDoorInfo(itemId) ?? null : null
         const wallBrush = !groundBrush && !doorInfo ? registry?.getWallBrushForItem(itemId) ?? null : null
-        mutator.beginBatch(groundBrush ? 'Paint ground' : doorInfo ? 'Place door' : wallBrush ? 'Paint wall' : 'Draw items')
+        const carpetBrush = !groundBrush && !doorInfo && !wallBrush ? registry?.getCarpetBrushForItem(itemId) ?? null : null
+        const tableBrush = !groundBrush && !doorInfo && !wallBrush && !carpetBrush ? registry?.getTableBrushForItem(itemId) ?? null : null
+        mutator.beginBatch(groundBrush ? 'Paint ground' : doorInfo ? 'Place door' : wallBrush ? 'Paint wall' : carpetBrush ? 'Paint carpet' : tableBrush ? 'Paint table' : 'Draw items')
         const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
         for (const t of tiles) {
           const key = `${t.x},${t.y}`
@@ -125,6 +127,10 @@ export function useEditorTools(
             mutator.paintDoor(t.x, t.y, pos.z, doorInfo.type, registry)
           } else if (wallBrush && registry) {
             mutator.paintWall(t.x, t.y, pos.z, wallBrush, registry)
+          } else if (carpetBrush && registry) {
+            mutator.paintCarpet(t.x, t.y, pos.z, carpetBrush, registry)
+          } else if (tableBrush && registry) {
+            mutator.paintTable(t.x, t.y, pos.z, tableBrush, registry)
           } else {
             mutator.addItem(t.x, t.y, pos.z, { id: itemId })
           }
@@ -169,6 +175,8 @@ export function useEditorTools(
         const groundBrush = registry?.getBrushForItem(itemId) ?? null
         const doorInfo = !groundBrush ? registry?.getDoorInfo(itemId) ?? null : null
         const wallBrush = !groundBrush && !doorInfo ? registry?.getWallBrushForItem(itemId) ?? null : null
+        const carpetBrush = !groundBrush && !doorInfo && !wallBrush ? registry?.getCarpetBrushForItem(itemId) ?? null : null
+        const tableBrush = !groundBrush && !doorInfo && !wallBrush && !carpetBrush ? registry?.getTableBrushForItem(itemId) ?? null : null
         const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
         let any = false
         for (const t of tiles) {
@@ -181,6 +189,10 @@ export function useEditorTools(
             mutator.paintDoor(t.x, t.y, pos.z, doorInfo.type, registry)
           } else if (wallBrush && registry) {
             mutator.paintWall(t.x, t.y, pos.z, wallBrush, registry)
+          } else if (carpetBrush && registry) {
+            mutator.paintCarpet(t.x, t.y, pos.z, carpetBrush, registry)
+          } else if (tableBrush && registry) {
+            mutator.paintTable(t.x, t.y, pos.z, tableBrush, registry)
           } else {
             mutator.addItem(t.x, t.y, pos.z, { id: itemId })
           }

@@ -2,6 +2,7 @@
 
 import type { AutoBorder, GroundBrush } from './BrushTypes'
 import type { WallBrush, WallDoor } from './WallTypes'
+import type { CarpetBrush, TableBrush } from './CarpetTypes'
 
 export class BrushRegistry {
   private brushesByName = new Map<string, GroundBrush>()
@@ -21,10 +22,22 @@ export class BrushRegistry {
   private doorItemInfo = new Map<number, WallDoor>()
   readonly doorItemIds = new Set<number>()
 
+  // Carpet brush maps
+  private carpetBrushesByName = new Map<string, CarpetBrush>()
+  private carpetBrushesByItemId = new Map<number, CarpetBrush>()
+  readonly carpetItemIds = new Set<number>()
+
+  // Table brush maps
+  private tableBrushesByName = new Map<string, TableBrush>()
+  private tableBrushesByItemId = new Map<number, TableBrush>()
+  readonly tableItemIds = new Set<number>()
+
   constructor(
     brushes: GroundBrush[],
     borders: Map<number, AutoBorder>,
     wallBrushes: WallBrush[] = [],
+    carpetBrushes: CarpetBrush[] = [],
+    tableBrushes: TableBrush[] = [],
   ) {
     // Register all ground brushes
     for (const brush of brushes) {
@@ -110,6 +123,28 @@ export class BrushRegistry {
         }
       }
     }
+
+    // Register carpet brushes
+    for (const cb of carpetBrushes) {
+      this.carpetBrushesByName.set(cb.name, cb)
+      for (const node of cb.carpetItems) {
+        for (const item of node.items) {
+          this.carpetBrushesByItemId.set(item.id, cb)
+          this.carpetItemIds.add(item.id)
+        }
+      }
+    }
+
+    // Register table brushes
+    for (const tb of tableBrushes) {
+      this.tableBrushesByName.set(tb.name, tb)
+      for (const node of tb.tableItems) {
+        for (const item of node.items) {
+          this.tableBrushesByItemId.set(item.id, tb)
+          this.tableItemIds.add(item.id)
+        }
+      }
+    }
   }
 
   getBrushByName(name: string): GroundBrush | undefined {
@@ -164,5 +199,29 @@ export class BrushRegistry {
       if (roll < cumulative) return item.id
     }
     return brush.items[brush.items.length - 1].id
+  }
+
+  getCarpetBrushByName(name: string): CarpetBrush | undefined {
+    return this.carpetBrushesByName.get(name)
+  }
+
+  getCarpetBrushForItem(itemId: number): CarpetBrush | undefined {
+    return this.carpetBrushesByItemId.get(itemId)
+  }
+
+  isCarpetItem(itemId: number): boolean {
+    return this.carpetItemIds.has(itemId)
+  }
+
+  getTableBrushByName(name: string): TableBrush | undefined {
+    return this.tableBrushesByName.get(name)
+  }
+
+  getTableBrushForItem(itemId: number): TableBrush | undefined {
+    return this.tableBrushesByItemId.get(itemId)
+  }
+
+  isTableItem(itemId: number): boolean {
+    return this.tableItemIds.has(itemId)
   }
 }

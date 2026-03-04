@@ -4,10 +4,13 @@ import { CHUNK_SIZE } from './constants'
 import { chunkKeyForTile } from './ChunkManager'
 import type { GroundBrush } from './brushes/BrushTypes'
 import type { WallBrush } from './brushes/WallTypes'
+import type { CarpetBrush, TableBrush } from './brushes/CarpetTypes'
+import { CARPET_CENTER, TABLE_ALONE } from './brushes/CarpetTypes'
 import type { BrushRegistry } from './brushes/BrushRegistry'
 import { computeBorders } from './brushes/BorderSystem'
 import { doWalls, getWallAlignment } from './brushes/WallSystem'
 import { findDoorForAlignment, switchDoor } from './brushes/DoorSystem'
+import { doCarpets, doTables } from './brushes/CarpetSystem'
 const MAX_UNDO = 200
 
 function tileKey(x: number, y: number, z: number): string {
@@ -536,6 +539,166 @@ export class MapMutator {
       })
       this.onTileChanged?.(x, y, z)
     })
+  }
+
+  // --- Carpet brush painting ---
+
+  paintCarpet(x: number, y: number, z: number, brush: CarpetBrush, registry: BrushRegistry): void {
+    this.autoBatch('Paint carpet', () => {
+      const tile = this.getOrCreateTile(x, y, z)
+      const oldItems = deepCloneItems(tile.items)
+
+      // Remove existing carpet items from the SAME brush on this tile
+      for (let i = tile.items.length - 1; i >= 0; i--) {
+        const cb = registry.getCarpetBrushForItem(tile.items[i].id)
+        if (cb && cb.id === brush.id) {
+          tile.items.splice(i, 1)
+        }
+      }
+
+      // Pick a center item as placeholder — doCarpets() will fix alignment
+      let placeholderId = 0
+      const centerNode = brush.carpetItems[CARPET_CENTER]
+      if (centerNode.items.length > 0) {
+        placeholderId = centerNode.items[0].id
+      } else {
+        // Fallback: first available item from any slot
+        for (const node of brush.carpetItems) {
+          if (node.items.length > 0) { placeholderId = node.items[0].id; break }
+        }
+      }
+      if (!placeholderId) return
+
+      const layer = classifyItem(placeholderId, this.appearances)
+      const index = this.findInsertIndex(tile, layer)
+      tile.items.splice(index, 0, { id: placeholderId })
+
+      // Run doCarpets() to get correctly aligned items
+      const alignedCarpets = doCarpets(x, y, z, this.mapData, registry)
+      this.replaceBrushItems(tile, alignedCarpets, registry, 'carpet')
+
+      this.recordAction({
+        type: 'setTileItems', x, y, z,
+        oldItems,
+        newItems: deepCloneItems(tile.items),
+      })
+      this.onTileChanged?.(x, y, z)
+
+      // Update 8 neighbors (carpets use 8-directional)
+      this.updateNeighborBrush(x, y, z, registry, 'carpet')
+    })
+  }
+
+  // --- Table brush painting ---
+
+  paintTable(x: number, y: number, z: number, brush: TableBrush, registry: BrushRegistry): void {
+    this.autoBatch('Paint table', () => {
+      const tile = this.getOrCreateTile(x, y, z)
+      const oldItems = deepCloneItems(tile.items)
+
+      // Remove existing table items from the SAME brush on this tile
+      for (let i = tile.items.length - 1; i >= 0; i--) {
+        const tb = registry.getTableBrushForItem(tile.items[i].id)
+        if (tb && tb.id === brush.id) {
+          tile.items.splice(i, 1)
+        }
+      }
+
+      // Pick an alone item as placeholder
+      let placeholderId = 0
+      const aloneNode = brush.tableItems[TABLE_ALONE]
+      if (aloneNode.items.length > 0) {
+        placeholderId = aloneNode.items[0].id
+      } else {
+        for (const node of brush.tableItems) {
+          if (node.items.length > 0) { placeholderId = node.items[0].id; break }
+        }
+      }
+      if (!placeholderId) return
+
+      const layer = classifyItem(placeholderId, this.appearances)
+      const index = this.findInsertIndex(tile, layer)
+      tile.items.splice(index, 0, { id: placeholderId })
+
+      const alignedTables = doTables(x, y, z, this.mapData, registry)
+      this.replaceBrushItems(tile, alignedTables, registry, 'table')
+
+      this.recordAction({
+        type: 'setTileItems', x, y, z,
+        oldItems,
+        newItems: deepCloneItems(tile.items),
+      })
+      this.onTileChanged?.(x, y, z)
+
+      this.updateNeighborBrush(x, y, z, registry, 'table')
+    })
+  }
+
+  // Update 8 cardinal+diagonal neighbors for carpet/table alignment
+  private updateNeighborBrush(
+    x: number, y: number, z: number,
+    registry: BrushRegistry,
+    brushType: 'carpet' | 'table',
+  ): void {
+    const neighborOffsets: [number, number][] = [
+      [-1, -1], [0, -1], [1, -1],
+      [-1, 0], [1, 0],
+      [-1, 1], [0, 1], [1, 1],
+    ]
+    for (const [dx, dy] of neighborOffsets) {
+      const nx = x + dx
+      const ny = y + dy
+      if (nx < 0 || ny < 0) continue
+
+      const neighborTile = this.mapData.tiles.get(`${nx},${ny},${z}`)
+      if (!neighborTile) continue
+
+      const hasItems = brushType === 'carpet'
+        ? neighborTile.items.some(item => registry.isCarpetItem(item.id))
+        : neighborTile.items.some(item => registry.isTableItem(item.id))
+      if (!hasItems) continue
+
+      const neighborOld = deepCloneItems(neighborTile.items)
+
+      const aligned = brushType === 'carpet'
+        ? doCarpets(nx, ny, z, this.mapData, registry)
+        : doTables(nx, ny, z, this.mapData, registry)
+      this.replaceBrushItems(neighborTile, aligned, registry, brushType)
+
+      if (!this.itemsEqual(neighborOld, neighborTile.items)) {
+        this.recordAction({
+          type: 'setTileItems', x: nx, y: ny, z,
+          oldItems: neighborOld,
+          newItems: deepCloneItems(neighborTile.items),
+        })
+        this.onTileChanged?.(nx, ny, z)
+      }
+    }
+  }
+
+  // Replace carpet/table items on a tile with new aligned ones
+  private replaceBrushItems(
+    tile: OtbmTile,
+    newItems: OtbmItem[],
+    registry: BrushRegistry,
+    brushType: 'carpet' | 'table',
+  ): void {
+    // Remove all existing items of this brush type
+    for (let i = tile.items.length - 1; i >= 0; i--) {
+      const isMatch = brushType === 'carpet'
+        ? registry.isCarpetItem(tile.items[i].id)
+        : registry.isTableItem(tile.items[i].id)
+      if (isMatch) {
+        tile.items.splice(i, 1)
+      }
+    }
+
+    // Insert new items at correct layer positions
+    for (const item of newItems) {
+      const layer = classifyItem(item.id, this.appearances)
+      const index = this.findInsertIndex(tile, layer)
+      tile.items.splice(index, 0, item)
+    }
   }
 
   // Replace wall items on a tile with new aligned ones, preserving non-wall items

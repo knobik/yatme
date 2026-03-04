@@ -692,6 +692,16 @@ html, body, #root {
   color: #fff;
 }
 
+.brush-badge-carpet {
+  background: var(--accent);
+  color: #fff;
+}
+
+.brush-badge-table {
+  background: #8b6cc4;
+  color: #fff;
+}
+
 /* ── Context menu ───────────────────────────────────────────────── */
 
 .context-menu {

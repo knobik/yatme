@@ -6,7 +6,7 @@ import { getItemDisplayName } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
 import { itemCategory } from '../proto/appearances'
 
-type SmartBrushType = 'ground' | 'wall' | null
+type SmartBrushType = 'ground' | 'wall' | 'carpet' | 'table' | null
 
 interface ItemPaletteProps {
   registry: ItemRegistry
@@ -106,6 +106,8 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
       if (brushRegistry) {
         if (brushRegistry.getBrushForItem(id)) brush = 'ground'
         else if (brushRegistry.getWallBrushForItem(id)) brush = 'wall'
+        else if (brushRegistry.getCarpetBrushForItem(id)) brush = 'carpet'
+        else if (brushRegistry.getTableBrushForItem(id)) brush = 'table'
       }
       items.push({ id, name, category, brush })
     }
@@ -245,15 +247,9 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
                   <ItemSprite itemId={item.id} appearances={appearances} size={36} />
                   {item.brush && (
                     <span className={`brush-badge brush-badge-${item.brush}`} title={`Smart brush: ${item.brush}`}>
-                      {item.brush === 'ground' ? (
-                        <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
-                          <path d="M15.2 0.8a2.7 2.7 0 0 0-3.8 0L4 8.2l-.2.6L2.4 13a.5.5 0 0 0 .6.6l4.2-1.4.6-.2L15.2 4.6a2.7 2.7 0 0 0 0-3.8zM5.4 9L11 3.4l1.6 1.6L7 11 5.4 9z"/>
-                        </svg>
-                      ) : (
-                        <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
-                          <path d="M1 1h6v4H1V1zm8 0h6v4H9V1zM1 7h4v4H1V7zm6 0h4v4H7V7zm6 0h2v4h-2V7zM1 13h6v2H1v-2zm8 0h6v2H9v-2z"/>
-                        </svg>
-                      )}
+                      <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M15.2 0.8a2.7 2.7 0 0 0-3.8 0L4 8.2l-.2.6L2.4 13a.5.5 0 0 0 .6.6l4.2-1.4.6-.2L15.2 4.6a2.7 2.7 0 0 0 0-3.8zM5.4 9L11 3.4l1.6 1.6L7 11 5.4 9z"/>
+                      </svg>
                     </span>
                   )}
                 </div>
