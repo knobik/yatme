@@ -4,6 +4,7 @@ import { Camera } from './Camera'
 import { TileRenderer } from './TileRenderer'
 import { SelectionOverlay } from './SelectionOverlay'
 import { FloorManager } from './FloorManager'
+import { LightEngine } from './LightEngine'
 import { setupMapInput, type InputHost } from './InputHandler'
 import { getItemSpriteId } from './SpriteResolver'
 import { getTextureSync, getTexture } from './TextureManager'
@@ -27,6 +28,10 @@ export class MapRenderer implements InputHost {
   private selection: SelectionOverlay
   private floorManager: FloorManager
   private chunkManager: ChunkManager
+  private lightEngine: LightEngine
+
+  // Settings
+  private _showSelectionBorder = false
 
   // Lifecycle
   private _cleanupInput: (() => void) | null = null
@@ -77,8 +82,12 @@ export class MapRenderer implements InputHost {
     // Selection overlay (added to mapContainer; FloorManager keeps it on top)
     this.mapContainer.addChild(this.selection.container)
 
+    // Light engine (multiply-blend overlay on top of everything)
+    this.lightEngine = new LightEngine()
+    this.mapContainer.addChild(this.lightEngine.container)
+
     // Floor manager
-    this.floorManager = new FloorManager(this.mapContainer, this.selection.container)
+    this.floorManager = new FloorManager(this.mapContainer, this.selection.container, this.lightEngine.container)
 
     // Input
     this._cleanupInput = setupMapInput(
@@ -163,11 +172,34 @@ export class MapRenderer implements InputHost {
   /** Invalidate specific chunks, forcing them to rebuild on next frame. */
   invalidateChunks(keys: Set<string>): void {
     this.chunkManager.invalidateChunks(keys)
+    this.lightEngine.markDirty()
   }
 
   /** Update the chunk index when a tile is created or modified. */
   updateChunkIndex(tile: OtbmTile): void {
     this.chunkManager.updateChunkIndex(tile)
+    this.lightEngine.markDirty()
+  }
+
+  // ── Light engine ──────────────────────────────────────────────
+
+  get showLights(): boolean { return this.lightEngine.enabled }
+
+  setShowLights(enabled: boolean): void {
+    this.lightEngine.setEnabled(enabled)
+  }
+
+  setGlobalLightColor(r: number, g: number, b: number): void {
+    this.lightEngine.setGlobalLightColor(r, g, b)
+  }
+
+  // ── Selection border ────────────────────────────────────────────
+
+  get selectionBorder(): boolean { return this._showSelectionBorder }
+
+  setShowSelectionBorder(v: boolean): void {
+    this._showSelectionBorder = v
+    if (!v) this.selection.clearSelectionBorder()
   }
 
   /** Highlight a single item on a tile (RME-style glow integrated into chunk rendering). */
@@ -178,8 +210,9 @@ export class MapRenderer implements InputHost {
     this.tileRenderer.setHighlight(tileKey, [itemIndex])
     affectedChunks.add(chunkKeyForTile(x, y, z))
     this.chunkManager.rebuildChunksForHighlight(affectedChunks)
-    // TODO: selection border disabled — future option menu item
-    // this.selection.updateSelectionBorder([{ x, y, z }], this.camera.floor)
+    if (this._showSelectionBorder) {
+      this.selection.updateSelectionBorder([{ x, y, z }], this.camera.floor)
+    }
   }
 
   /** Highlight all items on multiple tiles (RME-style glow for shift+drag). */
@@ -192,8 +225,48 @@ export class MapRenderer implements InputHost {
       affectedChunks.add(chunkKeyForTile(pos.x, pos.y, pos.z))
     }
     this.chunkManager.rebuildChunksForHighlight(affectedChunks)
-    // TODO: selection border disabled — future option menu item
-    // this.selection.updateSelectionBorder(positions, this.camera.floor)
+    if (this._showSelectionBorder) {
+      this.selection.updateSelectionBorder(positions, this.camera.floor)
+    }
+  }
+
+  /** Highlight a combination of per-item selections and whole-tile selections. */
+  highlightCombined(
+    items: { x: number; y: number; z: number; itemIndex: number }[],
+    tiles: { x: number; y: number; z: number }[],
+  ): void {
+    const affectedChunks = this._collectHighlightChunkKeys()
+    this.tileRenderer.clearHighlight()
+
+    // Whole tiles first (null = all items highlighted)
+    for (const t of tiles) {
+      this.tileRenderer.setHighlight(`${t.x},${t.y},${t.z}`, null)
+      affectedChunks.add(chunkKeyForTile(t.x, t.y, t.z))
+    }
+
+    // Per-item highlights (skip tiles already fully highlighted)
+    for (const item of items) {
+      const key = `${item.x},${item.y},${item.z}`
+      const existing = this.tileRenderer.highlightedTileKeys.get(key)
+      if (existing === null) continue // already fully highlighted as whole tile
+      const indices = existing ? [...existing, item.itemIndex] : [item.itemIndex]
+      this.tileRenderer.setHighlight(key, indices)
+      affectedChunks.add(chunkKeyForTile(item.x, item.y, item.z))
+    }
+
+    if (affectedChunks.size > 0) {
+      this.chunkManager.rebuildChunksForHighlight(affectedChunks)
+    }
+
+    if (this._showSelectionBorder) {
+      const allPositions = [...tiles]
+      const tileSet = new Set(tiles.map(t => `${t.x},${t.y},${t.z}`))
+      for (const item of items) {
+        const key = `${item.x},${item.y},${item.z}`
+        if (!tileSet.has(key)) allPositions.push({ x: item.x, y: item.y, z: item.z })
+      }
+      this.selection.updateSelectionBorder(allPositions, this.camera.floor)
+    }
   }
 
   clearItemHighlight(): void {
@@ -202,8 +275,9 @@ export class MapRenderer implements InputHost {
     if (affectedChunks.size > 0) {
       this.chunkManager.rebuildChunksForHighlight(affectedChunks)
     }
-    // TODO: selection border disabled — future option menu item
-    // this.selection.clearSelectionBorder()
+    if (this._showSelectionBorder) {
+      this.selection.clearSelectionBorder()
+    }
   }
 
   /** Collect chunk keys for all currently highlighted tiles. */
@@ -309,6 +383,8 @@ export class MapRenderer implements InputHost {
 
     this.chunkManager.update(visibleFloors)
 
+    this.lightEngine.update(this.camera, this.chunkManager.index, this.appearances, visibleFloors)
+
     this.selection.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
   }
 
@@ -323,6 +399,7 @@ export class MapRenderer implements InputHost {
     this.app.ticker.remove(this._boundUpdate)
     this._cleanupInput?.()
     this.recycleAllChunks()
+    this.lightEngine.destroy()
     this.selection.destroy()
     this.floorManager.destroy()
     this.mapContainer.destroy({ children: true })

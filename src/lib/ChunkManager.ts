@@ -192,6 +192,11 @@ export class ChunkManager {
     }
   }
 
+  /** Expose chunk index for external consumers (e.g. LightEngine). */
+  get index(): Map<string, OtbmTile[]> {
+    return this.chunkIndex
+  }
+
   /** Called once per frame — handles visibility, build/restore, eviction, animation, prefetch. */
   update(visibleFloors: number[]): void {
     this._animElapsed = performance.now() - this._animStartTime

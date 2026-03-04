@@ -21,6 +21,8 @@ import type { ResolvedTileset } from './lib/tilesets/TilesetTypes'
 import { Toolbar } from './components/Toolbar'
 import { ContextMenu, type ContextMenuGroup } from './components/ContextMenu'
 import { GoToPositionDialog } from './components/GoToPositionDialog'
+import { SettingsModal } from './components/SettingsModal'
+import { loadSettings, saveSettings, type EditorSettings } from './lib/EditorSettings'
 import { getItemDisplayName } from './lib/items'
 
 interface CameraState {
@@ -49,7 +51,8 @@ function App() {
   const [tileVersion, setTileVersion] = useState(0)
   const [itemRegistry, setItemRegistry] = useState<ItemRegistry | null>(null)
   const [appearancesData, setAppearancesData] = useState<AppearanceData | null>(null)
-  const [showPalette, setShowPalette] = useState(true)
+  const [showPalette, setShowPalette] = useState(() => loadSettings().showPalette)
+  const [showLights, setShowLights] = useState(() => loadSettings().showLights)
 
   // Phase 7 state
   const [mapData, setMapData] = useState<OtbmMap | null>(null)
@@ -57,6 +60,8 @@ function App() {
   const [mutatorReady, setMutatorReady] = useState<MapMutator | null>(null)
 
   const [showGoToDialog, setShowGoToDialog] = useState(false)
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [editorSettings, setEditorSettings] = useState<EditorSettings>(() => loadSettings())
   const [brushRegistryState, setBrushRegistryState] = useState<BrushRegistry | null>(null)
   const [tilesets, setTilesets] = useState<ResolvedTileset[]>([])
 
@@ -118,6 +123,19 @@ function App() {
 
   const handleResetZoom = useCallback(() => {
     rendererRef.current?.resetZoom()
+  }, [])
+
+  const handleSettingsChange = useCallback((next: EditorSettings) => {
+    setEditorSettings(next)
+    const r = rendererRef.current
+    if (r) {
+      r.setFloorViewMode(next.floorViewMode)
+      r.setShowTransparentUpper(next.showTransparentUpper)
+      r.setShowLights(next.showLights)
+      r.setShowSelectionBorder(next.selectionBorder)
+    }
+    setShowPalette(next.showPalette)
+    setShowLights(next.showLights)
   }, [])
 
   const handleGoToPosition = useCallback((x: number, y: number, z: number) => {
@@ -309,6 +327,13 @@ function App() {
         showTransparentUpper: renderer.showTransparentUpper,
       })
 
+      // Apply saved settings to renderer
+      const savedSettings = loadSettings()
+      renderer.setFloorViewMode(savedSettings.floorViewMode)
+      renderer.setShowTransparentUpper(savedSettings.showTransparentUpper)
+      renderer.setShowLights(savedSettings.showLights)
+      renderer.setShowSelectionBorder(savedSettings.selectionBorder)
+
       setLoadingProgress(1)
       setMapData(mapData)
       setRendererReady(renderer)
@@ -408,12 +433,24 @@ function App() {
         } else if (selectedTilePos) {
           setSelectedTilePos(null)
           rendererRef.current?.deselectTile()
-          toolsRef.current.setSelectedItem(null)
+          toolsRef.current.setSelectedItems([])
           toolsRef.current.selectTiles([])
         }
       } else if (e.key === 'p' || e.key === 'P') {
         e.preventDefault()
-        setShowPalette(prev => !prev)
+        setShowPalette(prev => {
+          const next = !prev
+          setEditorSettings(s => { const u = { ...s, showPalette: next }; saveSettings(u); return u })
+          return next
+        })
+      } else if (e.key === 'l' || e.key === 'L') {
+        e.preventDefault()
+        setShowLights(prev => {
+          const next = !prev
+          rendererRef.current?.setShowLights(next)
+          setEditorSettings(s => { const u = { ...s, showLights: next }; saveSettings(u); return u })
+          return next
+        })
       } else if (e.key === 's' && !e.ctrlKey) {
         e.preventDefault()
         toolsRef.current.setActiveTool('select')
@@ -448,9 +485,9 @@ function App() {
 
     const isInSelection = currentTools.selection.some(
       s => s.x === tilePos.x && s.y === tilePos.y && s.z === tilePos.z,
-    ) || (currentTools.selectedItem?.x === tilePos.x
-       && currentTools.selectedItem?.y === tilePos.y
-       && currentTools.selectedItem?.z === tilePos.z)
+    ) || currentTools.selectedItems.some(
+      i => i.x === tilePos.x && i.y === tilePos.y && i.z === tilePos.z
+    )
 
     // Clipboard group
     const clipboardGroup: ContextMenuGroup = {
@@ -639,10 +676,26 @@ function App() {
           onPaste={tools.paste}
           onDelete={tools.deleteSelection}
           canPaste={!!tools.clipboard}
-          hasSelection={tools.selection.length > 0 || tools.selectedItem !== null}
+          hasSelection={tools.selection.length > 0 || tools.selectedItems.length > 0}
           onGoToPosition={() => setShowGoToDialog(true)}
+          onOpenSettings={() => setShowSettingsModal(true)}
           showPalette={showPalette}
-          onTogglePalette={() => setShowPalette(prev => !prev)}
+          onTogglePalette={() => {
+            setShowPalette(prev => {
+              const next = !prev
+              setEditorSettings(s => { const u = { ...s, showPalette: next }; saveSettings(u); return u })
+              return next
+            })
+          }}
+          showLights={showLights}
+          onToggleLights={() => {
+            setShowLights(prev => {
+              const next = !prev
+              rendererRef.current?.setShowLights(next)
+              setEditorSettings(s => { const u = { ...s, showLights: next }; saveSettings(u); return u })
+              return next
+            })
+          }}
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onResetZoom={handleResetZoom}
@@ -673,6 +726,15 @@ function App() {
           currentZ={camera.floor}
           onNavigate={handleGoToPosition}
           onClose={() => setShowGoToDialog(false)}
+        />
+      )}
+
+      {/* Settings modal */}
+      {showSettingsModal && (
+        <SettingsModal
+          settings={editorSettings}
+          onChange={handleSettingsChange}
+          onClose={() => setShowSettingsModal(false)}
         />
       )}
 

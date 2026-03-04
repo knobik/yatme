@@ -10,6 +10,7 @@ export class FloorManager {
   constructor(
     private _parent: Container,
     private _overlay: Container,
+    private _lightOverlay?: Container,
   ) {}
 
   /** Get (or lazily create) the container for a floor. */
@@ -70,6 +71,7 @@ export class FloorManager {
       this._parent.addChild(this._containers.get(z)!)
     }
     this._parent.addChild(this._overlay)
+    if (this._lightOverlay) this._parent.addChild(this._lightOverlay)
 
     this._lastVisibleFloors = visibleFloors.slice()
   }

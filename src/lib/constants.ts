@@ -7,6 +7,7 @@ export const CHUNK_CACHE_SIZE = 512 // max cached off-screen chunks
 export const CHUNK_BUILD_BUDGET_MS = 4 // max ms per frame for building new chunks
 export const PREFETCH_RING = 2 // extra chunks around viewport to pre-build
 export const FLOOR_ABOVE_ALPHA = 0.3 // opacity for transparent floor above
+export const MAX_LIGHT_INTENSITY = 8
 
 export type FloorViewMode = 'single' | 'current-below' | 'all'
 

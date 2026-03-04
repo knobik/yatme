@@ -28,6 +28,9 @@ interface ToolbarProps {
   onGoToPosition: () => void
   showPalette: boolean
   onTogglePalette: () => void
+  showLights: boolean
+  onToggleLights: () => void
+  onOpenSettings: () => void
   onZoomIn: () => void
   onZoomOut: () => void
   onResetZoom: () => void
@@ -121,6 +124,7 @@ export function Toolbar({
   canPaste,
   hasSelection,
   onGoToPosition,
+  onOpenSettings,
   showPalette,
   onTogglePalette,
   onZoomIn,
@@ -132,6 +136,8 @@ export function Toolbar({
   onBrushShapeChange,
   activeDoorType,
   onDoorTypeChange,
+  showLights,
+  onToggleLights,
 }: ToolbarProps) {
   const itemName = selectedItemId != null && registry && appearances
     ? getItemDisplayName(selectedItemId, registry, appearances)
@@ -160,10 +166,13 @@ export function Toolbar({
       title: 'View',
       items: [
         { label: 'Brush Palette', shortcut: 'P', checked: showPalette, onClick: onTogglePalette },
+        { label: 'Show Lights', shortcut: 'L', checked: showLights, onClick: onToggleLights },
         'separator',
         { label: 'Zoom In', shortcut: 'Ctrl+=', onClick: onZoomIn },
         { label: 'Zoom Out', shortcut: 'Ctrl+-', onClick: onZoomOut },
         { label: 'Reset Zoom', shortcut: 'Ctrl+0', onClick: onResetZoom },
+        'separator',
+        { label: 'Settings...', onClick: onOpenSettings },
       ],
     },
   ]
