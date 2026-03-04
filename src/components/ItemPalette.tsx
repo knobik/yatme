@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import clsx from 'clsx'
 import type { ItemRegistry } from '../lib/items'
 import type { AppearanceData } from '../lib/appearances'
 import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
@@ -93,9 +94,7 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
   // Build the full item list with category assignments (cached)
   const allItems = useMemo(() => {
     const items: { id: number; name: string; category: Category; brush: SmartBrushType }[] = []
-    // Use appearance objects as the source of truth — they define what items exist
     for (const [id] of appearances.objects) {
-      // Skip items with no sprite
       const appearance = appearances.objects.get(id)
       const info = appearance?.frameGroup?.[0]?.spriteInfo
       if (!info || info.spriteId.length === 0 || info.spriteId[0] === 0) continue
@@ -162,17 +161,17 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
   const visibleItems = filteredItems.slice(startRow * COLS, endRow * COLS)
 
   return (
-    <div className="panel palette">
+    <div className="panel absolute left-4 top-4 bottom-4 z-10 flex w-[320px] flex-col pointer-events-auto">
       {/* Header */}
-      <div className="palette-header">
-        <span className="label" style={{ fontSize: 'var(--text-md)', letterSpacing: 'var(--tracking-wide)' }}>
+      <div className="flex items-center gap-3 px-5 py-4">
+        <span className="label text-md tracking-wide">
           ITEMS
         </span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>
+        <span className="font-mono text-sm text-fg-faint">
           {filteredItems.length.toLocaleString()}
         </span>
-        <div style={{ flex: 1 }} />
-        <button className="btn btn-icon" onClick={onClose} title="Close (Esc)" style={{ border: 'none', background: 'transparent', width: 22, height: 22 }}>
+        <div className="flex-1" />
+        <button className="btn btn-icon h-[22px] w-[22px] border-none bg-transparent" onClick={onClose} title="Close (Esc)">
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
             <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
@@ -180,7 +179,7 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
       </div>
 
       {/* Search */}
-      <div style={{ padding: 'var(--space-2) var(--space-3)' }}>
+      <div className="px-3 py-2">
         <input
           className="search-input"
           type="text"
@@ -195,7 +194,7 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
         {CATEGORIES.map(cat => (
           <button
             key={cat}
-            className={`category-tab${activeCategory === cat ? ' active' : ''}`}
+            className={clsx('category-tab', activeCategory === cat && 'active')}
             onClick={() => setActiveCategory(cat)}
           >
             {cat}
@@ -203,12 +202,12 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
         ))}
       </div>
 
-      <div className="separator" />
+      <div className="h-px w-full bg-border-subtle" />
 
       {/* Virtual scrolling grid */}
       <div
         ref={scrollRef}
-        className="palette-scroll"
+        className="flex-1 overflow-y-auto overflow-x-hidden min-h-0"
         onScroll={handleScroll}
       >
         <div style={{ height: totalHeight, position: 'relative' }} ref={viewportRef}>
@@ -224,7 +223,7 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
             {visibleItems.map((item) => (
               <div
                 key={item.id}
-                className={`item-cell${item.id === selectedItemId ? ' selected' : ''}`}
+                className={clsx('item-cell', item.id === selectedItemId && 'selected')}
                 onClick={() => onItemSelect?.(item.id)}
                 draggable
                 onDragStart={(e) => {
@@ -244,7 +243,7 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
                 }}
                 title={`${item.name} (ID: ${item.id})`}
               >
-                <div style={{ position: 'relative' }}>
+                <div className="relative">
                   <ItemSprite itemId={item.id} appearances={appearances} size={36} />
                   {item.brush && (
                     <span className={`brush-badge brush-badge-${item.brush}`} title={`Smart brush: ${item.brush}`}>

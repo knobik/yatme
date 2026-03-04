@@ -73,21 +73,16 @@ export function ContextMenu({ x, y, groups, onClose }: ContextMenuProps) {
   return (
     <div
       ref={menuRef}
-      className="panel context-menu"
-      style={{
-        position: 'fixed',
-        left: pos.x,
-        top: pos.y,
-        zIndex: 100,
-      }}
+      className="panel min-w-[200px] py-2 fixed z-100"
+      style={{ left: pos.x, top: pos.y }}
     >
       {visibleGroups.map((group, gi) => (
         <div key={gi}>
-          {gi > 0 && <div className="separator" />}
+          {gi > 0 && <div className="mx-0 my-2 h-px w-full bg-border-subtle" />}
           {group.items.map((item, ii) => (
             <button
               key={ii}
-              className="context-menu-item"
+              className="flex w-full items-center justify-between border-none bg-none px-5 py-2 text-left font-ui text-sm font-normal text-fg transition-[background] duration-100 ease-out hover:enabled:bg-panel-hover disabled:cursor-default disabled:text-fg-disabled"
               disabled={item.disabled}
               onClick={() => {
                 item.onClick()
@@ -96,7 +91,7 @@ export function ContextMenu({ x, y, groups, onClose }: ContextMenuProps) {
             >
               <span>{item.label}</span>
               {item.shortcut && (
-                <span className="context-menu-shortcut">{item.shortcut}</span>
+                <span className="ml-8 font-mono text-xs text-fg-faint">{item.shortcut}</span>
               )}
             </button>
           ))}

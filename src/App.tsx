@@ -77,7 +77,7 @@ function App() {
     setEditItemIndex(itemIndex)
   }, [])
 
-  const tools = useEditorTools(rendererReady, mutatorReady, mapData, brushRegistryState, handleRequestEditItem)
+  const tools = useEditorTools(rendererReady, mutatorReady, mapData, brushRegistryState, handleRequestEditItem, editorSettings.clickToInspect)
   const toolsRef = useRef(tools)
   toolsRef.current = tools
 
@@ -91,11 +91,14 @@ function App() {
     if (rendererRef.current) {
       rendererRef.current.setFloorViewMode(mode)
     }
+    setEditorSettings(s => { const u = { ...s, floorViewMode: mode }; saveSettings(u); return u })
   }, [])
 
   const handleToggleTransparentUpper = useCallback(() => {
     if (rendererRef.current) {
-      rendererRef.current.setShowTransparentUpper(!rendererRef.current.showTransparentUpper)
+      const next = !rendererRef.current.showTransparentUpper
+      rendererRef.current.setShowTransparentUpper(next)
+      setEditorSettings(s => { const u = { ...s, showTransparentUpper: next }; saveSettings(u); return u })
     }
   }, [])
 
@@ -108,6 +111,52 @@ function App() {
     tools.setSelectedItemId(itemId)
     tools.setActiveTool('draw')
   }, [tools])
+
+  const inspectorAnchorRef = useRef<number | null>(null)
+
+  const handleSelectItem = useCallback((index: number, e: React.MouseEvent) => {
+    if (!selectedTilePos) return
+    const { x, y, z } = selectedTilePos
+    const renderer = rendererRef.current
+    const tiles = tools.selection // preserve multi-tile selection
+
+    if (e.ctrlKey || e.metaKey) {
+      // Toggle item in/out of selection
+      const existing = tools.selectedItems.filter(
+        it => it.x === x && it.y === y && it.z === z
+      )
+      const alreadySelected = existing.some(it => it.itemIndex === index)
+      const otherOnTile = alreadySelected
+        ? existing.filter(it => it.itemIndex !== index)
+        : [...existing, { x, y, z, itemIndex: index }]
+      const otherTiles = tools.selectedItems.filter(
+        it => !(it.x === x && it.y === y && it.z === z)
+      )
+      const newItems = [...otherTiles, ...otherOnTile]
+      tools.setSelectedItems(newItems)
+      if (newItems.length === 0 && tiles.length === 0) {
+        renderer?.clearItemHighlight()
+      } else {
+        renderer?.highlightCombined(newItems, tiles)
+      }
+      inspectorAnchorRef.current = alreadySelected ? null : index
+    } else if (e.shiftKey && inspectorAnchorRef.current !== null) {
+      // Range select from anchor to clicked index
+      const from = Math.min(inspectorAnchorRef.current, index)
+      const to = Math.max(inspectorAnchorRef.current, index)
+      const rangeItems: typeof tools.selectedItems = []
+      for (let i = from; i <= to; i++) {
+        rangeItems.push({ x, y, z, itemIndex: i })
+      }
+      tools.setSelectedItems(rangeItems)
+      renderer?.highlightCombined(rangeItems, tiles)
+    } else {
+      // Plain click — select single item, clear multi-tile selection
+      tools.setSelectedItems([{ x, y, z, itemIndex: index }])
+      renderer?.highlightCombined([{ x, y, z, itemIndex: index }], tiles)
+      inspectorAnchorRef.current = index
+    }
+  }, [selectedTilePos, tools])
 
   const handleClosePalette = useCallback(() => {
     setShowPalette(false)
@@ -152,9 +201,7 @@ function App() {
     const app = new Application()
     appRef.current = app
 
-    // Weighted progress: each step has a weight proportional to its cost.
-    // The progress callback maps per-step fraction to overall 0→1 progress.
-    const stepWeights = [2, 15, 3, 55, 12, 8, 3, 2] // renderer, appearances, sprites, otbm, items, brushes, tilesets, setup
+    const stepWeights = [2, 15, 3, 55, 12, 8, 3, 2]
     const totalWeight = stepWeights.reduce((a, b) => a + b, 0)
     let currentStep = 0
     const stepStarts: number[] = []
@@ -230,12 +277,10 @@ function App() {
         const brushData = await loadBrushData(stepProgress)
         const nextId = { value: brushData.brushes.length + 1 }
 
-        // Load wall brushes
         const wallsXml = await fetch('/materials/brushs/walls.xml').then(r => r.text())
         const wallBrushes = parseWallBrushesXml(wallsXml, nextId)
         console.log(`[WallLoader] Loaded ${wallBrushes.length} wall brushes`)
 
-        // Load carpet/table/doodad brushes from doodad XMLs
         const doodadFiles = ['doodads.xml', 'tiny_borders.xml', 'trees.xml']
         const allCarpets: CarpetBrush[] = []
         const allTables: TableBrush[] = []
@@ -264,7 +309,6 @@ function App() {
       if (destroyed) return
       nextStep()
 
-      // Load tilesets
       setLoadingStatus('Loading tilesets...')
       try {
         const rawTilesets = await loadTilesets()
@@ -284,7 +328,6 @@ function App() {
       rendererRef.current = renderer
       ;(window as any).__renderer = renderer
 
-      // Create mutator and wire chunk invalidation
       const mutator = new MapMutator(mapData, appearances)
       mutator.brushRegistry = brushRegistry
       mutatorRef.current = mutator
@@ -305,8 +348,13 @@ function App() {
       renderer.onTileClick = (tile, worldX, worldY) => {
         if (tile) {
           setSelectedTilePos({ x: tile.x, y: tile.y, z: tile.z })
+          // Sync Inspector anchor to map's selected item (top item)
+          inspectorAnchorRef.current = tile.items.length > 0 ? tile.items.length - 1 : null
         } else {
           setSelectedTilePos(null)
+          inspectorAnchorRef.current = null
+          // Clear per-item selection when clicking empty ground
+          toolsRef.current.setSelectedItems([])
         }
       }
 
@@ -327,7 +375,6 @@ function App() {
         showTransparentUpper: renderer.showTransparentUpper,
       })
 
-      // Apply saved settings to renderer
       const savedSettings = loadSettings()
       renderer.setFloorViewMode(savedSettings.floorViewMode)
       renderer.setShowTransparentUpper(savedSettings.showTransparentUpper)
@@ -360,10 +407,8 @@ function App() {
   // Keyboard shortcuts
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      // Don't handle shortcuts when typing in an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
 
-      // Ctrl shortcuts
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 'z' && !e.shiftKey) {
           e.preventDefault()
@@ -489,7 +534,6 @@ function App() {
       i => i.x === tilePos.x && i.y === tilePos.y && i.z === tilePos.z
     )
 
-    // Clipboard group
     const clipboardGroup: ContextMenuGroup = {
       items: [
         {
@@ -532,7 +576,6 @@ function App() {
       ],
     }
 
-    // Position group
     const positionGroup: ContextMenuGroup = {
       items: [
         {
@@ -545,14 +588,13 @@ function App() {
           ? [{
               label: 'Browse Tile',
               onClick: () => {
-                renderer?.onTileClick?.(tile, tilePos.x, tilePos.y)
+                setSelectedTilePos({ x: tilePos.x, y: tilePos.y, z: tilePos.z })
               },
             }]
           : []),
       ],
     }
 
-    // Item info group
     const topItem = tile?.items?.[tile.items.length - 1]
     const itemInfoGroup: ContextMenuGroup = {
       items: topItem && itemRegistry && appearancesData
@@ -575,7 +617,6 @@ function App() {
         : [],
     }
 
-    // Door group — switch door open/closed
     const doorGroup: ContextMenuGroup = {
       items: topItem && brushRegistryState?.isDoorItem(topItem.id)
         ? [{
@@ -589,7 +630,6 @@ function App() {
         : [],
     }
 
-    // Teleport group — find first item with teleportDestination
     const teleportItem = tile?.items?.find(i => i.teleportDestination)
     const dest = teleportItem?.teleportDestination
     const teleportGroup: ContextMenuGroup = {
@@ -617,44 +657,32 @@ function App() {
 
   if (error) {
     return (
-      <div style={{
-        width: '100vw',
-        height: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'var(--bg-void)',
-      }}>
-        <div className="panel" style={{ padding: 'var(--space-10)', maxWidth: 400, textAlign: 'center' }}>
-          <div style={{
-            width: 40, height: 40, margin: '0 auto var(--space-6)',
-            borderRadius: 'var(--radius-md)',
-            background: 'var(--danger-subtle)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 20,
-          }}>!</div>
-          <div style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'var(--text-lg)',
-            fontWeight: 600,
-            color: 'var(--danger)',
-            marginBottom: 'var(--space-3)',
-          }}>Failed to load</div>
-          <div style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 'var(--text-sm)',
-            color: 'var(--text-secondary)',
-            wordBreak: 'break-word',
-          }}>{error}</div>
+      <div className="flex h-screen w-screen items-center justify-center bg-void">
+        <div className="panel max-w-[400px] p-10 text-center">
+          <div className="mx-auto mb-6 flex h-[40px] w-[40px] items-center justify-center rounded-md bg-danger-subtle text-[20px]">!</div>
+          <div className="mb-3 font-display text-lg font-semibold text-danger">Failed to load</div>
+          <div className="break-words font-mono text-sm text-fg-muted">{error}</div>
         </div>
       </div>
     )
   }
 
+  const inspectorSelectedIndices = (() => {
+    const s = new Set<number>()
+    if (selectedTilePos) {
+      for (const it of tools.selectedItems) {
+        if (it.x === selectedTilePos.x && it.y === selectedTilePos.y && it.z === selectedTilePos.z) {
+          s.add(it.itemIndex)
+        }
+      }
+    }
+    return s
+  })()
+
   return (
-    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
+    <div className="relative h-screen w-screen overflow-hidden">
       {/* Map viewport */}
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      <div ref={containerRef} className="h-full w-full" />
 
       {/* Loading overlay */}
       {loading && <LoadingOverlay status={loadingStatus} progress={loadingProgress} />}
@@ -765,6 +793,8 @@ function App() {
           mutator={mutatorReady}
           onClose={handleCloseInspector}
           onSelectAsBrush={handleSelectAsBrush}
+          onSelectItem={handleSelectItem}
+          selectedItemIndices={inspectorSelectedIndices}
           offset={showPalette}
           initialEditIndex={editItemIndex}
           onEditIndexConsumed={() => setEditItemIndex(null)}
@@ -773,30 +803,24 @@ function App() {
 
       {/* HUD — bottom left status bar */}
       {!loading && (
-        <div className="panel" style={{
-          position: 'absolute',
-          bottom: 'var(--space-4)',
-          left: showPalette && selectedTilePos
-            ? 'calc(var(--space-4) + 320px + var(--space-3) + 400px + var(--space-3))'
-            : showPalette
-              ? 'calc(var(--space-4) + 320px + var(--space-3))'
-              : selectedTilePos
-                ? 'calc(var(--space-4) + 400px + var(--space-3))'
-                : 'var(--space-4)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-6)',
-          padding: 'var(--space-3) var(--space-5)',
-          pointerEvents: 'auto',
-          userSelect: 'none',
-          transition: 'left var(--duration-normal) var(--ease-out)',
-        }}>
+        <div
+          className="panel absolute bottom-4 z-10 flex h-[48px] items-center gap-6 px-5 pointer-events-auto select-none transition-[left] duration-[180ms] ease-out"
+          style={{
+            left: showPalette && selectedTilePos
+              ? 'calc(8px + 320px + 6px + 400px + 6px)'
+              : showPalette
+                ? 'calc(8px + 320px + 6px)'
+                : selectedTilePos
+                  ? 'calc(8px + 400px + 6px)'
+                  : '8px',
+          }}
+        >
           <HudField label="POS" value={`${camera.x}, ${camera.y}`} />
-          <div className="separator-v" style={{ height: 16, flexShrink: 0 }} />
+          <div className="h-[16px] w-px shrink-0 bg-border-subtle" />
           <HudField label="ZOOM" value={`${camera.zoom.toFixed(2)}x`} />
           {mapInfo && (
             <>
-              <div className="separator-v" style={{ height: 16, flexShrink: 0 }} />
+              <div className="h-[16px] w-px shrink-0 bg-border-subtle" />
               <HudField label="TILES" value={mapInfo.tiles.toLocaleString()} />
             </>
           )}
@@ -805,64 +829,39 @@ function App() {
 
       {/* Floor selector — right side */}
       {!loading && (
-        <div className="panel" style={{
-          position: 'absolute',
-          top: '50%',
-          right: 'var(--space-4)',
-          transform: 'translateY(-50%)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          padding: 'var(--space-3)',
-          gap: 'var(--space-1)',
-        }}>
+        <div className="panel absolute top-1/2 right-4 z-10 flex -translate-y-1/2 flex-col items-center gap-1 p-3">
           <button
-            className="btn btn-icon"
+            className="btn btn-icon border-none bg-transparent"
             onClick={() => handleFloorChange(-1)}
             title="Floor up (PageUp)"
-            style={{ border: 'none', background: 'transparent' }}
           >
             <svg width="16" height="10" viewBox="0 0 12 8" fill="none">
               <path d="M1 6.5L6 1.5L11 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
 
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            padding: 'var(--space-2) var(--space-5)',
-            gap: 2,
-          }}>
-            <span className="label" style={{ fontSize: 10, lineHeight: 1 }}>FLOOR</span>
-            <span className="value value-accent" style={{ fontSize: 'var(--text-2xl)', fontWeight: 500, lineHeight: 1 }}>
-              {camera.floor}
-            </span>
-          </div>
+          <span className="value text-accent-fg text-2xl font-medium leading-none py-1">
+            {camera.floor}
+          </span>
 
           <button
-            className="btn btn-icon"
+            className="btn btn-icon border-none bg-transparent"
             onClick={() => handleFloorChange(1)}
             title="Floor down (PageDown)"
-            style={{ border: 'none', background: 'transparent' }}
           >
             <svg width="16" height="10" viewBox="0 0 12 8" fill="none">
               <path d="M1 1.5L6 6.5L11 1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
 
-          <div className="separator" style={{ width: '100%', margin: 'var(--space-1) 0' }} />
+          <div className="mx-1 my-1 h-px w-full bg-border-subtle" />
 
           {/* Floor view mode: single / current+below / all */}
           <button
-            className="btn btn-icon"
+            className="btn btn-icon border-none bg-transparent"
             onClick={() => handleFloorViewMode('single')}
             title="Single floor"
-            style={{
-              border: 'none',
-              background: 'transparent',
-              color: camera.floorViewMode === 'single' ? 'var(--accent)' : undefined,
-            }}
+            style={{ color: camera.floorViewMode === 'single' ? 'var(--color-accent)' : undefined }}
           >
             <svg width="18" height="13" viewBox="0 0 14 10" fill="none">
               <path d="M7 2L1 5L7 8L13 5L7 2Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
@@ -870,14 +869,10 @@ function App() {
           </button>
 
           <button
-            className="btn btn-icon"
+            className="btn btn-icon border-none bg-transparent"
             onClick={() => handleFloorViewMode('current-below')}
             title="Current floor + below"
-            style={{
-              border: 'none',
-              background: 'transparent',
-              color: camera.floorViewMode === 'current-below' ? 'var(--accent)' : undefined,
-            }}
+            style={{ color: camera.floorViewMode === 'current-below' ? 'var(--color-accent)' : undefined }}
           >
             <svg width="18" height="16" viewBox="0 0 14 12" fill="none">
               <path d="M7 1L1 4L7 7L13 4L7 1Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
@@ -886,14 +881,10 @@ function App() {
           </button>
 
           <button
-            className="btn btn-icon"
+            className="btn btn-icon border-none bg-transparent"
             onClick={() => handleFloorViewMode('all')}
             title="All floors"
-            style={{
-              border: 'none',
-              background: 'transparent',
-              color: camera.floorViewMode === 'all' ? 'var(--accent)' : undefined,
-            }}
+            style={{ color: camera.floorViewMode === 'all' ? 'var(--color-accent)' : undefined }}
           >
             <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
               <path d="M7 1L1 4L7 7L13 4L7 1Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
@@ -902,18 +893,14 @@ function App() {
             </svg>
           </button>
 
-          <div className="separator" style={{ width: '100%', margin: 'var(--space-1) 0' }} />
+          <div className="mx-1 my-1 h-px w-full bg-border-subtle" />
 
           {/* Transparent upper floor toggle */}
           <button
-            className="btn btn-icon"
+            className="btn btn-icon border-none bg-transparent"
             onClick={handleToggleTransparentUpper}
             title="Show transparent upper floor"
-            style={{
-              border: 'none',
-              background: 'transparent',
-              color: camera.showTransparentUpper ? 'var(--accent)' : undefined,
-            }}
+            style={{ color: camera.showTransparentUpper ? 'var(--color-accent)' : undefined }}
           >
             <svg width="18" height="13" viewBox="0 0 14 10" fill="none">
               <path d="M1 5C1 5 3.5 1 7 1C10.5 1 13 5 13 5C13 5 10.5 9 7 9C3.5 9 1 5 1 5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
@@ -930,9 +917,9 @@ function App() {
 
 function HudField({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3)' }}>
-      <span className="label">{label}</span>
-      <span className="value">{value}</span>
+    <div className="flex items-baseline gap-3">
+      <span className="label text-sm">{label}</span>
+      <span className="value text-sm">{value}</span>
     </div>
   )
 }
@@ -940,92 +927,28 @@ function HudField({ label, value }: { label: string; value: string }) {
 function LoadingOverlay({ status, progress }: { status: string; progress: number }) {
   const pct = Math.round(progress * 100)
   return (
-    <div style={{
-      position: 'absolute',
-      inset: 0,
-      background: 'var(--bg-void)',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 'var(--space-8)',
-      zIndex: 100,
-    }}>
+    <div className="absolute inset-0 z-100 flex flex-col items-center justify-center gap-8 bg-void">
       {/* Animated sigil */}
-      <div style={{
-        width: 48,
-        height: 48,
-        position: 'relative',
-      }}>
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          border: '2px solid var(--border-default)',
-          borderTopColor: 'var(--accent)',
-          borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite',
-        }} />
-        <div style={{
-          position: 'absolute',
-          inset: 6,
-          border: '2px solid var(--border-subtle)',
-          borderBottomColor: 'var(--accent-pressed)',
-          borderRadius: '50%',
-          animation: 'spin 1.2s linear infinite reverse',
-        }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+      <div className="relative h-[48px] w-[48px]">
+        <div className="absolute inset-0 animate-spin rounded-full border-2 border-border-default border-t-accent" />
+        <div className="absolute inset-[6px] animate-spin-reverse rounded-full border-2 border-border-subtle border-b-accent-pressed" />
       </div>
 
-      <div style={{
-        fontFamily: 'var(--font-display)',
-        fontSize: 'var(--text-xl)',
-        fontWeight: 600,
-        letterSpacing: 'var(--tracking-wide)',
-        textTransform: 'uppercase',
-        color: 'var(--text-primary)',
-      }}>
+      <div className="font-display text-xl font-semibold tracking-wide uppercase text-fg">
         Tibia Map Editor
       </div>
 
       {/* Progress bar */}
-      <div style={{
-        width: 280,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--space-3)',
-      }}>
-        <div style={{
-          width: '100%',
-          height: 4,
-          background: 'var(--bg-elevated)',
-          borderRadius: 2,
-          overflow: 'hidden',
-        }}>
-          <div style={{
-            height: '100%',
-            width: `${pct}%`,
-            background: 'var(--accent)',
-            borderRadius: 2,
-          }} />
+      <div className="flex w-[280px] flex-col gap-3">
+        <div className="h-[4px] w-full overflow-hidden rounded-[2px] bg-elevated">
+          <div className="h-full rounded-[2px] bg-accent" style={{ width: `${pct}%` }} />
         </div>
 
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'baseline',
-        }}>
-          <div style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 'var(--text-xs)',
-            color: 'var(--text-tertiary)',
-          }}>
+        <div className="flex items-baseline justify-between">
+          <div className="font-mono text-xs text-fg-faint">
             {status}
           </div>
-          <div style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 'var(--text-xs)',
-            color: 'var(--accent)',
-          }}>
+          <div className="font-mono text-xs text-accent">
             {pct}%
           </div>
         </div>

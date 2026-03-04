@@ -77,46 +77,35 @@ export function HamburgerMenu({ sections }: HamburgerMenuProps) {
   const dropdown = open ? createPortal(
     <div
       ref={menuRef}
-      className="panel context-menu hamburger-menu"
-      style={{
-        position: 'fixed',
-        top: pos.top,
-        left: pos.left,
-        zIndex: 100,
-      }}
+      className="panel min-w-[240px] py-2 fixed z-100"
+      style={{ top: pos.top, left: pos.left }}
     >
       {sections.map((section, si) => (
         <div key={si}>
-          {si > 0 && <div className="separator" />}
-          <div className="hamburger-menu-header">{section.title}</div>
+          {si > 0 && <div className="mx-0 my-2 h-px w-full bg-border-subtle" />}
+          <div className="px-5 pt-3 pb-1 font-display text-xs font-semibold tracking-wide uppercase text-fg-faint">{section.title}</div>
           {section.items.map((item, ii) => {
             if (item === 'separator') {
-              return <div key={ii} className="separator" />
+              return <div key={ii} className="mx-0 my-2 h-px w-full bg-border-subtle" />
             }
             return (
               <button
                 key={ii}
-                className="context-menu-item"
+                className="flex w-full items-center justify-between border-none bg-none px-5 py-2 text-left font-ui text-sm font-normal text-fg transition-[background] duration-100 ease-out hover:enabled:bg-panel-hover disabled:cursor-default disabled:text-fg-disabled"
                 disabled={item.disabled}
                 onClick={() => {
                   item.onClick()
                   setOpen(false)
                 }}
               >
-                <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-                  <span style={{
-                    width: 14,
-                    textAlign: 'center',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 'var(--text-sm)',
-                    color: 'var(--accent-text)',
-                  }}>
+                <span className="flex items-center gap-3">
+                  <span className="w-[14px] text-center font-mono text-sm text-accent-fg">
                     {item.checked ? '\u2713' : ''}
                   </span>
                   {item.label}
                 </span>
                 {item.shortcut && (
-                  <span className="context-menu-shortcut">{item.shortcut}</span>
+                  <span className="ml-8 font-mono text-xs text-fg-faint">{item.shortcut}</span>
                 )}
               </button>
             )
@@ -131,10 +120,9 @@ export function HamburgerMenu({ sections }: HamburgerMenuProps) {
     <>
       <button
         ref={buttonRef}
-        className="btn btn-icon"
+        className="btn btn-icon border-none bg-transparent"
         onClick={() => setOpen(prev => !prev)}
         title="Menu"
-        style={{ border: 'none', background: 'transparent' }}
       >
         <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
           <path d="M2 3.5H12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />

@@ -1,3 +1,4 @@
+import clsx from 'clsx'
 import type { EditorTool, BrushShape } from '../hooks/useEditorTools'
 import type { AppearanceData } from '../lib/appearances'
 import type { ItemRegistry } from '../lib/items'
@@ -178,37 +179,36 @@ export function Toolbar({
   ]
 
   return (
-    <div className="panel toolbar">
+    <div className="panel absolute top-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-4 px-5 py-3 pointer-events-auto select-none">
       {/* Hamburger menu */}
       <HamburgerMenu sections={menuSections} />
 
-      <div className="separator-v" style={{ height: 22, flexShrink: 0 }} />
+      <div className="h-[22px] w-px shrink-0 bg-border-subtle" />
 
       {/* Tool buttons */}
-      <div className="tool-group">
+      <div className="flex gap-1">
         {TOOLS.map((tool) => (
           <button
             key={tool.id}
-            className={`btn btn-icon${activeTool === tool.id ? ' tool-active' : ''}`}
+            className={clsx('btn btn-icon border-none bg-transparent', activeTool === tool.id && 'tool-active')}
             onClick={() => onToolChange(tool.id)}
             title={`${tool.label} (${tool.shortcut})`}
-            style={{ border: 'none', background: 'transparent' }}
           >
             {tool.icon}
           </button>
         ))}
       </div>
 
-      <div className="separator-v" style={{ height: 22, flexShrink: 0 }} />
+      <div className="h-[22px] w-px shrink-0 bg-border-subtle" />
 
       {/* Undo / Redo */}
-      <div className="tool-group">
+      <div className="flex gap-1">
         <button
-          className="btn btn-icon"
+          className="btn btn-icon border-none bg-transparent"
           onClick={onUndo}
           disabled={!canUndo}
           title="Undo (Ctrl+Z)"
-          style={{ border: 'none', background: 'transparent', opacity: canUndo ? 1 : 0.45 }}
+          style={{ opacity: canUndo ? 1 : 0.45 }}
         >
           <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
             <path d="M3 5H9C10.66 5 12 6.34 12 8C12 9.66 10.66 11 9 11H6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
@@ -216,11 +216,11 @@ export function Toolbar({
           </svg>
         </button>
         <button
-          className="btn btn-icon"
+          className="btn btn-icon border-none bg-transparent"
           onClick={onRedo}
           disabled={!canRedo}
           title="Redo (Ctrl+Y)"
-          style={{ border: 'none', background: 'transparent', opacity: canRedo ? 1 : 0.45 }}
+          style={{ opacity: canRedo ? 1 : 0.45 }}
         >
           <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
             <path d="M11 5H5C3.34 5 2 6.34 2 8C2 9.66 3.34 11 5 11H8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
@@ -232,44 +232,37 @@ export function Toolbar({
       {/* Brush size — for draw/erase */}
       {(activeTool === 'draw' || activeTool === 'erase') && (
         <>
-          <div className="separator-v" style={{ height: 22, flexShrink: 0 }} />
-          <div className="tool-group">
-            <span className="label" style={{ fontSize: 'var(--text-xs)', alignSelf: 'center', marginRight: 'var(--space-1)' }}>SIZE</span>
+          <div className="h-[22px] w-px shrink-0 bg-border-subtle" />
+          <div className="flex gap-1">
+            <span className="label self-center mr-1 text-xs">SIZE</span>
             {BRUSH_SIZES.map(({ value, label }) => (
               <button
                 key={value}
-                className={`btn btn-icon${brushSize === value ? ' tool-active' : ''}`}
+                className={clsx(
+                  'btn btn-icon min-w-[24px] border-none bg-transparent px-[4px] py-[2px] font-mono text-xs',
+                  brushSize === value && 'tool-active',
+                )}
                 onClick={() => onBrushSizeChange(value)}
                 title={`Brush size ${label}`}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 'var(--text-xs)',
-                  minWidth: 24,
-                  padding: '2px 4px',
-                }}
               >
                 {label}
               </button>
             ))}
           </div>
-          <div className="tool-group" style={{ marginLeft: 'var(--space-1)' }}>
+          <div className="flex gap-1 ml-1">
             <button
-              className={`btn btn-icon${brushShape === 'square' ? ' tool-active' : ''}`}
+              className={clsx('btn btn-icon border-none bg-transparent', brushShape === 'square' && 'tool-active')}
               onClick={() => onBrushShapeChange('square')}
               title="Square brush"
-              style={{ border: 'none', background: 'transparent' }}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <rect x="2.5" y="2.5" width="11" height="11" stroke="currentColor" strokeWidth="1.4" />
               </svg>
             </button>
             <button
-              className={`btn btn-icon${brushShape === 'circle' ? ' tool-active' : ''}`}
+              className={clsx('btn btn-icon border-none bg-transparent', brushShape === 'circle' && 'tool-active')}
               onClick={() => onBrushShapeChange('circle')}
               title="Circle brush"
-              style={{ border: 'none', background: 'transparent' }}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.4" />
@@ -282,24 +275,18 @@ export function Toolbar({
       {/* Door type selector — only for door tool */}
       {activeTool === 'door' && (
         <>
-          <div className="separator-v" style={{ height: 22, flexShrink: 0 }} />
-          <div className="tool-group">
-            <span className="label" style={{ fontSize: 'var(--text-xs)', alignSelf: 'center', marginRight: 'var(--space-1)' }}>DOOR</span>
+          <div className="h-[22px] w-px shrink-0 bg-border-subtle" />
+          <div className="flex gap-1">
+            <span className="label self-center mr-1 text-xs">DOOR</span>
             {DOOR_TYPES.map(({ value, label }) => (
               <button
                 key={value}
-                className={`btn${activeDoorType === value ? ' tool-active' : ''}`}
+                className={clsx(
+                  'btn border-none bg-transparent px-[6px] py-[4px] font-display text-xs uppercase tracking-[0.04em]',
+                  activeDoorType === value && 'tool-active',
+                )}
                 onClick={() => onDoorTypeChange(value)}
                 title={`${label} door`}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  fontFamily: 'var(--font-condensed)',
-                  fontSize: 'var(--text-xs)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                  padding: '4px 6px',
-                }}
               >
                 {label}
               </button>
@@ -311,26 +298,14 @@ export function Toolbar({
       {/* Selected item indicator */}
       {selectedItemId != null && appearances && (
         <>
-          <div className="separator-v" style={{ height: 22, flexShrink: 0 }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+          <div className="h-[22px] w-px shrink-0 bg-border-subtle" />
+          <div className="flex items-center gap-2">
             <ItemSprite itemId={selectedItemId} appearances={appearances} size={24} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              <span style={{
-                fontFamily: 'var(--font-ui)',
-                fontSize: 'var(--text-sm)',
-                color: 'var(--text-primary)',
-                maxWidth: 120,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}>
+            <div className="flex flex-col gap-[1px]">
+              <span className="max-w-[120px] truncate font-ui text-sm text-fg">
                 {itemName}
               </span>
-              <span style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 'var(--text-xs)',
-                color: 'var(--text-tertiary)',
-              }}>
+              <span className="font-mono text-xs text-fg-faint">
                 #{selectedItemId}
               </span>
             </div>

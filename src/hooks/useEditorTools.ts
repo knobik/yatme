@@ -110,6 +110,7 @@ export function useEditorTools(
   mapData: OtbmMap | null,
   brushRegistry: BrushRegistry | null = null,
   onRequestEditItem?: (x: number, y: number, z: number, itemIndex: number) => void,
+  clickToInspect: boolean = true,
 ): EditorToolsState {
   const [activeTool, setActiveTool] = useState<EditorTool>('select')
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null)
@@ -132,6 +133,7 @@ export function useEditorTools(
   const brushRegistryRef = useRef(brushRegistry)
   const activeDoorTypeRef = useRef(activeDoorType)
   const onRequestEditItemRef = useRef(onRequestEditItem)
+  const clickToInspectRef = useRef(clickToInspect)
   activeToolRef.current = activeTool
   selectedItemIdRef.current = selectedItemId
   selectedItemsRef.current = selectedItems
@@ -141,6 +143,7 @@ export function useEditorTools(
   brushRegistryRef.current = brushRegistry
   activeDoorTypeRef.current = activeDoorType
   onRequestEditItemRef.current = onRequestEditItem
+  clickToInspectRef.current = clickToInspect
 
   // Drag state for tools
   const paintedTilesRef = useRef(new Set<string>())
@@ -405,14 +408,17 @@ export function useEditorTools(
           setSelection([])
           selectionRef.current = []
 
-          // Open inspector
-          renderer.onTileClick?.(tile, pos.x, pos.y)
+          // Open inspector (if click-to-inspect is enabled)
+          if (clickToInspectRef.current) {
+            renderer.onTileClick?.(tile, pos.x, pos.y)
+          }
         } else if (wasClick && ctrlKey && !shiftKey) {
           // Ctrl+Click — already handled in pointerDown (toggle top item)
-          // Just open inspector for the clicked tile
-          const key = `${pos.x},${pos.y},${pos.z}`
-          const tile = mapData?.tiles.get(key) ?? null
-          renderer.onTileClick?.(tile, pos.x, pos.y)
+          if (clickToInspectRef.current) {
+            const key = `${pos.x},${pos.y},${pos.z}`
+            const tile = mapData?.tiles.get(key) ?? null
+            renderer.onTileClick?.(tile, pos.x, pos.y)
+          }
         } else if (wasClick && ctrlKey && shiftKey) {
           // Ctrl+Shift+Click (no drag) — toggle entire tile in/out of selection
           const newSelection = toggleTileInSelection(selectionRef.current, pos)

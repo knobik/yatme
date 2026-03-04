@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import clsx from 'clsx'
 import type { ItemRegistry } from '../lib/items'
 import type { AppearanceData } from '../lib/appearances'
 import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
@@ -111,7 +112,6 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
   const tilesetItems = useMemo(() => {
     if (selectedTileset === 'ALL' && activeCategory === 'all') return allItems
 
-    // "All tilesets" within a specific category — collect all items from that category across all tilesets
     if (selectedTileset === 'ALL') {
       const seen = new Set<number>()
       const items: { id: number; name: string }[] = []
@@ -128,7 +128,6 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
       return items
     }
 
-    // Specific tileset selected
     const tileset = tilesets.find(t => t.name === selectedTileset)
     if (!tileset) return []
 
@@ -139,7 +138,6 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
       }))
     }
 
-    // Specific tileset + specific category
     const section = tileset.sections.find(s => s.type === activeCategory)
     if (!section) return []
     return section.itemIds.map(id => ({
@@ -202,17 +200,17 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
   const selectedLabel = selectedTileset === 'ALL' ? 'All Tilesets' : selectedTileset
 
   return (
-    <div className="panel palette">
+    <div className="panel absolute left-4 top-4 bottom-4 z-10 flex w-[320px] flex-col pointer-events-auto">
       {/* Header */}
-      <div className="palette-header">
-        <span className="label" style={{ fontSize: 'var(--text-md)', letterSpacing: 'var(--tracking-wide)' }}>
+      <div className="flex items-center gap-3 px-5 py-4">
+        <span className="label text-md tracking-wide">
           BRUSHES
         </span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>
+        <span className="font-mono text-sm text-fg-faint">
           {filteredItems.length.toLocaleString()}
         </span>
-        <div style={{ flex: 1 }} />
-        <button className="btn btn-icon" onClick={onClose} title="Close (Esc)" style={{ border: 'none', background: 'transparent', width: 22, height: 22 }}>
+        <div className="flex-1" />
+        <button className="btn btn-icon h-[22px] w-[22px] border-none bg-transparent" onClick={onClose} title="Close (Esc)">
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
             <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
@@ -224,7 +222,7 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
         {CATEGORIES.map(cat => (
           <button
             key={cat.id}
-            className={`section-tab${activeCategory === cat.id ? ' active' : ''}`}
+            className={clsx('section-tab', activeCategory === cat.id && 'active')}
             onClick={() => setActiveCategory(cat.id)}
           >
             {cat.label}
@@ -233,14 +231,14 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
       </div>
 
       {/* Tileset dropdown */}
-      <div style={{ padding: '0 var(--space-3) var(--space-2)' }} ref={dropdownRef}>
+      <div className="px-3 pb-2" ref={dropdownRef}>
         <div className="tileset-select-wrapper">
           <button
             className="tileset-select-trigger"
             onClick={() => { setTilesetOpen(!tilesetOpen); setTilesetSearch('') }}
           >
             <span className="tileset-select-label">{selectedLabel}</span>
-            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ flexShrink: 0 }}>
+            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="shrink-0">
               <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
@@ -256,7 +254,7 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
               />
               <div className="tileset-dropdown-list">
                 <button
-                  className={`tileset-option${selectedTileset === 'ALL' ? ' active' : ''}`}
+                  className={clsx('tileset-option', selectedTileset === 'ALL' && 'active')}
                   onClick={() => { setSelectedTileset('ALL'); setTilesetOpen(false); setTilesetSearch('') }}
                 >
                   All Tilesets
@@ -264,7 +262,7 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
                 {filteredDropdownTilesets.map(t => (
                   <button
                     key={t.name}
-                    className={`tileset-option${selectedTileset === t.name ? ' active' : ''}`}
+                    className={clsx('tileset-option', selectedTileset === t.name && 'active')}
                     onClick={() => { setSelectedTileset(t.name); setTilesetOpen(false); setTilesetSearch('') }}
                   >
                     {t.name}
@@ -278,7 +276,7 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
       </div>
 
       {/* Search */}
-      <div style={{ padding: '0 var(--space-3) var(--space-2)' }}>
+      <div className="px-3 pb-2">
         <input
           className="search-input"
           type="text"
@@ -288,12 +286,12 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
         />
       </div>
 
-      <div className="separator" />
+      <div className="h-px w-full bg-border-subtle" />
 
       {/* Virtual scrolling grid */}
       <div
         ref={scrollRef}
-        className="palette-scroll"
+        className="flex-1 overflow-y-auto overflow-x-hidden min-h-0"
         onScroll={handleScroll}
       >
         <div style={{ height: totalHeight, position: 'relative' }}>
@@ -311,7 +309,7 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
               return (
                 <div
                   key={item.id}
-                  className={`item-cell${item.id === selectedItemId ? ' selected' : ''}`}
+                  className={clsx('item-cell', item.id === selectedItemId && 'selected')}
                   onClick={() => onItemSelect?.(item.id)}
                   draggable
                   onDragStart={(e) => {
@@ -331,7 +329,7 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
                   }}
                   title={`${item.name} (ID: ${item.id})`}
                 >
-                  <div style={{ position: 'relative' }}>
+                  <div className="relative">
                     <ItemSprite itemId={item.id} appearances={appearances} size={36} />
                     {brush && (
                       <span className={`brush-badge brush-badge-${brush}`} title={`Smart brush: ${brush}`}>

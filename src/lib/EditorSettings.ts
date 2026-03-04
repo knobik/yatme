@@ -11,6 +11,7 @@ export interface EditorSettings {
   // Editor
   selectionBorder: boolean
   showPalette: boolean
+  clickToInspect: boolean
 }
 
 export const DEFAULT_SETTINGS: EditorSettings = {
@@ -19,6 +20,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   showLights: false,
   selectionBorder: false,
   showPalette: true,
+  clickToInspect: true,
 }
 
 const SETTINGS_KEY = 'tibia-editor-settings'
@@ -72,5 +74,6 @@ function mergeWithDefaults(parsed: Record<string, unknown>): EditorSettings {
   if (typeof parsed.showLights === 'boolean') s.showLights = parsed.showLights
   if (typeof parsed.selectionBorder === 'boolean') s.selectionBorder = parsed.selectionBorder
   if (typeof parsed.showPalette === 'boolean') s.showPalette = parsed.showPalette
+  if (typeof parsed.clickToInspect === 'boolean') s.clickToInspect = parsed.clickToInspect
   return s
 }

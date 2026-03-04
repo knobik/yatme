@@ -78,34 +78,34 @@ export function GoToPositionDialog({
   }
 
   return (
-    <div ref={scrimRef} className="goto-scrim" onClick={handleScrimClick}>
-      <div className="panel goto-dialog">
-        <div className="goto-title">Go to Position</div>
+    <div ref={scrimRef} className="fixed inset-0 z-200 flex items-center justify-center bg-scrim" onClick={handleScrimClick}>
+      <div className="panel min-w-[280px] flex flex-col gap-6 p-8">
+        <div className="font-display text-lg font-semibold tracking-wide uppercase text-fg">Go to Position</div>
         <form onSubmit={handleSubmit} onPaste={handlePaste}>
-          <div className="goto-fields">
-            <div className="goto-field">
-              <span className="label">X</span>
+          <div className="flex gap-4">
+            <div className="flex flex-1 flex-col gap-2">
+              <span className="label text-sm">X</span>
               <input
                 ref={xRef}
-                className="goto-input"
+                className="w-full rounded-sm border border-border-default bg-bg-base px-4 py-3 font-mono text-md text-fg outline-none transition-[border-color] duration-100 ease-out focus:border-accent"
                 type="number"
                 value={x}
                 onChange={e => setX(e.target.value)}
               />
             </div>
-            <div className="goto-field">
-              <span className="label">Y</span>
+            <div className="flex flex-1 flex-col gap-2">
+              <span className="label text-sm">Y</span>
               <input
-                className="goto-input"
+                className="w-full rounded-sm border border-border-default bg-bg-base px-4 py-3 font-mono text-md text-fg outline-none transition-[border-color] duration-100 ease-out focus:border-accent"
                 type="number"
                 value={y}
                 onChange={e => setY(e.target.value)}
               />
             </div>
-            <div className="goto-field">
-              <span className="label">Z</span>
+            <div className="flex flex-1 flex-col gap-2">
+              <span className="label text-sm">Z</span>
               <input
-                className="goto-input"
+                className="w-full rounded-sm border border-border-default bg-bg-base px-4 py-3 font-mono text-md text-fg outline-none transition-[border-color] duration-100 ease-out focus:border-accent"
                 type="number"
                 value={z}
                 min={0}
@@ -114,9 +114,9 @@ export function GoToPositionDialog({
               />
             </div>
           </div>
-          <div className="goto-actions" style={{ marginTop: 'var(--space-6)' }}>
+          <div className="mt-6 flex justify-end gap-3">
             <button type="button" className="btn" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-accent">Go</button>
+            <button type="submit" className="btn border-accent bg-accent text-fg-inverse hover:border-accent-hover hover:bg-accent-hover hover:text-fg-inverse">Go</button>
           </div>
         </form>
       </div>

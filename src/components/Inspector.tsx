@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import clsx from 'clsx'
 import type { OtbmMap, OtbmItem } from '../lib/otbm'
 import { deepCloneItem } from '../lib/otbm'
 import type { ItemRegistry } from '../lib/items'
@@ -17,6 +18,8 @@ interface InspectorProps {
   mutator: MapMutator
   onClose: () => void
   onSelectAsBrush: (itemId: number) => void
+  onSelectItem?: (index: number, e: React.MouseEvent) => void
+  selectedItemIndices?: Set<number>
   offset?: boolean
   initialEditIndex?: number | null
   onEditIndexConsumed?: () => void
@@ -31,6 +34,8 @@ export function Inspector({
   mutator,
   onClose,
   onSelectAsBrush,
+  onSelectItem,
+  selectedItemIndices,
   offset,
   initialEditIndex,
   onEditIndexConsumed,
@@ -89,7 +94,6 @@ export function Inspector({
   const handleDragStart = (index: number, e: React.DragEvent) => {
     setDragIndex(index)
     e.dataTransfer.effectAllowed = 'move'
-    // Use a transparent 1px image as ghost so it doesn't obscure the list
     const ghost = document.createElement('canvas')
     ghost.width = 1
     ghost.height = 1
@@ -99,7 +103,6 @@ export function Inspector({
   const handleDragOver = (index: number, e: React.DragEvent) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
-    // Determine top vs bottom half for drop indicator
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     const midY = rect.top + rect.height / 2
     setDragOverHalf(e.clientY < midY ? 'top' : 'bottom')
@@ -113,12 +116,8 @@ export function Inspector({
       return
     }
 
-    // Calculate actual insert position based on cursor half
     let insertAt = dragOverHalf === 'top' ? targetIndex : targetIndex + 1
-    // If dragging downward, account for removal shifting indices
     if (dragIndex < insertAt) insertAt--
-
-    // Clamp: can't drop into or before ground items
     insertAt = Math.max(insertAt, groundCount)
 
     if (insertAt === dragIndex) {
@@ -131,7 +130,6 @@ export function Inspector({
     items.splice(insertAt, 0, dragged)
     mutator.setTileItems(tilePos.x, tilePos.y, tilePos.z, items)
 
-    // Update editing index if needed
     if (editingIndex === dragIndex) {
       setEditingIndex(insertAt)
     } else if (editingIndex !== null) {
@@ -155,7 +153,6 @@ export function Inspector({
     const item = items[index]
     if (!item) return
 
-    // Apply numeric properties — use ?? to preserve 0 as a valid value
     item.actionId = props.actionId ?? undefined
     item.uniqueId = props.uniqueId ?? undefined
     item.count = props.count ?? undefined
@@ -163,12 +160,9 @@ export function Inspector({
     item.duration = props.duration ?? undefined
     item.depotId = props.depotId ?? undefined
     item.houseDoorId = props.houseDoorId ?? undefined
-
-    // Apply string properties
     item.text = props.text || undefined
     item.description = props.description || undefined
 
-    // Apply teleport destination
     if (props.teleportDestination) {
       item.teleportDestination = { ...props.teleportDestination }
     } else {
@@ -180,47 +174,56 @@ export function Inspector({
   }
 
   return (
-    <div className={`panel inspector${offset ? ' inspector-offset' : ''}`}>
+    <div className={clsx(
+      'panel absolute top-4 bottom-4 z-10 flex w-[400px] flex-col pointer-events-auto transition-[left] duration-[180ms] ease-out',
+      offset ? 'left-[calc(8px+320px+6px)]' : 'left-4',
+    )}>
       {/* Header */}
-      <div className="inspector-header">
-        <span className="label" style={{ fontSize: 'var(--text-lg)', letterSpacing: 'var(--tracking-wide)' }}>
+      <div className="flex items-center justify-between px-6 py-5">
+        <span className="label text-lg tracking-wide">
           BROWSE TILE
         </span>
-        <button className="btn btn-icon" onClick={onClose} title="Close (Esc)" style={{ border: 'none', background: 'transparent' }}>
+        <button className="btn btn-icon border-none bg-transparent" onClick={onClose} title="Close (Esc)">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M2 2L12 12M12 2L2 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
         </button>
       </div>
 
-      <div className="separator" />
+      <div className="h-px w-full bg-border-subtle" />
 
       {/* Position */}
-      <div className="inspector-section">
-        <div className="inspector-field">
-          <span className="label">POSITION</span>
-          <span className="value">{tilePos.x}, {tilePos.y}, {tilePos.z}</span>
+      <div className="flex flex-col gap-3 px-6 py-4">
+        <div className="flex items-baseline gap-4">
+          <span className="label text-base">POSITION</span>
+          <span className="value text-md">{tilePos.x}, {tilePos.y}, {tilePos.z}</span>
         </div>
         {tile && tile.flags !== 0 && (
-          <div className="inspector-field">
-            <span className="label">FLAGS</span>
-            <span className="value">0x{tile.flags.toString(16).padStart(8, '0')}</span>
+          <div className="flex flex-col gap-2">
+            <span className="label text-base">FLAGS</span>
+            <div className="flex flex-wrap gap-2">
+              {TILE_FLAGS.filter(f => (tile.flags & f.bit) !== 0).map(({ bit, label }) => (
+                <span key={bit} className="rounded-sm bg-accent-subtle px-3 py-[2px] font-display text-xs font-semibold tracking-wide uppercase text-accent-fg">
+                  {label}
+                </span>
+              ))}
+            </div>
           </div>
         )}
         {tile?.houseId != null && (
-          <div className="inspector-field">
-            <span className="label">HOUSE</span>
-            <span className="value">{tile.houseId}</span>
+          <div className="flex items-baseline gap-4">
+            <span className="label text-base">HOUSE</span>
+            <span className="value text-md">{tile.houseId}</span>
           </div>
         )}
       </div>
 
-      <div className="separator" />
+      <div className="h-px w-full bg-border-subtle" />
 
       {/* Items */}
-      <div className="inspector-items">
+      <div className="flex-1 overflow-y-auto min-h-0">
         {!tile || tile.items.length === 0 ? (
-          <div style={{ padding: 'var(--space-6)', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-base)' }}>
+          <div className="p-6 font-mono text-base text-fg-faint">
             No items
           </div>
         ) : (
@@ -234,12 +237,14 @@ export function Inspector({
                   item={item}
                   index={i}
                   isGround={isGround}
+                  isSelected={selectedItemIndices?.has(i) ?? false}
                   isDragging={isDragging}
                   isDragOver={isDragOver}
                   dragOverHalf={dragOverHalf}
                   registry={registry}
                   appearances={appearances}
                   depth={0}
+                  onClick={(e) => onSelectItem?.(i, e)}
                   onDelete={() => handleDelete(i)}
                   onSelectAsBrush={() => onSelectAsBrush(item.id)}
                   onEditToggle={() => setEditingIndex(editingIndex === i ? null : i)}
@@ -253,6 +258,7 @@ export function Inspector({
                   <PropertyEditor
                     key={`${tileVersion}-edit-${i}`}
                     item={item}
+                    appearances={appearances}
                     onApply={(props) => handleApplyProperties(i, props)}
                     onCancel={() => setEditingIndex(null)}
                   />
@@ -298,7 +304,6 @@ function GripIcon() {
   )
 }
 
-// Crosshair/target — "select as brush"
 function CrosshairIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -309,7 +314,6 @@ function CrosshairIcon() {
   )
 }
 
-// Sliders — "edit properties"
 function SlidersIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -323,7 +327,6 @@ function SlidersIcon() {
   )
 }
 
-// Trash can — "delete"
 function TrashIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -340,12 +343,14 @@ function ItemRow({
   item,
   index,
   isGround,
+  isSelected,
   isDragging,
   isDragOver,
   dragOverHalf,
   registry,
   appearances,
   depth,
+  onClick,
   onDelete,
   onSelectAsBrush,
   onEditToggle,
@@ -358,12 +363,14 @@ function ItemRow({
   item: OtbmItem
   index: number
   isGround: boolean
+  isSelected?: boolean
   isDragging: boolean
   isDragOver: boolean
   dragOverHalf: 'top' | 'bottom'
   registry: ItemRegistry
   appearances: AppearanceData
   depth: number
+  onClick?: (e: React.MouseEvent) => void
   onDelete?: () => void
   onSelectAsBrush?: () => void
   onEditToggle?: () => void
@@ -379,18 +386,18 @@ function ItemRow({
   const hasActions = isTopLevel && !isGround && onDelete
   const canDrag = isTopLevel && !isGround && onDragStart
 
-  const className = [
-    'item-row',
-    isDragging ? 'dragging' : '',
-    isDragOver && dragOverHalf === 'top' ? 'drag-over-top' : '',
-    isDragOver && dragOverHalf === 'bottom' ? 'drag-over-bottom' : '',
-  ].filter(Boolean).join(' ')
-
   return (
     <div
-      className={className}
-      style={{ paddingLeft: `calc(var(--space-5) + ${depth * 16}px)` }}
+      className={clsx(
+        'group flex items-center gap-4 border-b border-border-subtle px-5 py-4 transition-[background,opacity] duration-100 ease-out last:border-b-0 hover:bg-panel-hover',
+        isSelected && 'bg-accent-subtle',
+        isDragging && 'opacity-35',
+        isDragOver && dragOverHalf === 'top' && 'shadow-drag-top',
+        isDragOver && dragOverHalf === 'bottom' && 'shadow-drag-bottom',
+      )}
+      style={{ paddingLeft: `calc(10px + ${depth * 16}px)`, cursor: onClick ? 'pointer' : undefined }}
       draggable={!!canDrag}
+      onClick={onClick}
       onDragStart={canDrag ? onDragStart : undefined}
       onDragOver={onDragOver}
       onMouseEnter={onHoverChange ? () => onHoverChange(true) : undefined}
@@ -401,25 +408,24 @@ function ItemRow({
     >
       {/* Drag handle — only for draggable items */}
       {canDrag ? (
-        <div className="drag-handle">
+        <div className="flex w-[14px] shrink-0 cursor-grab items-center justify-center text-fg-faint opacity-0 transition-opacity duration-100 ease-out group-hover:opacity-60 active:cursor-grabbing">
           <GripIcon />
         </div>
       ) : isTopLevel ? (
-        <div style={{ width: 14, flexShrink: 0 }} />
+        <div className="w-[14px] shrink-0" />
       ) : null}
 
       <ItemSprite itemId={item.id} appearances={appearances} size={36} />
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div className="item-name">{name}</div>
-        <div className="item-attr">ID: {item.id}</div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-ui text-md font-medium text-fg">{name}</div>
+        <div className="font-mono text-sm leading-normal text-fg-faint">ID: {item.id}</div>
         {attrs.map((attr, i) => (
-          <div key={i} className="item-attr">{attr}</div>
+          <div key={i} className="font-mono text-sm leading-normal text-fg-faint">{attr}</div>
         ))}
       </div>
       {isTopLevel && isGround && (
         <>
-          <span className="item-ground-badge">GROUND</span>
-          <div className="item-actions">
+          <div className="flex shrink-0 items-center gap-2 opacity-0 transition-opacity duration-100 ease-out group-hover:opacity-100">
             <button className="item-action-btn brush" onClick={onSelectAsBrush} title="Select as brush">
               <CrosshairIcon />
             </button>
@@ -427,10 +433,11 @@ function ItemRow({
               <SlidersIcon />
             </button>
           </div>
+          <span className="shrink-0 rounded-sm bg-accent-subtle px-3 py-[2px] font-display text-xs font-semibold tracking-wide uppercase text-accent-fg">GROUND</span>
         </>
       )}
       {hasActions && (
-        <div className="item-actions">
+        <div className="flex shrink-0 items-center gap-2 opacity-0 transition-opacity duration-100 ease-out group-hover:opacity-100">
           <button className="item-action-btn brush" onClick={onSelectAsBrush} title="Select as brush">
             <CrosshairIcon />
           </button>
@@ -450,10 +457,12 @@ function ItemRow({
 
 function PropertyEditor({
   item,
+  appearances,
   onApply,
   onCancel,
 }: {
   item: OtbmItem
+  appearances: AppearanceData
   onApply: (props: Partial<OtbmItem>) => void
   onCancel: () => void
 }) {
@@ -500,8 +509,21 @@ function PropertyEditor({
     })
   }
 
+  const appearance = appearances.objects.get(item.id)
+  const flags = appearance?.flags
+  const itemFlags = flags ? getItemFlags(flags) : []
+
   return (
     <div className="item-properties">
+      {itemFlags.length > 0 && (
+        <div className="flex flex-wrap gap-2 px-4 pb-3">
+          {itemFlags.map(f => (
+            <span key={f} className="rounded-sm bg-accent-subtle px-3 py-[2px] font-display text-xs font-semibold tracking-wide uppercase text-accent-fg">
+              {f}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="item-prop-row">
         <PropField label="ACTION ID" value={actionId} onChange={setActionId} />
         <PropField label="UNIQUE ID" value={uniqueId} onChange={setUniqueId} />
@@ -528,11 +550,7 @@ function PropertyEditor({
       </div>
       <div className="item-prop-actions">
         <button className="btn" onClick={onCancel}>Cancel</button>
-        <button className="btn" onClick={handleApply} style={{
-          background: 'var(--accent)',
-          borderColor: 'var(--accent)',
-          color: 'var(--text-inverse)',
-        }}>Apply</button>
+        <button className="btn border-accent bg-accent text-fg-inverse hover:border-accent-hover hover:bg-accent-hover hover:text-fg-inverse" onClick={handleApply}>Apply</button>
       </div>
     </div>
   )
@@ -551,14 +569,48 @@ function PropField({
 }) {
   return (
     <div className="item-prop-field" style={wide ? { flex: '1 1 100%' } : undefined}>
-      <span className="label">{label}</span>
+      <span className="label text-sm">{label}</span>
       <input
-        className={`item-prop-input${value ? ' has-value' : ''}`}
+        className={clsx('item-prop-input', value && 'has-value')}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
     </div>
   )
+}
+
+// ── Tile Flags ────────────────────────────────────────────────────
+
+const TILE_FLAGS = [
+  { bit: 0x0001, label: 'PZ' },
+  { bit: 0x0004, label: 'NO PVP' },
+  { bit: 0x0008, label: 'NO LOGOUT' },
+  { bit: 0x0010, label: 'PVP ZONE' },
+  { bit: 0x0020, label: 'REFRESH' },
+] as const
+
+// ── Item Flags ────────────────────────────────────────────────────
+
+/** Skip internal/rendering-only flags that aren't useful in the inspector */
+const HIDDEN_FLAGS = new Set(['shift', 'npcsaledata', 'noMovementAnimation', 'defaultAction', 'lenshelp', 'cyclopediaitem', 'skillwheelGem', 'transparencylevel'])
+
+function getItemFlags(flags: Record<string, unknown>): string[] {
+  const result: string[] = []
+  for (const [key, value] of Object.entries(flags)) {
+    if (HIDDEN_FLAGS.has(key)) continue
+    if (value === false || value === undefined || value === 0) continue
+    if (Array.isArray(value) && value.length === 0) continue
+
+    if (value === true) {
+      result.push(key)
+    } else if (typeof value === 'object' && value !== null) {
+      const inner = Object.values(value as Record<string, unknown>).filter(v => v !== undefined && v !== 0)
+      result.push(inner.length > 0 ? `${key}(${inner.join(',')})` : key)
+    } else {
+      result.push(`${key}(${value})`)
+    }
+  }
+  return result
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
