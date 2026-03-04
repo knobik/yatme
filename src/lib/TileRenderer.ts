@@ -44,6 +44,7 @@ export class TileRenderer {
     tile: OtbmTile,
     elapsedMs: number,
     animSprites?: AnimatedSpriteRef[],
+    highlightSprites?: Sprite[],
   ): void {
     const baseX = tile.x * TILE_SIZE
     const baseY = tile.y * TILE_SIZE
@@ -109,15 +110,16 @@ export class TileRenderer {
 
       parent.addChild(sprite)
 
-      // RME-style darkening: add a black-tinted copy right after the item sprite
+      // Highlight: add a dark overlay copy right after the item sprite (breathing darken)
       if (hasHighlight && (highlightAll || highlightSet?.has(item))) {
         const dark = new Sprite(texture)
         dark.tint = 0x000000
-        dark.alpha = 0.35
+        dark.alpha = 0.0 // animated by ChunkManager
         dark.roundPixels = true
         dark.x = sprite.x
         dark.y = sprite.y
         parent.addChild(dark)
+        highlightSprites?.push(dark)
       }
 
       if (animSprites) {

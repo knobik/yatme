@@ -13,6 +13,10 @@ export class SelectionOverlay {
   private _selectedTileY = -1
   private _selectedTileZ = -1
 
+  // Selection border state
+  private _selectionBorderGraphics: Graphics
+  private _selectionBorderKey = ''
+
   // Brush cursor state
   private _brushCursorKey = ''
 
@@ -30,10 +34,13 @@ export class SelectionOverlay {
 
   constructor() {
     this.container = new Container()
+    this._selectionBorderGraphics = new Graphics()
+    this._selectionBorderGraphics.visible = false
     this._brushCursorGraphics = new Graphics()
     this._brushCursorGraphics.visible = false
     this._ghostContainer = new Container()
     this._ghostContainer.visible = false
+    this.container.addChild(this._selectionBorderGraphics)
     this.container.addChild(this._brushCursorGraphics)
     this.container.addChild(this._ghostContainer)
   }
@@ -63,6 +70,63 @@ export class SelectionOverlay {
       this.container.position.set(-floorOffset, -floorOffset)
       this._lastHighlightOffset = floorOffset
     }
+  }
+
+  // ── Selection border ─────────────────────────────────────────
+
+  updateSelectionBorder(tiles: TilePos[], floor: number): void {
+    const key = tiles.map(t => `${t.x},${t.y}`).join(';')
+    if (key === this._selectionBorderKey) return
+    this._selectionBorderKey = key
+
+    const g = this._selectionBorderGraphics
+    g.clear()
+
+    if (tiles.length === 0) {
+      g.visible = false
+      return
+    }
+
+    // Build set of selected positions for neighbor lookup
+    const selected = new Set<string>()
+    for (const t of tiles) {
+      if (t.z !== floor) continue
+      selected.add(`${t.x},${t.y}`)
+    }
+
+    if (selected.size === 0) {
+      g.visible = false
+      return
+    }
+
+    // Draw only outer edges (skip edges shared between selected tiles)
+    for (const t of tiles) {
+      if (t.z !== floor) continue
+      const px = t.x * TILE_SIZE
+      const py = t.y * TILE_SIZE
+
+      if (!selected.has(`${t.x},${t.y - 1}`)) {
+        g.moveTo(px, py).lineTo(px + TILE_SIZE, py)
+      }
+      if (!selected.has(`${t.x},${t.y + 1}`)) {
+        g.moveTo(px, py + TILE_SIZE).lineTo(px + TILE_SIZE, py + TILE_SIZE)
+      }
+      if (!selected.has(`${t.x - 1},${t.y}`)) {
+        g.moveTo(px, py).lineTo(px, py + TILE_SIZE)
+      }
+      if (!selected.has(`${t.x + 1},${t.y}`)) {
+        g.moveTo(px + TILE_SIZE, py).lineTo(px + TILE_SIZE, py + TILE_SIZE)
+      }
+    }
+
+    g.stroke({ color: 0xd4a549, width: 1, alpha: 0.8 })
+    g.visible = true
+  }
+
+  clearSelectionBorder(): void {
+    this._selectionBorderKey = ''
+    this._selectionBorderGraphics.clear()
+    this._selectionBorderGraphics.visible = false
   }
 
   // ── Brush cursor (hover preview) ─────────────────────────────
@@ -175,6 +239,7 @@ export class SelectionOverlay {
     this._clearGhostSprites()
     this._ghostContainer.destroy()
     this._brushCursorGraphics.destroy()
+    this._selectionBorderGraphics.destroy()
     this.container.destroy()
   }
 }

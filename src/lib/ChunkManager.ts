@@ -1,4 +1,4 @@
-import { Container } from 'pixi.js'
+import { Container, type Sprite } from 'pixi.js'
 import { getTextureSync, preloadSheets } from './TextureManager'
 import { getItemSpriteId, type AnimatedSpriteRef } from './SpriteResolver'
 import { CHUNK_SIZE, CHUNK_CACHE_SIZE, CHUNK_BUILD_BUDGET_MS, PREFETCH_RING } from './constants'
@@ -170,6 +170,9 @@ export class ChunkManager {
   private _animatedChunkKeys: Set<string>
   private _chunkAnimSprites = new Map<string, AnimatedSpriteRef[]>()
 
+  // Highlight breathing animation
+  private _chunkHighlightSprites = new Map<string, Sprite[]>()
+
   constructor(
     deps: ChunkManagerDeps,
     chunkIndex: Map<string, OtbmTile[]>,
@@ -183,7 +186,10 @@ export class ChunkManager {
     this.chunkIndex = chunkIndex
     this._animatedChunkKeys = animatedKeys
     this._animStartTime = performance.now()
-    this.chunkCache.onEvict = (key) => this._chunkAnimSprites.delete(key)
+    this.chunkCache.onEvict = (key) => {
+      this._chunkAnimSprites.delete(key)
+      this._chunkHighlightSprites.delete(key)
+    }
   }
 
   /** Called once per frame — handles visibility, build/restore, eviction, animation, prefetch. */
@@ -256,10 +262,14 @@ export class ChunkManager {
           if (!tiles || tiles.length === 0) continue
 
           const container = new Container()
-          const animSprites = this.buildChunkSync(container, tiles, this._animElapsed)
+          const hlSprites: Sprite[] = []
+          const animSprites = this.buildChunkSync(container, tiles, this._animElapsed, hlSprites)
           container.cacheAsTexture({ scaleMode: 'nearest', antialias: false })
           if (animSprites.length > 0) {
             this._chunkAnimSprites.set(key, animSprites)
+          }
+          if (hlSprites.length > 0) {
+            this._chunkHighlightSprites.set(key, hlSprites)
           }
           floorContainer.addChild(container)
           this.activeChunks.set(key, container)
@@ -274,6 +284,7 @@ export class ChunkManager {
     }
 
     this.updateAnimatedSprites()
+    this.updateHighlightBreathing()
 
     if (rangeChanged) {
       for (const key of this._allPrefetchKeys) {
@@ -299,6 +310,7 @@ export class ChunkManager {
       }
       this.chunkCache.delete(key)
       this._chunkAnimSprites.delete(key)
+      this._chunkHighlightSprites.delete(key)
     }
     this._lastRangeKey = ''
   }
@@ -332,12 +344,15 @@ export class ChunkManager {
       if (!tiles) continue
 
       container.removeChildren()
-      const animSprites: AnimatedSpriteRef[] = []
-      for (const tile of tiles) {
-        this.tileRenderer.renderTile(container, tile, this._animElapsed, animSprites)
-      }
+      const hlSprites: Sprite[] = []
+      const animSprites = this.buildChunkSync(container, tiles, this._animElapsed, hlSprites)
       if (animSprites.length > 0) {
         this._chunkAnimSprites.set(key, animSprites)
+      }
+      if (hlSprites.length > 0) {
+        this._chunkHighlightSprites.set(key, hlSprites)
+      } else {
+        this._chunkHighlightSprites.delete(key)
       }
       if (container.isCachedAsTexture) {
         container.updateCacheTexture()
@@ -352,6 +367,7 @@ export class ChunkManager {
     }
     this.activeChunks.clear()
     this._chunkAnimSprites.clear()
+    this._chunkHighlightSprites.clear()
     this.chunkCache.clear()
     this.buildQueue.length = 0
     this.buildQueueReadIdx = 0
@@ -389,6 +405,26 @@ export class ChunkManager {
     }
   }
 
+  // ── Highlight breathing animation ──────────────────────────────
+
+  private updateHighlightBreathing(): void {
+    if (this._chunkHighlightSprites.size === 0) return
+
+    // Sine wave: period ~1.5s, alpha oscillates between 0.1 and 0.4
+    const alpha = 0.45 + 0.075 * Math.sin(this._animElapsed * 0.004)
+
+    for (const [key, sprites] of this._chunkHighlightSprites) {
+      const container = this.activeChunks.get(key)
+      if (!container) continue
+
+      for (const s of sprites) s.alpha = alpha
+
+      if (container.isCachedAsTexture) {
+        container.updateCacheTexture()
+      }
+    }
+  }
+
   // ── Build queue ────────────────────────────────────────────────
 
   private processBuildQueue(frameStart: number): void {
@@ -403,9 +439,13 @@ export class ChunkManager {
       if (!tiles || tiles.length === 0) continue
 
       const container = new Container()
-      const animSprites = this.buildChunkSync(container, tiles, this._animElapsed)
+      const hlSprites: Sprite[] = []
+      const animSprites = this.buildChunkSync(container, tiles, this._animElapsed, hlSprites)
       if (animSprites.length > 0) {
         this._chunkAnimSprites.set(key, animSprites)
+      }
+      if (hlSprites.length > 0) {
+        this._chunkHighlightSprites.set(key, hlSprites)
       }
       this.preloadAndRebuild(container, tiles, key)
       this.chunkCache.set(key, container)
@@ -419,10 +459,16 @@ export class ChunkManager {
 
   // ── Chunk building ─────────────────────────────────────────────
 
-  private buildChunkSync(container: Container, tiles: OtbmTile[], elapsedMs: number): AnimatedSpriteRef[] {
+  private buildChunkSync(
+    container: Container,
+    tiles: OtbmTile[],
+    elapsedMs: number,
+    outHighlightSprites?: Sprite[],
+  ): AnimatedSpriteRef[] {
     const animSprites: AnimatedSpriteRef[] = []
+    const hlSprites = outHighlightSprites ?? []
     for (const tile of tiles) {
-      this.tileRenderer.renderTile(container, tile, elapsedMs, animSprites)
+      this.tileRenderer.renderTile(container, tile, elapsedMs, animSprites, hlSprites)
     }
     return animSprites
   }
@@ -447,9 +493,15 @@ export class ChunkManager {
       preloadSheets(spriteIds).then(() => {
         const elapsed = performance.now() - this._animStartTime
         container.removeChildren()
-        const animSprites = this.buildChunkSync(container, tiles, elapsed)
+        const hlSprites: Sprite[] = []
+        const animSprites = this.buildChunkSync(container, tiles, elapsed, hlSprites)
         if (animSprites.length > 0) {
           this._chunkAnimSprites.set(chunkKey, animSprites)
+        }
+        if (hlSprites.length > 0) {
+          this._chunkHighlightSprites.set(chunkKey, hlSprites)
+        } else {
+          this._chunkHighlightSprites.delete(chunkKey)
         }
         if (container.isCachedAsTexture) {
           container.updateCacheTexture()

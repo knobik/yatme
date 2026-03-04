@@ -170,7 +170,7 @@ export class MapRenderer implements InputHost {
     this.chunkManager.updateChunkIndex(tile)
   }
 
-  /** Highlight a single item on a tile (RME-style darkening integrated into chunk rendering). */
+  /** Highlight a single item on a tile (RME-style glow integrated into chunk rendering). */
   highlightItem(x: number, y: number, z: number, itemIndex: number): void {
     const affectedChunks = this._collectHighlightChunkKeys()
     this.tileRenderer.clearHighlight()
@@ -178,9 +178,11 @@ export class MapRenderer implements InputHost {
     this.tileRenderer.setHighlight(tileKey, [itemIndex])
     affectedChunks.add(chunkKeyForTile(x, y, z))
     this.chunkManager.rebuildChunksForHighlight(affectedChunks)
+    // TODO: selection border disabled — future option menu item
+    // this.selection.updateSelectionBorder([{ x, y, z }], this.camera.floor)
   }
 
-  /** Highlight all items on multiple tiles (RME-style darkening for shift+drag). */
+  /** Highlight all items on multiple tiles (RME-style glow for shift+drag). */
   highlightTiles(positions: { x: number; y: number; z: number }[]): void {
     const affectedChunks = this._collectHighlightChunkKeys()
     this.tileRenderer.clearHighlight()
@@ -190,6 +192,8 @@ export class MapRenderer implements InputHost {
       affectedChunks.add(chunkKeyForTile(pos.x, pos.y, pos.z))
     }
     this.chunkManager.rebuildChunksForHighlight(affectedChunks)
+    // TODO: selection border disabled — future option menu item
+    // this.selection.updateSelectionBorder(positions, this.camera.floor)
   }
 
   clearItemHighlight(): void {
@@ -198,6 +202,8 @@ export class MapRenderer implements InputHost {
     if (affectedChunks.size > 0) {
       this.chunkManager.rebuildChunksForHighlight(affectedChunks)
     }
+    // TODO: selection border disabled — future option menu item
+    // this.selection.clearSelectionBorder()
   }
 
   /** Collect chunk keys for all currently highlighted tiles. */
