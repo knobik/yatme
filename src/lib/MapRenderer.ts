@@ -5,9 +5,11 @@ import { TileRenderer } from './TileRenderer'
 import { SelectionOverlay } from './SelectionOverlay'
 import { FloorManager } from './FloorManager'
 import { setupMapInput, type InputHost } from './InputHandler'
+import { getItemSpriteId } from './SpriteResolver'
+import { getTextureSync, getTexture } from './TextureManager'
 import { type FloorViewMode, ZOOM_LEVELS } from './constants'
 import type { AppearanceData } from './appearances'
-import type { OtbmMap, OtbmTile } from './otbm'
+import type { OtbmMap, OtbmTile, OtbmItem } from './otbm'
 
 export { type FloorViewMode } from './constants'
 
@@ -18,6 +20,7 @@ export class MapRenderer implements InputHost {
   private mapContainer: Container
   readonly mapData: OtbmMap
   readonly camera: Camera
+  private appearances: AppearanceData
 
   // Sub-modules
   private tileRenderer: TileRenderer
@@ -43,6 +46,7 @@ export class MapRenderer implements InputHost {
   constructor(app: Application, appearances: AppearanceData, mapData: OtbmMap) {
     this.app = app
     this.mapData = mapData
+    this.appearances = appearances
 
     // Camera (app.screen is a persistent Pixi Rectangle — no allocation on access)
     this.camera = new Camera(this.app.screen)
@@ -182,6 +186,50 @@ export class MapRenderer implements InputHost {
 
   clearBrushCursor(): void {
     this.selection.clearBrushCursor()
+  }
+
+  /** Update the ghost sprite preview for the brush cursor. */
+  updateGhostPreview(itemId: number | null, tiles: { x: number; y: number; z: number }[]): void {
+    if (itemId == null || tiles.length === 0) {
+      this.selection.clearGhostCursor()
+      return
+    }
+
+    const appearance = this.appearances.objects.get(itemId)
+    if (!appearance) {
+      this.selection.clearGhostCursor()
+      return
+    }
+
+    const firstTile = tiles[0]
+    const fakeItem: OtbmItem = { id: itemId }
+    const fakeTile = { x: firstTile.x, y: firstTile.y, z: firstTile.z, flags: 0, items: [fakeItem] }
+    const spriteId = getItemSpriteId(appearance, fakeItem, fakeTile, 0)
+
+    if (spriteId == null || spriteId === 0) {
+      this.selection.clearGhostCursor()
+      return
+    }
+
+    const texture = getTextureSync(spriteId)
+    if (texture) {
+      const shift = appearance.flags?.shift
+      this.selection.setGhostTexture(itemId, texture, shift?.x ?? 0, shift?.y ?? 0)
+      this.selection.updateGhostCursor(tiles, this.camera.floor)
+    } else {
+      // Texture not loaded yet — load async then set
+      getTexture(spriteId).then(tex => {
+        if (tex) {
+          const shift = appearance.flags?.shift
+          this.selection.setGhostTexture(itemId, tex, shift?.x ?? 0, shift?.y ?? 0)
+          this.selection.updateGhostCursor(tiles, this.camera.floor)
+        }
+      })
+    }
+  }
+
+  clearGhostPreview(): void {
+    this.selection.clearGhostCursor()
   }
 
   /** Change the canvas cursor style. */

@@ -1,4 +1,4 @@
-import { Container, Graphics } from 'pixi.js'
+import { Container, Graphics, Sprite, type Texture } from 'pixi.js'
 import { TILE_SIZE } from './constants'
 
 type TilePos = { x: number; y: number; z: number }
@@ -19,6 +19,15 @@ export class SelectionOverlay {
   // Brush cursor state
   private _brushCursorKey = ''
 
+  // Ghost sprite preview state
+  private _ghostContainer: Container
+  private _ghostItemId: number = -1
+  private _ghostTexture: Texture | null = null
+  private _ghostShiftX: number = 0
+  private _ghostShiftY: number = 0
+  private _ghostSprites: Sprite[] = []
+  private _ghostCursorKey: string = ''
+
   // Dirty tracking — avoid redrawing Graphics when nothing changed
   private _highlightDirty = false
   private _lastHighlightFloor = -1
@@ -32,9 +41,12 @@ export class SelectionOverlay {
     this._selectionGraphics.visible = false
     this._brushCursorGraphics = new Graphics()
     this._brushCursorGraphics.visible = false
+    this._ghostContainer = new Container()
+    this._ghostContainer.visible = false
     this.container.addChild(this._highlightGraphics)
     this.container.addChild(this._selectionGraphics)
     this.container.addChild(this._brushCursorGraphics)
+    this.container.addChild(this._ghostContainer)
   }
 
   // ── Selection state ───────────────────────────────────────────
@@ -155,9 +167,83 @@ export class SelectionOverlay {
     this._brushCursorGraphics.visible = false
   }
 
+  // ── Ghost sprite preview ───────────────────────────────────────
+
+  setGhostTexture(
+    itemId: number,
+    texture: Texture | null,
+    shiftX: number,
+    shiftY: number,
+  ): void {
+    if (itemId === this._ghostItemId) return
+    this._ghostItemId = itemId
+    this._ghostTexture = texture
+    this._ghostShiftX = shiftX
+    this._ghostShiftY = shiftY
+    this._ghostCursorKey = '' // force position recalc
+    this._clearGhostSprites()
+  }
+
+  updateGhostCursor(tiles: TilePos[], floor: number): void {
+    if (!this._ghostTexture || tiles.length === 0) {
+      this._ghostContainer.visible = false
+      return
+    }
+
+    const key = tiles.map(t => `${t.x},${t.y}`).join(';')
+    if (key === this._ghostCursorKey) return
+    this._ghostCursorKey = key
+
+    const tex = this._ghostTexture
+    const tw = tex.width
+    const th = tex.height
+
+    // Grow sprite pool as needed
+    while (this._ghostSprites.length < tiles.length) {
+      const s = new Sprite(tex)
+      s.alpha = 0.5
+      s.roundPixels = true
+      this._ghostContainer.addChild(s)
+      this._ghostSprites.push(s)
+    }
+
+    // Position visible sprites, hide excess
+    let idx = 0
+    for (const t of tiles) {
+      if (t.z !== floor) continue
+      const sprite = this._ghostSprites[idx]
+      sprite.texture = tex
+      sprite.x = t.x * TILE_SIZE + TILE_SIZE - tw - this._ghostShiftX
+      sprite.y = t.y * TILE_SIZE + TILE_SIZE - th - this._ghostShiftY
+      sprite.visible = true
+      idx++
+    }
+    for (let i = idx; i < this._ghostSprites.length; i++) {
+      this._ghostSprites[i].visible = false
+    }
+
+    this._ghostContainer.visible = true
+  }
+
+  clearGhostCursor(): void {
+    this._ghostItemId = -1
+    this._ghostTexture = null
+    this._ghostCursorKey = ''
+    this._clearGhostSprites()
+    this._ghostContainer.visible = false
+  }
+
+  private _clearGhostSprites(): void {
+    for (const s of this._ghostSprites) s.destroy()
+    this._ghostSprites.length = 0
+    this._ghostContainer.removeChildren()
+  }
+
   // ── Cleanup ───────────────────────────────────────────────────
 
   destroy(): void {
+    this._clearGhostSprites()
+    this._ghostContainer.destroy()
     this._highlightGraphics.destroy()
     this._selectionGraphics.destroy()
     this._brushCursorGraphics.destroy()

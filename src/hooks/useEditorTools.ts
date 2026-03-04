@@ -278,6 +278,44 @@ export function useEditorTools(
       const tiles = getTilesInBrush(pos.x, pos.y, size, shape)
         .map(t => ({ x: t.x, y: t.y, z: pos.z }))
       renderer.updateBrushCursor(tiles)
+
+      // Ghost sprite preview for draw tool
+      if (tool === 'draw') {
+        const itemId = selectedItemIdRef.current
+        if (itemId != null) {
+          const registry = brushRegistryRef.current
+          let previewItemId = itemId
+          const groundBrush = registry?.getBrushForItem(itemId)
+          if (groundBrush && groundBrush.lookId > 0) {
+            previewItemId = groundBrush.lookId
+          } else if (!groundBrush) {
+            const wallBrush = registry?.getWallBrushForItem(itemId)
+            if (wallBrush && wallBrush.lookId > 0) {
+              previewItemId = wallBrush.lookId
+            } else if (!wallBrush) {
+              const carpetBrush = registry?.getCarpetBrushForItem(itemId)
+              if (carpetBrush && carpetBrush.lookId > 0) {
+                previewItemId = carpetBrush.lookId
+              } else if (!carpetBrush) {
+                const tableBrush = registry?.getTableBrushForItem(itemId)
+                if (tableBrush && tableBrush.lookId > 0) {
+                  previewItemId = tableBrush.lookId
+                } else if (!tableBrush) {
+                  const doodadBrush = registry?.getDoodadBrushForItem(itemId)
+                  if (doodadBrush && doodadBrush.lookId > 0) {
+                    previewItemId = doodadBrush.lookId
+                  }
+                }
+              }
+            }
+          }
+          renderer.updateGhostPreview(previewItemId, tiles)
+        } else {
+          renderer.clearGhostPreview()
+        }
+      } else {
+        renderer.clearGhostPreview()
+      }
     }
 
     return () => {
@@ -285,6 +323,7 @@ export function useEditorTools(
       renderer.onTilePointerMove = undefined
       renderer.onTilePointerUp = undefined
       renderer.onTileHover = undefined
+      renderer.clearGhostPreview()
     }
   }, [renderer, mutator, mapData, brushRegistry])
 
@@ -292,12 +331,18 @@ export function useEditorTools(
   useEffect(() => {
     if (!renderer) return
     switch (activeTool) {
-      case 'select': renderer.setCursorStyle('default'); break
+      case 'select': renderer.setCursorStyle('default'); renderer.clearGhostPreview(); break
       case 'draw': renderer.setCursorStyle('crosshair'); break
-      case 'erase': renderer.setCursorStyle('crosshair'); break
-      case 'door': renderer.setCursorStyle('crosshair'); break
+      case 'erase': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
+      case 'door': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
     }
   }, [renderer, activeTool])
+
+  // Clear ghost when selected item changes (re-resolved on next hover)
+  useEffect(() => {
+    if (!renderer || activeTool !== 'draw') return
+    renderer.clearGhostPreview()
+  }, [renderer, selectedItemId, activeTool])
 
   const undo = useCallback(() => { mutator?.undo() }, [mutator])
   const redo = useCallback(() => { mutator?.redo() }, [mutator])
