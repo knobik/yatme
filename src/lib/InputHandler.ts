@@ -107,10 +107,11 @@ export function setupMapInput(
       camera.y = cameraStartY - dy / camera.zoom
       onCameraChange()
     } else if (activeButton === 0) {
-      if (toolFired && host.onTilePointerMove) {
+      if (toolFired) {
         const rect = canvas.getBoundingClientRect()
         const pos = camera.getTileAt(e.clientX - rect.left, e.clientY - rect.top)
-        host.onTilePointerMove(pos, e)
+        host.onTilePointerMove?.(pos, e)
+        host.onTileHover?.(pos)
       } else if (!toolFired) {
         // Left mouse without tool: pan
         camera.x = cameraStartX - dx / camera.zoom

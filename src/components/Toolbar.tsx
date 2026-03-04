@@ -159,7 +159,7 @@ export function Toolbar({
     {
       title: 'View',
       items: [
-        { label: 'Item Palette', shortcut: 'P', checked: showPalette, onClick: onTogglePalette },
+        { label: 'Brush Palette', shortcut: 'P', checked: showPalette, onClick: onTogglePalette },
         'separator',
         { label: 'Zoom In', shortcut: 'Ctrl+=', onClick: onZoomIn },
         { label: 'Zoom Out', shortcut: 'Ctrl+-', onClick: onZoomOut },

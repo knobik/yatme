@@ -15,7 +15,9 @@ import type { CarpetBrush, TableBrush } from './lib/brushes/CarpetTypes'
 import type { DoodadBrush } from './lib/brushes/DoodadTypes'
 import { BrushRegistry } from './lib/brushes/BrushRegistry'
 import { Inspector } from './components/Inspector'
-import { ItemPalette } from './components/ItemPalette'
+import { BrushPalette } from './components/BrushPalette'
+import { loadTilesets, resolveTilesets } from './lib/tilesets/TilesetLoader'
+import type { ResolvedTileset } from './lib/tilesets/TilesetTypes'
 import { Toolbar } from './components/Toolbar'
 import { ContextMenu, type ContextMenuGroup } from './components/ContextMenu'
 import { GoToPositionDialog } from './components/GoToPositionDialog'
@@ -56,6 +58,7 @@ function App() {
 
   const [showGoToDialog, setShowGoToDialog] = useState(false)
   const [brushRegistryState, setBrushRegistryState] = useState<BrushRegistry | null>(null)
+  const [tilesets, setTilesets] = useState<ResolvedTileset[]>([])
 
   const [contextMenu, setContextMenu] = useState<{
     x: number; y: number
@@ -127,7 +130,7 @@ function App() {
 
     // Weighted progress: each step has a weight proportional to its cost.
     // The progress callback maps per-step fraction to overall 0→1 progress.
-    const stepWeights = [2, 15, 3, 55, 12, 8, 5] // renderer, appearances, sprites, otbm, items, brushes, setup
+    const stepWeights = [2, 15, 3, 55, 12, 8, 3, 2] // renderer, appearances, sprites, otbm, items, brushes, tilesets, setup
     const totalWeight = stepWeights.reduce((a, b) => a + b, 0)
     let currentStep = 0
     const stepStarts: number[] = []
@@ -233,6 +236,21 @@ function App() {
         if (!destroyed) setBrushRegistryState(brushRegistry)
       } catch (e) {
         console.warn('[App] Failed to load brush data, smart brushes disabled:', e)
+      }
+      if (destroyed) return
+      nextStep()
+
+      // Load tilesets
+      setLoadingStatus('Loading tilesets...')
+      try {
+        const rawTilesets = await loadTilesets()
+        if (brushRegistry) {
+          const resolved = resolveTilesets(rawTilesets, brushRegistry, appearances)
+          if (!destroyed) setTilesets(resolved)
+          console.log(`[TilesetLoader] Loaded ${resolved.length} tilesets`)
+        }
+      } catch (e) {
+        console.warn('[App] Failed to load tilesets:', e)
       }
       if (destroyed) return
       nextStep()
@@ -648,9 +666,10 @@ function App() {
         />
       )}
 
-      {/* Item palette — left side */}
+      {/* Brush palette — left side */}
       {!loading && showPalette && itemRegistry && appearancesData && (
-        <ItemPalette
+        <BrushPalette
+          tilesets={tilesets}
           registry={itemRegistry}
           appearances={appearancesData}
           brushRegistry={brushRegistryState}
