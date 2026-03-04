@@ -158,6 +158,7 @@ export function useEditorTools(
   const isDragMovingRef = useRef(false)
   const dragMoveOriginRef = useRef<{ x: number; y: number; z: number } | null>(null)
   const dragMoveLastPosRef = useRef<{ x: number; y: number; z: number } | null>(null)
+  const hoverPosRef = useRef<{ x: number; y: number; z: number } | null>(null)
 
   /** Apply combined highlights from both selectedItems and selection to the renderer. */
   const applyHighlights = (
@@ -590,6 +591,7 @@ export function useEditorTools(
     }
 
     renderer.onTileHover = (pos) => {
+      hoverPosRef.current = pos
       const tool = activeToolRef.current
       const size = (tool === 'draw' || tool === 'erase' || tool === 'door') ? brushSizeRef.current : 0
       const shape = brushShapeRef.current
@@ -744,9 +746,10 @@ export function useEditorTools(
     if (!clipboard || !mutator || !renderer) return
     const items = selectedItemsRef.current
     const sel = selectionRef.current
-    // Paste at the selected tile (first selected item or first in selection), or at clipboard origin
-    const targetX = items.length > 0 ? items[0].x : sel.length > 0 ? sel[0].x : clipboard.originX
-    const targetY = items.length > 0 ? items[0].y : sel.length > 0 ? sel[0].y : clipboard.originY
+    // Paste at the selected tile, or at hover position, or at clipboard origin
+    const hover = hoverPosRef.current
+    const targetX = items.length > 0 ? items[0].x : sel.length > 0 ? sel[0].x : hover ? hover.x : clipboard.originX
+    const targetY = items.length > 0 ? items[0].y : sel.length > 0 ? sel[0].y : hover ? hover.y : clipboard.originY
     const targetZ = renderer.floor
 
     mutator.beginBatch('Paste')
