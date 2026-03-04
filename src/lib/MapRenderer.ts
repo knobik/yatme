@@ -299,6 +299,15 @@ export class MapRenderer implements InputHost {
     this.selection.clearBrushCursor()
   }
 
+  /** Show a ghost preview of tiles being dragged to a new position. */
+  updateDragPreview(tiles: { x: number; y: number; z: number }[], dx: number, dy: number): void {
+    this.selection.updateDragPreview(tiles, dx, dy, this.camera.floor, this.mapData.tiles, this.appearances)
+  }
+
+  clearDragPreview(): void {
+    this.selection.clearDragPreview()
+  }
+
   /** Update the ghost sprite preview for the brush cursor. */
   updateGhostPreview(itemId: number | null, tiles: { x: number; y: number; z: number }[]): void {
     if (itemId == null || tiles.length === 0) {

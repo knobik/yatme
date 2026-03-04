@@ -154,6 +154,11 @@ export function useEditorTools(
   // For Ctrl+Shift+Drag: snapshot of selection at drag start to merge with
   const selectionSnapshotRef = useRef<{ x: number; y: number; z: number }[]>([])
 
+  // For drag-move: move selected items by dragging
+  const isDragMovingRef = useRef(false)
+  const dragMoveOriginRef = useRef<{ x: number; y: number; z: number } | null>(null)
+  const dragMoveLastPosRef = useRef<{ x: number; y: number; z: number } | null>(null)
+
   /** Apply combined highlights from both selectedItems and selection to the renderer. */
   const applyHighlights = (
     r: MapRenderer,
@@ -251,6 +256,39 @@ export function useEditorTools(
         isShiftDragRef.current = event.shiftKey
         isCtrlDragRef.current = ctrlKey
 
+        // Plain click (no modifiers): select top item immediately and begin drag-move
+        if (!event.shiftKey && !ctrlKey) {
+          const tileKey = `${pos.x},${pos.y},${pos.z}`
+          const tile = mapData?.tiles.get(tileKey) ?? null
+
+          // Check if clicking an already-selected tile (per-item or multi-tile selection)
+          const hasSelectedItem = selectedItemsRef.current.some(
+            s => s.x === pos.x && s.y === pos.y && s.z === pos.z
+          )
+          const hasSelectedTile = selectionRef.current.some(
+            s => s.x === pos.x && s.y === pos.y && s.z === pos.z
+          )
+          const isAlreadySelected = hasSelectedItem || hasSelectedTile
+
+          if (!isAlreadySelected && tile && tile.items.length > 0) {
+            // Select top item immediately so drag can begin in same gesture
+            const topIdx = tile.items.length - 1
+            const newSel: SelectedItemInfo = { x: pos.x, y: pos.y, z: pos.z, itemIndex: topIdx }
+            setSelectedItems([newSel])
+            selectedItemsRef.current = [newSel]
+            setSelection([])
+            selectionRef.current = []
+            renderer.highlightItem(pos.x, pos.y, pos.z, topIdx)
+          }
+
+          // Begin drag-move if tile has any selection
+          if (isAlreadySelected || (tile && tile.items.length > 0)) {
+            isDragMovingRef.current = true
+            dragMoveOriginRef.current = pos
+            dragMoveLastPosRef.current = pos
+          }
+        }
+
         if (ctrlKey && !event.shiftKey) {
           // Ctrl+Click: toggle top item in selection (immediate, additive)
           const tileKey = `${pos.x},${pos.y},${pos.z}`
@@ -340,6 +378,28 @@ export function useEditorTools(
         }
         if (any) mutator.flushChunkUpdates()
       } else if (tool === 'select') {
+        // Drag-move: track target position and show ghost preview
+        if (isDragMovingRef.current) {
+          dragMoveLastPosRef.current = pos
+          const origin = dragMoveOriginRef.current
+          if (origin) {
+            const dx = pos.x - origin.x
+            const dy = pos.y - origin.y
+            // Collect source tiles from both selection types
+            const sourceTiles: { x: number; y: number; z: number }[] = []
+            const seen = new Set<string>()
+            for (const s of selectedItemsRef.current) {
+              const key = `${s.x},${s.y},${s.z}`
+              if (!seen.has(key)) { seen.add(key); sourceTiles.push({ x: s.x, y: s.y, z: s.z }) }
+            }
+            for (const t of selectionRef.current) {
+              const key = `${t.x},${t.y},${t.z}`
+              if (!seen.has(key)) { seen.add(key); sourceTiles.push(t) }
+            }
+            renderer.updateDragPreview(sourceTiles, dx, dy)
+          }
+          return
+        }
         // Plain drag without shift: do nothing
         if (!isShiftDragRef.current) return
         // Shift+drag: rectangle selection
@@ -387,26 +447,121 @@ export function useEditorTools(
         const ctrlKey = isCtrlDragRef.current
         const shiftKey = isShiftDragRef.current
 
+        // Handle drag-move completion
+        if (isDragMovingRef.current) {
+          const origin = dragMoveOriginRef.current
+          const target = dragMoveLastPosRef.current
+          isDragMovingRef.current = false
+          dragMoveOriginRef.current = null
+          dragMoveLastPosRef.current = null
+          renderer.clearDragPreview()
+
+          if (origin && target && (origin.x !== target.x || origin.y !== target.y)) {
+            const dx = target.x - origin.x
+            const dy = target.y - origin.y
+
+            // Build a unified set of per-item selections to move.
+            // If we have multi-tile selection, expand it to per-item (all non-ground items).
+            const itemsToMove: SelectedItemInfo[] = [...selectedItemsRef.current]
+            const tileSelection = selectionRef.current
+
+            if (tileSelection.length > 0) {
+              const alreadyCovered = new Set(
+                itemsToMove.map(s => `${s.x},${s.y},${s.z}`)
+              )
+              for (const tilePos of tileSelection) {
+                const key = `${tilePos.x},${tilePos.y},${tilePos.z}`
+                if (alreadyCovered.has(key)) continue
+                const tile = mapData?.tiles.get(key)
+                if (!tile) continue
+                // Select all non-ground items (skip index 0 if it's ground)
+                for (let i = 0; i < tile.items.length; i++) {
+                  itemsToMove.push({ x: tilePos.x, y: tilePos.y, z: tilePos.z, itemIndex: i })
+                }
+              }
+            }
+
+            if (itemsToMove.length === 0) {
+              selectStartRef.current = null
+              isShiftDragRef.current = false
+              isCtrlDragRef.current = false
+              return
+            }
+
+            // Group by source tile, sort indices descending for safe removal
+            const byTile = new Map<string, SelectedItemInfo[]>()
+            for (const item of itemsToMove) {
+              const key = `${item.x},${item.y},${item.z}`
+              const list = byTile.get(key) ?? []
+              list.push(item)
+              byTile.set(key, list)
+            }
+
+            mutator.beginBatch('Move items')
+            const newSelection: { x: number; y: number; z: number }[] = []
+
+            for (const [, tileItems] of byTile) {
+              // Deduplicate indices and sort descending
+              const uniqueIndices = [...new Set(tileItems.map(t => t.itemIndex))].sort((a, b) => b - a)
+              const removed: OtbmItem[] = []
+              const srcX = tileItems[0].x
+              const srcY = tileItems[0].y
+              const srcZ = tileItems[0].z
+
+              for (const idx of uniqueIndices) {
+                const tileKey = `${srcX},${srcY},${srcZ}`
+                const tile = mapData?.tiles.get(tileKey)
+                if (!tile || idx >= tile.items.length) continue
+                const item = deepCloneItem(tile.items[idx])
+                removed.unshift(item) // preserve original order
+                mutator.removeItem(srcX, srcY, srcZ, idx)
+              }
+
+              // Add items to target tile
+              const destX = srcX + dx
+              const destY = srcY + dy
+              for (const item of removed) {
+                mutator.addItem(destX, destY, srcZ, item)
+              }
+
+              newSelection.push({ x: destX, y: destY, z: srcZ })
+            }
+
+            mutator.commitBatch()
+
+            // Update selection to new positions (use tile selection for multi-tile moves)
+            setSelectedItems([])
+            selectedItemsRef.current = []
+            setSelection(newSelection)
+            selectionRef.current = newSelection
+            applyHighlights(renderer, [], newSelection)
+          }
+          // Same tile — selection already happened in pointerDown, just open inspector
+          selectStartRef.current = null
+          isShiftDragRef.current = false
+          isCtrlDragRef.current = false
+          if (clickToInspectRef.current) {
+            const key = `${pos.x},${pos.y},${pos.z}`
+            const tile = mapData?.tiles.get(key) ?? null
+            renderer.onTileClick?.(tile, pos.x, pos.y)
+          }
+          return
+        }
+
         if (wasClick && !shiftKey && !ctrlKey) {
-          // Plain click — select top item on tile, clear everything else
+          // Plain click — selection already happened in pointerDown
+          // Just open inspector
           const key = `${pos.x},${pos.y},${pos.z}`
           const tile = mapData?.tiles.get(key) ?? null
 
-          if (tile && tile.items.length > 0) {
-            const topIdx = tile.items.length - 1
-            const newSel: SelectedItemInfo = { x: pos.x, y: pos.y, z: pos.z, itemIndex: topIdx }
-            setSelectedItems([newSel])
-            selectedItemsRef.current = [newSel]
-            renderer.highlightItem(pos.x, pos.y, pos.z, topIdx)
-          } else {
+          // Handle click on empty tile (deselect)
+          if (!tile || tile.items.length === 0) {
             setSelectedItems([])
             selectedItemsRef.current = []
             renderer.clearItemHighlight()
+            setSelection([])
+            selectionRef.current = []
           }
-
-          // Clear multi-tile selection
-          setSelection([])
-          selectionRef.current = []
 
           // Open inspector (if click-to-inspect is enabled)
           if (clickToInspectRef.current) {

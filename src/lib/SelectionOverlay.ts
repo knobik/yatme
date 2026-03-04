@@ -1,5 +1,9 @@
 import { Container, Graphics, Sprite, type Texture } from 'pixi.js'
 import { TILE_SIZE } from './constants'
+import type { OtbmTile } from './otbm'
+import type { AppearanceData } from './appearances'
+import { getItemSpriteId } from './SpriteResolver'
+import { getTextureSync } from './TextureManager'
 
 type TilePos = { x: number; y: number; z: number }
 
@@ -129,6 +133,81 @@ export class SelectionOverlay {
     this._selectionBorderGraphics.visible = false
   }
 
+  // ── Drag-move preview (ghost items) ─────────────────────────────
+
+  private _dragPreviewContainer: Container | null = null
+  private _dragPreviewKey = ''
+
+  updateDragPreview(
+    tiles: TilePos[],
+    dx: number,
+    dy: number,
+    floor: number,
+    tileMap: Map<string, OtbmTile>,
+    appearances: AppearanceData,
+  ): void {
+    if (tiles.length === 0 || (dx === 0 && dy === 0)) {
+      this.clearDragPreview()
+      return
+    }
+
+    const key = `${tiles.map(t => `${t.x},${t.y}`).join(';')}:${dx},${dy}`
+    if (key === this._dragPreviewKey) return
+    this._dragPreviewKey = key
+
+    if (!this._dragPreviewContainer) {
+      this._dragPreviewContainer = new Container()
+      this._dragPreviewContainer.alpha = 0.5
+      this.container.addChild(this._dragPreviewContainer)
+    }
+
+    // Clear previous sprites
+    this._dragPreviewContainer.removeChildren()
+
+    for (const t of tiles) {
+      if (t.z !== floor) continue
+      const tileKey = `${t.x},${t.y},${t.z}`
+      const tile = tileMap.get(tileKey)
+      if (!tile) continue
+
+      const baseX = (t.x + dx) * TILE_SIZE
+      const baseY = (t.y + dy) * TILE_SIZE
+      let elevation = 0
+
+      for (const item of tile.items) {
+        const appearance = appearances.objects.get(item.id)
+        if (!appearance) continue
+
+        const spriteId = getItemSpriteId(appearance, item, tile)
+        if (spriteId == null || spriteId === 0) continue
+
+        const texture = getTextureSync(spriteId)
+        if (!texture) continue
+
+        const sprite = new Sprite(texture)
+        sprite.roundPixels = true
+        const shift = appearance.flags?.shift
+        sprite.x = baseX + TILE_SIZE - texture.width - elevation - (shift?.x ?? 0)
+        sprite.y = baseY + TILE_SIZE - texture.height - elevation - (shift?.y ?? 0)
+        this._dragPreviewContainer.addChild(sprite)
+
+        if (appearance.flags?.height) {
+          elevation += appearance.flags.height.elevation ?? 0
+        }
+      }
+    }
+
+    this._dragPreviewContainer.visible = true
+  }
+
+  clearDragPreview(): void {
+    this._dragPreviewKey = ''
+    if (this._dragPreviewContainer) {
+      this._dragPreviewContainer.removeChildren()
+      this._dragPreviewContainer.visible = false
+    }
+  }
+
   // ── Brush cursor (hover preview) ─────────────────────────────
 
   updateBrushCursor(tiles: TilePos[], floor: number): void {
@@ -240,6 +319,7 @@ export class SelectionOverlay {
     this._ghostContainer.destroy()
     this._brushCursorGraphics.destroy()
     this._selectionBorderGraphics.destroy()
+    this._dragPreviewContainer?.destroy()
     this.container.destroy()
   }
 }
