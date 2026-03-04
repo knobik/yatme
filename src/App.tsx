@@ -244,15 +244,18 @@ function App() {
       container.appendChild(app.canvas as HTMLCanvasElement)
       nextStep()
 
-      setLoadingStatus('Loading appearances...')
-      const appearances = await loadAppearances(undefined, stepProgress)
+      setLoadingStatus('Loading sprite catalog...')
+      const catalog = await loadSpriteCatalog(undefined, stepProgress)
       if (destroyed) return
-      setAppearancesData(appearances)
       nextStep()
 
-      setLoadingStatus('Loading sprite catalog...')
-      await loadSpriteCatalog(undefined, stepProgress)
+      setLoadingStatus('Loading appearances...')
+      const appearancesUrl = catalog.appearancesFile
+        ? `/sprites-png/${catalog.appearancesFile}`
+        : '/appearances.dat'
+      const appearances = await loadAppearances(appearancesUrl, stepProgress)
       if (destroyed) return
+      setAppearancesData(appearances)
       nextStep()
 
       setLoadingStatus('Loading map data...')
@@ -277,7 +280,7 @@ function App() {
         const brushData = await loadBrushData(stepProgress)
         const nextId = { value: brushData.brushes.length + 1 }
 
-        const wallsXml = await fetch('/materials/brushs/walls.xml').then(r => r.text())
+        const wallsXml = await fetch('/data/materials/brushs/walls.xml').then(r => r.text())
         const wallBrushes = parseWallBrushesXml(wallsXml, nextId)
         console.log(`[WallLoader] Loaded ${wallBrushes.length} wall brushes`)
 
@@ -287,7 +290,7 @@ function App() {
         const allDoodads: DoodadBrush[] = []
         for (const file of doodadFiles) {
           try {
-            const xml = await fetch(`/materials/brushs/${file}`).then(r => r.text())
+            const xml = await fetch(`/data/materials/brushs/${file}`).then(r => r.text())
             const { carpets, tables } = parseCarpetBrushesXml(xml, nextId)
             const doodads = parseDoodadBrushesXml(xml, nextId)
             allCarpets.push(...carpets)

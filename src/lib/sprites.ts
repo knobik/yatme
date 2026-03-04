@@ -15,6 +15,11 @@ interface CatalogSpriteEntry {
   lastspriteid: number;
 }
 
+interface CatalogAppearancesEntry {
+  type: 'appearances';
+  file: string;
+}
+
 export interface SheetInfo {
   file: string;
   spritetype: number;
@@ -29,17 +34,26 @@ const sheetIndex: SheetInfo[] = [];
 const sheetCache = new Map<string, HTMLImageElement>();
 const spriteCache = new Map<number, ImageBitmap>();
 
+export interface SpriteCatalogResult {
+  appearancesFile: string | null;
+}
+
 export async function loadSpriteCatalog(
   catalogUrl = '/sprites-png/catalog-content.json',
   onProgress?: (fraction: number) => void,
-): Promise<void> {
+): Promise<SpriteCatalogResult> {
   const { fetchTextWithProgress } = await import('./fetchWithProgress');
   const text = await fetchTextWithProgress(catalogUrl, onProgress);
   const catalog = JSON.parse(text);
 
   sheetIndex.length = 0;
+  let appearancesFile: string | null = null;
 
   for (const entry of catalog) {
+    if (entry.type === 'appearances') {
+      appearancesFile = (entry as CatalogAppearancesEntry).file;
+      continue;
+    }
     if (entry.type !== 'sprite') continue;
     const dims = SPRITE_DIMENSIONS[entry.spritetype];
     if (!dims) continue;
@@ -57,6 +71,8 @@ export async function loadSpriteCatalog(
 
   // Sort by firstSpriteId for binary search
   sheetIndex.sort((a, b) => a.firstSpriteId - b.firstSpriteId);
+
+  return { appearancesFile };
 }
 
 export function findSheet(spriteId: number): SheetInfo | null {

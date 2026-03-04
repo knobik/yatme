@@ -52,7 +52,7 @@ function parseTilesetXml(raw: string): Tileset | null {
 
 export async function loadTilesets(): Promise<Tileset[]> {
   // Fetch master includes file
-  const masterXml = await fetch('/materials/tilesets.xml').then(r => r.text())
+  const masterXml = await fetch('/data/materials/tilesets.xml').then(r => r.text())
   const masterDoc = new DOMParser().parseFromString(sanitizeXml(masterXml), 'text/xml')
   const includes = masterDoc.querySelectorAll('include')
 
@@ -64,7 +64,7 @@ export async function loadTilesets(): Promise<Tileset[]> {
 
   // Fetch all tileset files in parallel
   const results = await Promise.allSettled(
-    filenames.map(f => fetch(`/materials/${f}`).then(r => r.text()))
+    filenames.map(f => fetch(`/data/materials/${f}`).then(r => r.text()))
   )
 
   const tilesets: Tileset[] = []

@@ -13,4 +13,3 @@ dist
 
 # Tibia data (large binaries)
 vendor/
-tibia-versions/

@@ -275,14 +275,14 @@ export async function loadBrushData(
 
   // Load borders (~33% of brush loading)
   const bordersXml = await fetchTextWithProgress(
-    '/materials/borders/borders.xml',
+    '/data/materials/borders/borders.xml',
     onProgress ? (f) => onProgress(f * 0.33) : undefined,
   )
   const borders = parseBordersXml(bordersXml)
 
   // Load ground brushes (~67% of brush loading)
   const groundsXml = await fetchTextWithProgress(
-    '/materials/brushs/grounds.xml',
+    '/data/materials/brushs/grounds.xml',
     onProgress ? (f) => onProgress(0.33 + f * 0.67) : undefined,
   )
   const nextId = { value: 1 }

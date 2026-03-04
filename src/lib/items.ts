@@ -13,7 +13,7 @@ export interface ItemInfo {
 export type ItemRegistry = Map<number, ItemInfo>
 
 export async function loadItems(
-  url = '/items.xml',
+  url = '/data/items.xml',
   onProgress?: (fraction: number) => void,
 ): Promise<ItemRegistry> {
   const { fetchTextWithProgress } = await import('./fetchWithProgress')
