@@ -319,9 +319,12 @@ function App() {
       renderer.setShowSelectionBorder(savedSettings.selectionBorder)
 
       setLoadingProgress(1)
+      setLoadingStatus('Ready')
       setMapData(mapData)
       setRendererReady(renderer)
       setMutatorReady(mutator)
+      // Brief delay so user sees 100% before overlay disappears
+      await new Promise(r => setTimeout(r, 350))
       setLoading(false)
     }
 
@@ -956,7 +959,7 @@ function LoadingOverlay({ status, progress }: { status: string; progress: number
       {/* Progress bar */}
       <div className="flex w-[280px] flex-col gap-3">
         <div className="h-[4px] w-full overflow-hidden rounded-[2px] bg-elevated">
-          <div className="h-full rounded-[2px] bg-accent" style={{ width: `${pct}%` }} />
+          <div className="h-full rounded-[2px] bg-accent transition-[width] duration-300 ease-out" style={{ width: `${pct}%` }} />
         </div>
 
         <div className="flex items-baseline justify-between">

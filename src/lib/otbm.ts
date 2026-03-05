@@ -443,22 +443,43 @@ function parseTile(
 export async function loadOtbm(
   url = '/canary.otbm',
   onProgress?: (fraction: number) => void,
+  onStatus?: (msg: string) => void,
 ): Promise<OtbmMap> {
   const { fetchWithProgress } = await import('./fetchWithProgress')
-  const buffer = await fetchWithProgress(url, onProgress)
-  return parseOtbm(new Uint8Array(buffer))
-}
+  // Download phase: 0 → 0.5 of this step
+  const buffer = await fetchWithProgress(url, (f) => onProgress?.(f * 0.5))
 
-export function parseOtbm(raw: Uint8Array): OtbmMap {
-  // Skip 4-byte file identifier
-  // Byte 4 should be NODE_START (0xFE)
+  // Tree building phase: 0.5 → 0.65
+  onProgress?.(0.5)
+  onStatus?.('Building node tree...')
+  await new Promise(r => setTimeout(r, 0))
+  const raw = new Uint8Array(buffer)
   if (raw[4] !== NODE_START) {
     throw new Error(`Expected NODE_START at byte 4, got 0x${raw[4].toString(16)}`)
   }
+  const { node: root } = buildTree(raw, 5)
+  onProgress?.(0.65)
 
-  const { node: root } = buildTree(raw, 5) // start after the NODE_START
+  // Tile processing phase: 0.65 → 1.0
+  onStatus?.('Processing map data...')
+  await new Promise(r => setTimeout(r, 0))
+  const map = await parseOtbmAsync(root, (f) => onProgress?.(0.65 + f * 0.35))
+  onProgress?.(1)
+  return map
+}
 
-  // Root node: type byte (always 0), then header
+/**
+ * Synchronous parse — used when no progress reporting is needed.
+ */
+export function parseOtbm(raw: Uint8Array): OtbmMap {
+  if (raw[4] !== NODE_START) {
+    throw new Error(`Expected NODE_START at byte 4, got 0x${raw[4].toString(16)}`)
+  }
+  const { node: root } = buildTree(raw, 5)
+  return parseOtbmFromTree(root)
+}
+
+function parseOtbmFromTree(root: BinaryNode): OtbmMap {
   const rootType = root.readU8()
   if (rootType !== 0) {
     throw new Error(`Unexpected root node type: ${rootType}`)
@@ -482,7 +503,6 @@ export function parseOtbm(raw: Uint8Array): OtbmMap {
     waypoints: [],
   }
 
-  // Root should have one child: OTBM_MAP_DATA
   if (root.children.length === 0) {
     throw new Error('No MAP_DATA node found')
   }
@@ -493,7 +513,6 @@ export function parseOtbm(raw: Uint8Array): OtbmMap {
     throw new Error(`Expected OTBM_MAP_DATA (2), got ${mapDataType}`)
   }
 
-  // Read map properties (inline attributes)
   while (mapDataNode.canRead()) {
     const attr = mapDataNode.readU8()
     switch (attr) {
@@ -507,12 +526,15 @@ export function parseOtbm(raw: Uint8Array): OtbmMap {
         map.houseFile = mapDataNode.readString()
         break
       default:
-        // Unknown map attribute — stop reading
         break
     }
   }
 
-  // Process children of MAP_DATA
+  processChildren(mapDataNode, map, version)
+  return map
+}
+
+function processChildren(mapDataNode: BinaryNode, map: OtbmMap, version: number): void {
   for (const child of mapDataNode.children) {
     const nodeType = child.readU8()
 
@@ -526,8 +548,7 @@ export function parseOtbm(raw: Uint8Array): OtbmMap {
           const tileType = tileNode.readU8()
           if (tileType === OTBM_TILE || tileType === OTBM_HOUSETILE) {
             const tile = parseTile(tileNode, tileType, baseX, baseY, baseZ, version)
-            const key = `${tile.x},${tile.y},${tile.z}`
-            map.tiles.set(key, tile)
+            map.tiles.set(`${tile.x},${tile.y},${tile.z}`, tile)
           }
         }
         break
@@ -535,8 +556,7 @@ export function parseOtbm(raw: Uint8Array): OtbmMap {
 
       case OTBM_TOWNS: {
         for (const townNode of child.children) {
-          const townType = townNode.readU8()
-          if (townType === OTBM_TOWN) {
+          if (townNode.readU8() === OTBM_TOWN) {
             map.towns.push({
               id: townNode.readU32(),
               name: townNode.readString(),
@@ -551,8 +571,121 @@ export function parseOtbm(raw: Uint8Array): OtbmMap {
 
       case OTBM_WAYPOINTS: {
         for (const wpNode of child.children) {
-          const wpType = wpNode.readU8()
-          if (wpType === OTBM_WAYPOINT) {
+          if (wpNode.readU8() === OTBM_WAYPOINT) {
+            map.waypoints.push({
+              name: wpNode.readString(),
+              x: wpNode.readU16(),
+              y: wpNode.readU16(),
+              z: wpNode.readU8(),
+            })
+          }
+        }
+        break
+      }
+    }
+  }
+}
+
+/**
+ * Async parse — yields to the browser every ~50ms so the progress bar can update.
+ */
+async function parseOtbmAsync(
+  root: BinaryNode,
+  onProgress?: (fraction: number) => void,
+): Promise<OtbmMap> {
+  const rootType = root.readU8()
+  if (rootType !== 0) {
+    throw new Error(`Unexpected root node type: ${rootType}`)
+  }
+
+  const version = root.readU32()
+  const width = root.readU16()
+  const height = root.readU16()
+  root.readU32() // majorItems
+  root.readU32() // minorItems
+
+  const map: OtbmMap = {
+    version,
+    width,
+    height,
+    description: '',
+    spawnFile: '',
+    houseFile: '',
+    tiles: new Map(),
+    towns: [],
+    waypoints: [],
+  }
+
+  if (root.children.length === 0) {
+    throw new Error('No MAP_DATA node found')
+  }
+
+  const mapDataNode = root.children[0]
+  const mapDataType = mapDataNode.readU8()
+  if (mapDataType !== OTBM_MAP_DATA) {
+    throw new Error(`Expected OTBM_MAP_DATA (2), got ${mapDataType}`)
+  }
+
+  while (mapDataNode.canRead()) {
+    const attr = mapDataNode.readU8()
+    switch (attr) {
+      case OTBM_ATTR_DESCRIPTION:
+        map.description += mapDataNode.readString()
+        break
+      case OTBM_ATTR_SPAWN_FILE:
+        map.spawnFile = mapDataNode.readString()
+        break
+      case OTBM_ATTR_HOUSE_FILE:
+        map.houseFile = mapDataNode.readString()
+        break
+      default:
+        break
+    }
+  }
+
+  // Process tile areas in batches, yielding periodically for UI updates
+  const children = mapDataNode.children
+  const total = children.length
+  let lastYield = performance.now()
+
+  for (let i = 0; i < total; i++) {
+    const child = children[i]
+    const nodeType = child.readU8()
+
+    switch (nodeType) {
+      case OTBM_TILE_AREA: {
+        const baseX = child.readU16()
+        const baseY = child.readU16()
+        const baseZ = child.readU8()
+
+        for (const tileNode of child.children) {
+          const tileType = tileNode.readU8()
+          if (tileType === OTBM_TILE || tileType === OTBM_HOUSETILE) {
+            const tile = parseTile(tileNode, tileType, baseX, baseY, baseZ, version)
+            map.tiles.set(`${tile.x},${tile.y},${tile.z}`, tile)
+          }
+        }
+        break
+      }
+
+      case OTBM_TOWNS: {
+        for (const townNode of child.children) {
+          if (townNode.readU8() === OTBM_TOWN) {
+            map.towns.push({
+              id: townNode.readU32(),
+              name: townNode.readString(),
+              templeX: townNode.readU16(),
+              templeY: townNode.readU16(),
+              templeZ: townNode.readU8(),
+            })
+          }
+        }
+        break
+      }
+
+      case OTBM_WAYPOINTS: {
+        for (const wpNode of child.children) {
+          if (wpNode.readU8() === OTBM_WAYPOINT) {
             map.waypoints.push({
               name: wpNode.readString(),
               x: wpNode.readU16(),
@@ -565,7 +698,15 @@ export function parseOtbm(raw: Uint8Array): OtbmMap {
       }
     }
 
+    // Yield every ~50ms so the browser can paint progress updates
+    const now = performance.now()
+    if (now - lastYield > 50) {
+      onProgress?.((i + 1) / total)
+      await new Promise(r => setTimeout(r, 0))
+      lastYield = performance.now()
+    }
   }
 
+  onProgress?.(1)
   return map
 }

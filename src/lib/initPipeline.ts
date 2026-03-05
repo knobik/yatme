@@ -36,8 +36,8 @@ export async function loadAssets(
   progress: InitProgress,
   signal: { destroyed: boolean },
 ): Promise<InitResult | null> {
-  // Weights: pixi, catalog, appearances, items, brushes, tilesets, map data
-  const stepWeights = [2, 15, 3, 12, 8, 3, 55]
+  // Weights: pixi, catalog, appearances, items, brushes, tilesets, map data, editor setup
+  const stepWeights = [2, 15, 3, 12, 8, 3, 50, 5]
   const totalWeight = stepWeights.reduce((a, b) => a + b, 0)
   let currentStep = 0
   const stepStarts: number[] = []
@@ -153,8 +153,14 @@ export async function loadAssets(
 
   // Step 7: Map data (heaviest step)
   progress.setStatus('Loading map data...')
-  const mapData = await loadOtbm(undefined, stepProgress)
+  const mapData = await loadOtbm(undefined, stepProgress, progress.setStatus)
   if (signal.destroyed) return null
+  nextStep()
+
+  // Step 8: Signal editor setup phase
+  progress.setStatus('Initializing editor...')
+  // Yield so the UI can paint the status update before setupEditor blocks
+  await new Promise(r => setTimeout(r, 0))
 
   return { app, appearances, mapData, registry, brushRegistry, tilesets }
 }
