@@ -13,6 +13,11 @@ export function chunkKeyStr(cx: number, cy: number, z: number): string {
   return `${cx},${cy},${z}`
 }
 
+/** Compute a zIndex for a chunk so the floor container draws them back-to-front. */
+function chunkZIndex(cx: number, cy: number): number {
+  return cy * 10000 + cx
+}
+
 /** Chunk key from tile world coordinates (divides by CHUNK_SIZE internally). */
 export function chunkKeyForTile(x: number, y: number, z: number): string {
   return `${Math.floor(x / CHUNK_SIZE)},${Math.floor(y / CHUNK_SIZE)},${z}`
@@ -163,6 +168,9 @@ export class ChunkManager {
   private _allVisibleKeys = new Set<string>()
   private _allPrefetchKeys = new Set<string>()
 
+  // Invalidated chunks that must be rebuilt immediately (no budget limit)
+  private _priorityKeys = new Set<string>()
+
   // Animation state
   private _animStartTime: number
   private _animElapsed = 0
@@ -242,15 +250,16 @@ export class ChunkManager {
     // Build/restore visible chunks
     const frameStart = performance.now()
     let budgetExhausted = false
+    const hasPriority = this._priorityKeys.size > 0
 
     for (const z of visibleFloors) {
-      if (budgetExhausted) break
+      if (budgetExhausted && !hasPriority) break
       const floorContainer = this.getFloorContainer(z)
       const offset = this.camera.getFloorOffset(z)
       const { startX, startY, endX, endY } = this.camera.getVisibleRangeForFloor(offset)
 
       for (let cy = startY; cy <= endY; cy++) {
-        if (budgetExhausted) break
+        if (budgetExhausted && !hasPriority) break
         for (let cx = startX; cx <= endX; cx++) {
           const key = chunkKeyStr(cx, cy, z)
           if (this.activeChunks.has(key)) continue
@@ -258,13 +267,22 @@ export class ChunkManager {
           const cached = this.chunkCache.take(key)
           if (cached) {
             cached.cacheAsTexture({ scaleMode: 'nearest', antialias: false })
+            cached.zIndex = chunkZIndex(cx, cy)
             floorContainer.addChild(cached)
             this.activeChunks.set(key, cached)
+            this._priorityKeys.delete(key)
             continue
           }
 
+          // Skip non-priority chunks when budget is exhausted
+          const isPriority = hasPriority && this._priorityKeys.has(key)
+          if (budgetExhausted && !isPriority) continue
+
           const tiles = this.chunkIndex.get(key)
-          if (!tiles || tiles.length === 0) continue
+          if (!tiles || tiles.length === 0) {
+            this._priorityKeys.delete(key)
+            continue
+          }
 
           const container = new Container()
           const hlSprites: Sprite[] = []
@@ -276,17 +294,20 @@ export class ChunkManager {
           if (hlSprites.length > 0) {
             this._chunkHighlightSprites.set(key, hlSprites)
           }
+          container.zIndex = chunkZIndex(cx, cy)
           floorContainer.addChild(container)
           this.activeChunks.set(key, container)
           this.preloadAndRebuild(container, tiles, key)
+          this._priorityKeys.delete(key)
 
-          if (performance.now() - frameStart > CHUNK_BUILD_BUDGET_MS) {
+          if (!isPriority && performance.now() - frameStart > CHUNK_BUILD_BUDGET_MS) {
             budgetExhausted = true
             break
           }
         }
       }
     }
+    this._priorityKeys.clear()
 
     this.updateAnimatedSprites()
     this.updateHighlightBreathing()
@@ -316,6 +337,7 @@ export class ChunkManager {
       this.chunkCache.delete(key)
       this._chunkAnimSprites.delete(key)
       this._chunkHighlightSprites.delete(key)
+      this._priorityKeys.add(key)
     }
     this._lastRangeKey = ''
   }
@@ -377,6 +399,7 @@ export class ChunkManager {
     this.buildQueue.length = 0
     this.buildQueueReadIdx = 0
     this.buildQueueSet.clear()
+    this._priorityKeys.clear()
     this._lastRangeKey = ''
   }
 
@@ -496,6 +519,9 @@ export class ChunkManager {
 
     if (spriteIds.length > 0) {
       preloadSheets(spriteIds).then(() => {
+        // Guard: skip if the container was destroyed since this callback was scheduled
+        if (container.destroyed) return
+
         const elapsed = performance.now() - this._animStartTime
         container.removeChildren()
         const hlSprites: Sprite[] = []

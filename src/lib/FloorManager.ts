@@ -22,6 +22,7 @@ export class FloorManager {
     let container = this._containers.get(z)
     if (!container) {
       container = new Container()
+      container.sortableChildren = true
       this._containers.set(z, container)
     }
     return container
