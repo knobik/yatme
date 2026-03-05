@@ -10,6 +10,8 @@ export class BrushRegistry {
   private brushesByItemId = new Map<number, GroundBrush>()
   // All item IDs that appear in any AutoBorder.tiles[] — used to identify border items
   readonly borderItemIds = new Set<number>()
+  // Item IDs that belong to optional/mountain borders (RME: isOptionalBorder)
+  readonly optionalBorderItemIds = new Set<number>()
   // Item ID → border group and alignment (for specific case matching)
   private borderItemGroup = new Map<number, number>()
   private borderItemAlignment = new Map<number, number>()
@@ -92,6 +94,17 @@ export class BrushRegistry {
           this.borderItemIds.add(itemId)
           this.borderItemGroup.set(itemId, border.group)
           this.borderItemAlignment.set(itemId, edgeIndex)
+        }
+      }
+    }
+
+    // Collect optional/mountain border item IDs (RME: type.isOptionalBorder)
+    for (const brush of brushes) {
+      if (brush.optionalBorder) {
+        for (const itemId of brush.optionalBorder.tiles) {
+          if (itemId != null) {
+            this.optionalBorderItemIds.add(itemId)
+          }
         }
       }
     }
@@ -188,6 +201,10 @@ export class BrushRegistry {
 
   isBorderItem(itemId: number): boolean {
     return this.borderItemIds.has(itemId)
+  }
+
+  isOptionalBorderItem(itemId: number): boolean {
+    return this.optionalBorderItemIds.has(itemId)
   }
 
   getBorderItemGroup(itemId: number): number {

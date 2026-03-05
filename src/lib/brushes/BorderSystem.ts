@@ -30,7 +30,7 @@ function getGroundBrush(
 ): GroundBrush | null {
   const tile = map.tiles.get(`${x},${y},${z}`)
   if (!tile || tile.items.length === 0) return null
-  // Ground item is always first
+  // Ground item is always first (index 0) in our tile representation
   return registry.getBrushForItem(tile.items[0].id) ?? null
 }
 
@@ -104,6 +104,13 @@ export function computeBorders(
   map: OtbmMap,
   registry: BrushRegistry,
 ): OtbmItem[] {
+  // RME: tile->hasOptionalBorder() checks TILESTATE_OP_BORDER, which is set when
+  // any item on the tile has type.isOptionalBorder (i.e. belongs to an optional border).
+  // We compute this by scanning items for optional border membership.
+  const tile = map.tiles.get(`${x},${y},${z}`)
+  const tileHasOptionalBorder = tile
+    ? tile.items.some(item => registry.isOptionalBorderItem(item.id))
+    : false
   const borderBrush = getGroundBrush(map, x, y, z, registry)
 
   // Get 8 neighbors' ground brushes
@@ -150,10 +157,8 @@ export function computeBorders(
           }
 
           if (tiledata !== 0) {
-            // Add mountain/optional border if both brushes support it.
-            // RME checks tile->hasOptionalBorder() (per-tile flag); we
-            // approximate by checking borderBrush.optionalBorder.
-            if (other.optionalBorder && borderBrush.optionalBorder) {
+            // RME: optional/mountain border only if tile has TILESTATE_OP_BORDER flag
+            if (other.optionalBorder && tileHasOptionalBorder) {
               borderList.push({
                 alignment: tiledata,
                 z: 0x7FFFFFFF,  // Always on top of other borders
@@ -246,8 +251,8 @@ export function computeBorders(
           })
         }
 
-        // Add mountain if center tile's brush also supports optional borders
-        if (other.optionalBorder && borderBrush?.optionalBorder) {
+        // RME: optional/mountain border only if tile has TILESTATE_OP_BORDER flag
+        if (other.optionalBorder && tileHasOptionalBorder) {
           borderList.push({
             alignment: tiledata,
             z: 0x7FFFFFFF,
