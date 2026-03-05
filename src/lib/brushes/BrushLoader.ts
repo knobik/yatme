@@ -237,13 +237,19 @@ export function parseGroundBrushesXml(
       }
     }
 
+    // Parse solo_optional attribute on the brush element
+    const soloOpt = brushEl.getAttribute('solo_optional')
+    if (soloOpt === 'true' || soloOpt === '1') {
+      brush.useSoloOptionalBorder = true
+    }
+
     // Parse optional border
     for (const optEl of brushEl.children) {
       if (optEl.tagName.toLowerCase() !== 'optional') continue
       const optId = parseInt(optEl.getAttribute('id') || '0', 10)
       if (optId) {
         brush.optionalBorder = bordersMap.get(optId) || null
-        // optional border implies outer zilch border capability
+        // optional border implies outer zilch border capability (matches RME)
         if (brush.optionalBorder) {
           brush.hasOuterZilchBorder = true
           brush.hasOuterBorder = true
@@ -251,11 +257,29 @@ export function parseGroundBrushesXml(
       }
     }
 
-    // Parse friends
-    for (const friendEl of brushEl.children) {
-      if (friendEl.tagName.toLowerCase() !== 'friend') continue
-      const friendName = friendEl.getAttribute('name')
-      if (friendName) brush.friends.add(friendName)
+    // Parse friends and enemies
+    // <friend name="X"> → friend (hateFriends = false)
+    // <enemy name="X">  → enemy list (hateFriends = true)
+    // name="all" → wildcard 0xFFFFFFFF
+    // <clear_friends> → clear all
+    for (const el of brushEl.children) {
+      const tag = el.tagName.toLowerCase()
+      if (tag === 'friend') {
+        const friendName = el.getAttribute('name')
+        if (friendName) {
+          brush.friends.add(friendName)
+        }
+        brush.hateFriends = false
+      } else if (tag === 'enemy') {
+        const enemyName = el.getAttribute('name')
+        if (enemyName) {
+          brush.friends.add(enemyName)
+        }
+        brush.hateFriends = true
+      } else if (tag === 'clear_friends') {
+        brush.friends.clear()
+        brush.hateFriends = false
+      }
     }
 
     brushes.push(brush)

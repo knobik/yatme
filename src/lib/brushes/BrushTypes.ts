@@ -32,9 +32,11 @@ export interface GroundBrush {
   items: { id: number; chance: number }[]
   totalChance: number
   borders: BorderBlock[]
-  friends: Set<string>     // friend brush names
-  friendIds: Set<number>   // resolved friend brush IDs
+  friends: Set<string>     // friend brush names (or enemy names if hateFriends)
+  friendIds: Set<number>   // resolved friend/enemy brush IDs
+  hateFriends: boolean     // if true, friends list is actually enemies (inverted logic)
   optionalBorder: AutoBorder | null
+  useSoloOptionalBorder: boolean  // if true, suppress regular border under mountain
   // Derived flags (set during loading)
   hasOuterBorder: boolean
   hasInnerBorder: boolean
@@ -53,7 +55,9 @@ export function createGroundBrush(): GroundBrush {
     borders: [],
     friends: new Set(),
     friendIds: new Set(),
+    hateFriends: false,
     optionalBorder: null,
+    useSoloOptionalBorder: false,
     hasOuterBorder: false,
     hasInnerBorder: false,
     hasOuterZilchBorder: false,

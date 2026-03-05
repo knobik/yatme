@@ -55,11 +55,16 @@ export class BrushRegistry {
     }
 
     // Resolve ground brush friend IDs (names → numeric IDs)
+    // "all" maps to 0xFFFFFFFF (wildcard = friend/enemy of everyone)
     for (const brush of brushes) {
       for (const friendName of brush.friends) {
-        const friend = this.brushesByName.get(friendName)
-        if (friend) {
-          brush.friendIds.add(friend.id)
+        if (friendName === 'all') {
+          brush.friendIds.add(0xFFFFFFFF)
+        } else {
+          const friend = this.brushesByName.get(friendName)
+          if (friend) {
+            brush.friendIds.add(friend.id)
+          }
         }
       }
     }
