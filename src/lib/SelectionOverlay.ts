@@ -138,7 +138,7 @@ export class SelectionOverlay {
   private _dragPreviewKey = ''
 
   updateDragPreview(
-    tiles: TilePos[],
+    tiles: { pos: TilePos; indices: number[] }[],
     dx: number,
     dy: number,
     floor: number,
@@ -150,7 +150,7 @@ export class SelectionOverlay {
       return
     }
 
-    const key = `${tiles.map(t => `${t.x},${t.y}`).join(';')}:${dx},${dy}`
+    const key = `${tiles.map(t => `${t.pos.x},${t.pos.y}:${t.indices.join(',')}`).join(';')}:${dx},${dy}`
     if (key === this._dragPreviewKey) return
     this._dragPreviewKey = key
 
@@ -163,15 +163,19 @@ export class SelectionOverlay {
     // Clear previous sprites
     this._dragPreviewContainer.removeChildren()
 
-    for (const t of tiles) {
+    for (const { pos: t, indices } of tiles) {
       if (t.z !== floor) continue
       const tileKey = `${t.x},${t.y},${t.z}`
       const tile = tileMap.get(tileKey)
       if (!tile) continue
 
+      const selectedItems = indices
+        .filter(i => i >= 0 && i < tile.items.length)
+        .map(i => tile.items[i])
+
       renderTileItems({
         parent: this._dragPreviewContainer!,
-        items: tile.items,
+        items: selectedItems,
         tile,
         baseX: (t.x + dx) * TILE_SIZE,
         baseY: (t.y + dy) * TILE_SIZE,

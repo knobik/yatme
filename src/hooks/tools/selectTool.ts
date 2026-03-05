@@ -65,13 +65,21 @@ export function createSelectHandlers(ctx: ToolContext) {
           ctx.renderer.clearDragPreview()
           return
         }
-        const sourceTiles: TilePos[] = []
-        const seen = new Set<string>()
+        const tileIndices = new Map<string, { pos: TilePos; indices: Set<number> }>()
         for (const s of ctx.selectedItemsRef.current) {
           const key = `${s.x},${s.y},${s.z}`
-          if (!seen.has(key)) { seen.add(key); sourceTiles.push({ x: s.x, y: s.y, z: s.z }) }
+          let entry = tileIndices.get(key)
+          if (!entry) {
+            entry = { pos: { x: s.x, y: s.y, z: s.z }, indices: new Set() }
+            tileIndices.set(key, entry)
+          }
+          entry.indices.add(s.itemIndex)
         }
-        ctx.renderer.updateDragPreview(sourceTiles, dx, dy)
+        const selectedPerTile: { pos: TilePos; indices: number[] }[] = []
+        for (const [, entry] of tileIndices) {
+          selectedPerTile.push({ pos: entry.pos, indices: [...entry.indices] })
+        }
+        ctx.renderer.updateDragPreview(selectedPerTile, dx, dy)
       }
       return
     }
@@ -134,49 +142,72 @@ export function createSelectHandlers(ctx: ToolContext) {
         byTile.set(key, list)
       }
 
-      ctx.mutator.beginBatch('Move items')
-      const newItems: SelectedItemInfo[] = []
-
+      // Phase 1: Snapshot all items to move before any mutations
+      const moveOps: { srcX: number; srcY: number; srcZ: number; indices: number[]; items: OtbmItem[] }[] = []
       for (const [, tileItems] of byTile) {
         const uniqueIndices = [...new Set(tileItems.map(t => t.itemIndex))].sort((a, b) => b - a)
-        const removed: OtbmItem[] = []
         const srcX = tileItems[0].x
         const srcY = tileItems[0].y
         const srcZ = tileItems[0].z
+        const tileKey = `${srcX},${srcY},${srcZ}`
+        const tile = ctx.mapData.tiles.get(tileKey)
+        if (!tile) continue
 
+        const snapshotItems: OtbmItem[] = []
         for (const idx of uniqueIndices) {
-          const tileKey = `${srcX},${srcY},${srcZ}`
+          if (idx >= tile.items.length) continue
+          snapshotItems.unshift(deepCloneItem(tile.items[idx]))
+        }
+        moveOps.push({ srcX, srcY, srcZ, indices: uniqueIndices, items: snapshotItems })
+      }
+
+      ctx.mutator.beginBatch('Move items')
+
+      // Phase 2: Remove all items from source tiles (reverse index order already ensures safe removal)
+      for (const op of moveOps) {
+        for (const idx of op.indices) {
+          const tileKey = `${op.srcX},${op.srcY},${op.srcZ}`
           const tile = ctx.mapData.tiles.get(tileKey)
           if (!tile || idx >= tile.items.length) continue
-          const item = deepCloneItem(tile.items[idx])
-          removed.unshift(item)
-          ctx.mutator.removeItem(srcX, srcY, srcZ, idx)
+          ctx.mutator.removeItem(op.srcX, op.srcY, op.srcZ, idx)
         }
+      }
 
-        const destX = srcX + dx
-        const destY = srcY + dy
-        const destKey = `${destX},${destY},${srcZ}`
-        const destTile = ctx.mapData.tiles.get(destKey)
-        const baseIndex = destTile ? destTile.items.length : 0
-        for (let ri = 0; ri < removed.length; ri++) {
-          ctx.mutator.addItem(destX, destY, srcZ, removed[ri])
-          newItems.push({ x: destX, y: destY, z: srcZ, itemIndex: baseIndex + ri })
+      // Phase 3: Add all items to destination tiles, tracking moved item IDs (with counts for duplicates)
+      const movedCountsByTile = new Map<string, Map<number, number>>()
+      for (const op of moveOps) {
+        const destX = op.srcX + dx
+        const destY = op.srcY + dy
+        const destKey = `${destX},${destY},${op.srcZ}`
+        let counts = movedCountsByTile.get(destKey)
+        if (!counts) { counts = new Map(); movedCountsByTile.set(destKey, counts) }
+        for (const item of op.items) {
+          ctx.mutator.addItem(destX, destY, op.srcZ, item)
+          counts.set(item.id, (counts.get(item.id) ?? 0) + 1)
         }
       }
 
       ctx.mutator.commitBatch()
 
-      // Update selection to new positions
-      const destTilePositions: TilePos[] = []
-      const seen = new Set<string>()
-      for (const item of newItems) {
-        const key = `${item.x},${item.y},${item.z}`
-        if (!seen.has(key)) { seen.add(key); destTilePositions.push({ x: item.x, y: item.y, z: item.z }) }
+      // Rebuild selection from actual tile state to get correct indices
+      const newItems: SelectedItemInfo[] = []
+      for (const [destKey, idCounts] of movedCountsByTile) {
+        const destTile = ctx.mapData.tiles.get(destKey)
+        if (!destTile) continue
+        const [dx_, dy_, dz_] = destKey.split(',').map(Number)
+        const remaining = new Map(idCounts)
+        for (let i = 0; i < destTile.items.length; i++) {
+          const count = remaining.get(destTile.items[i].id)
+          if (count && count > 0) {
+            newItems.push({ x: dx_, y: dy_, z: dz_, itemIndex: i })
+            remaining.set(destTile.items[i].id, count - 1)
+          }
+        }
       }
-      const expandedItems = selectAllItemsOnTiles(destTilePositions, ctx.mapData)
-      ctx.setSelectedItems(expandedItems)
-      ctx.selectedItemsRef.current = expandedItems
-      ctx.applyHighlights(expandedItems)
+
+      ctx.setSelectedItems(newItems)
+      ctx.selectedItemsRef.current = newItems
+      ctx.applyHighlights(newItems)
     }
 
     ctx.selectStartRef.current = null

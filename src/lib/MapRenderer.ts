@@ -255,7 +255,7 @@ export class MapRenderer implements InputHost {
   }
 
   /** Show a ghost preview of tiles being dragged to a new position. */
-  updateDragPreview(tiles: { x: number; y: number; z: number }[], dx: number, dy: number): void {
+  updateDragPreview(tiles: { pos: { x: number; y: number; z: number }; indices: number[] }[], dx: number, dy: number): void {
     this.selection.updateDragPreview(tiles, dx, dy, this.camera.floor, this.mapData.tiles, this.appearances)
   }
 
@@ -267,18 +267,18 @@ export class MapRenderer implements InputHost {
   updatePastePreview(clipboard: ClipboardData, targetX: number, targetY: number, targetZ: number): void {
     // Build a temporary tileMap with clipboard data at their original positions
     const tempMap = new Map<string, OtbmTile>()
-    const tilePositions: { x: number; y: number; z: number }[] = []
+    const tileEntries: { pos: { x: number; y: number; z: number }; indices: number[] }[] = []
     for (const t of clipboard.tiles) {
       const x = clipboard.originX + t.dx
       const y = clipboard.originY + t.dy
       const key = `${x},${y},${targetZ}`
       tempMap.set(key, { x, y, z: targetZ, flags: 0, items: t.items })
-      tilePositions.push({ x, y, z: targetZ })
+      tileEntries.push({ pos: { x, y, z: targetZ }, indices: t.items.map((_, i) => i) })
     }
     // Compute offset from original positions to target
     const dx = targetX - clipboard.originX
     const dy = targetY - clipboard.originY
-    this.selection.updateDragPreview(tilePositions, dx, dy, this.camera.floor, tempMap, this.appearances)
+    this.selection.updateDragPreview(tileEntries, dx, dy, this.camera.floor, tempMap, this.appearances)
   }
 
   /** Update the ghost sprite preview for the brush cursor. */
