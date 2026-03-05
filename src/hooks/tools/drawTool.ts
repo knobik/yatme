@@ -3,10 +3,10 @@ import { resolveBrush, brushBatchName, applyBrushToTile, getTilesInBrush } from 
 
 export function createDrawHandlers(ctx: ToolContext) {
   function onDown(pos: TilePos) {
-    const itemId = ctx.selectedItemIdRef.current
-    if (itemId == null) return
+    const selection = ctx.selectedBrushRef.current
+    if (!selection) return
     ctx.paintedTilesRef.current.clear()
-    const brush = resolveBrush(itemId, ctx.brushRegistryRef.current)
+    const brush = resolveBrush(selection, ctx.brushRegistryRef.current)
     ctx.mutator.beginBatch(brushBatchName(brush))
     const tiles = getTilesInBrush(pos.x, pos.y, ctx.brushSizeRef.current, ctx.brushShapeRef.current)
     for (const t of tiles) {
@@ -18,9 +18,9 @@ export function createDrawHandlers(ctx: ToolContext) {
   }
 
   function onMove(pos: TilePos) {
-    const itemId = ctx.selectedItemIdRef.current
-    if (itemId == null) return
-    const brush = resolveBrush(itemId, ctx.brushRegistryRef.current)
+    const selection = ctx.selectedBrushRef.current
+    if (!selection) return
+    const brush = resolveBrush(selection, ctx.brushRegistryRef.current)
     const tiles = getTilesInBrush(pos.x, pos.y, ctx.brushSizeRef.current, ctx.brushShapeRef.current)
     let any = false
     for (const t of tiles) {

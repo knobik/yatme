@@ -7,7 +7,7 @@ import { DOOR_NORMAL } from '../lib/brushes/WallTypes'
 import type { SelectedItemInfo } from './useSelection'
 import { useSelection } from './useSelection'
 import { useClipboard } from './useClipboard'
-import type { EditorTool, BrushShape, ToolContext, ClipboardData, TilePos } from './tools/types'
+import type { EditorTool, BrushShape, BrushSelection, ToolContext, ClipboardData, TilePos } from './tools/types'
 import { createDrawHandlers } from './tools/drawTool'
 import { createEraseHandlers } from './tools/eraseTool'
 import { createDoorHandlers } from './tools/doorTool'
@@ -15,15 +15,15 @@ import { createSelectHandlers } from './tools/selectTool'
 import { createHoverHandler } from './tools/hoverHandler'
 
 // Re-export types for consumers
-export type { EditorTool, BrushShape, ClipboardData, TilePos }
+export type { EditorTool, BrushShape, BrushSelection, ClipboardData, TilePos }
 export type { SelectedItemInfo }
 export { deriveHighlights } from './useSelection'
 
 export interface EditorToolsState {
   activeTool: EditorTool
   setActiveTool: (tool: EditorTool) => void
-  selectedItemId: number | null
-  setSelectedItemId: (id: number | null) => void
+  selectedBrush: BrushSelection | null
+  setSelectedBrush: (brush: BrushSelection | null) => void
   selectedItems: SelectedItemInfo[]
   setSelectedItems: (items: SelectedItemInfo[]) => void
   hasSelection: boolean
@@ -57,7 +57,7 @@ export function useEditorTools(
 ): EditorToolsState {
   // ── Tool & brush config state ────────────────────────────────────
   const [activeTool, setActiveTool] = useState<EditorTool>('select')
-  const [selectedItemId, setSelectedItemId] = useState<number | null>(null)
+  const [selectedBrush, setSelectedBrush] = useState<BrushSelection | null>(null)
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
   const [brushSize, setBrushSize] = useState(0)
@@ -66,7 +66,7 @@ export function useEditorTools(
 
   // ── Refs (avoid stale closures in pointer handlers) ──────────────
   const activeToolRef = useRef(activeTool)
-  const selectedItemIdRef = useRef(selectedItemId)
+  const selectedBrushRef = useRef(selectedBrush)
   const brushSizeRef = useRef(brushSize)
   const brushShapeRef = useRef(brushShape)
   const brushRegistryRef = useRef(brushRegistry)
@@ -74,7 +74,7 @@ export function useEditorTools(
   const onRequestEditItemRef = useRef(onRequestEditItem)
   const clickToInspectRef = useRef(clickToInspect)
   activeToolRef.current = activeTool
-  selectedItemIdRef.current = selectedItemId
+  selectedBrushRef.current = selectedBrush
   brushSizeRef.current = brushSize
   brushShapeRef.current = brushShape
   brushRegistryRef.current = brushRegistry
@@ -114,7 +114,7 @@ export function useEditorTools(
 
     const ctx: ToolContext = {
       mutator, renderer, mapData,
-      selectedItemIdRef, brushSizeRef, brushShapeRef, brushRegistryRef,
+      selectedBrushRef, brushSizeRef, brushShapeRef, brushRegistryRef,
       activeDoorTypeRef, paintedTilesRef, isDraggingRef,
       selectedItemsRef: selection.selectedItemsRef,
       setSelectedItems: selection.setSelectedItems,
@@ -213,7 +213,7 @@ export function useEditorTools(
   useEffect(() => {
     if (!renderer || activeTool !== 'draw') return
     renderer.clearGhostPreview()
-  }, [renderer, selectedItemId, activeTool])
+  }, [renderer, selectedBrush, activeTool])
 
   useEffect(() => {
     if (activeTool !== 'select') {
@@ -233,8 +233,8 @@ export function useEditorTools(
   return {
     activeTool,
     setActiveTool,
-    selectedItemId,
-    setSelectedItemId,
+    selectedBrush,
+    setSelectedBrush,
     selectedItems: selection.selectedItems,
     setSelectedItems: selection.setSelectedItems,
     hasSelection: selection.hasSelection,

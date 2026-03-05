@@ -1,5 +1,5 @@
 import type { ToolContext, TilePos } from './types'
-import { resolveBrush, getPreviewItemId, getTilesInBrush, getClipboardFootprint } from './types'
+import { getSelectionPreviewId, getTilesInBrush, getClipboardFootprint } from './types'
 
 export function createHoverHandler(ctx: ToolContext) {
   function onHover(pos: TilePos) {
@@ -23,10 +23,14 @@ export function createHoverHandler(ctx: ToolContext) {
 
     // Ghost sprite preview for draw tool
     if (tool === 'draw') {
-      const itemId = ctx.selectedItemIdRef.current
-      if (itemId != null) {
-        const brush = resolveBrush(itemId, ctx.brushRegistryRef.current)
-        ctx.renderer.updateGhostPreview(getPreviewItemId(brush, itemId), tiles)
+      const selection = ctx.selectedBrushRef.current
+      if (selection) {
+        const previewId = getSelectionPreviewId(selection, ctx.brushRegistryRef.current)
+        if (previewId > 0) {
+          ctx.renderer.updateGhostPreview(previewId, tiles)
+        } else {
+          ctx.renderer.clearGhostPreview()
+        }
       } else {
         ctx.renderer.clearGhostPreview()
       }

@@ -20,7 +20,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   showLights: false,
   selectionBorder: false,
   showPalette: true,
-  clickToInspect: true,
+  clickToInspect: false,
 }
 
 const SETTINGS_KEY = 'tibia-editor-settings'

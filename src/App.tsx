@@ -8,16 +8,19 @@ import type { ItemRegistry } from './lib/items'
 import { useEditorTools, deriveHighlights } from './hooks/useEditorTools'
 import type { BrushRegistry } from './lib/brushes/BrushRegistry'
 import { Inspector } from './components/Inspector'
-import { BrushPalette } from './components/BrushPalette'
+import { BrushPalette, type BrushPaletteHandle } from './components/BrushPalette'
 import type { ResolvedTileset } from './lib/tilesets/TilesetTypes'
 import { Toolbar } from './components/Toolbar'
-import { ContextMenu, type ContextMenuGroup } from './components/ContextMenu'
+import { ContextMenu, type ContextMenuGroup, type ContextMenuAction } from './components/ContextMenu'
 import { GoToPositionDialog } from './components/GoToPositionDialog'
 import { SettingsModal } from './components/SettingsModal'
 import { loadSettings, saveSettings, type EditorSettings } from './lib/EditorSettings'
 import { getItemDisplayName } from './lib/items'
 import { loadAssets } from './lib/initPipeline'
 import { setupEditor } from './lib/setupEditor'
+import { findEntryInTilesets } from './lib/tilesets/TilesetLoader'
+import type { BrushSelection } from './hooks/tools/types'
+import type { CategoryType } from './lib/tilesets/TilesetTypes'
 
 interface CameraState {
   x: number
@@ -65,6 +68,8 @@ function App() {
     tile: OtbmTile | null
   } | null>(null)
 
+  const paletteRef = useRef<BrushPaletteHandle>(null)
+
   const [editItemIndex, setEditItemIndex] = useState<number | null>(null)
 
   const handleRequestEditItem = useCallback((_x: number, _y: number, _z: number, itemIndex: number) => {
@@ -101,10 +106,76 @@ function App() {
     rendererRef.current?.deselectTile()
   }, [])
 
-  const handleSelectAsBrush = useCallback((itemId: number) => {
-    tools.setSelectedItemId(itemId)
+  const navigatePaletteAndDraw = useCallback((selection: BrushSelection, primaryCategory: CategoryType) => {
+    const location = findEntryInTilesets(tilesets, (entry) => {
+      if (selection.mode === 'brush' && entry.type === 'brush') {
+        return entry.brushName === selection.brushName && entry.brushType === selection.brushType
+      }
+      if (selection.mode === 'raw' && entry.type === 'item') {
+        return entry.itemId === selection.itemId
+      }
+      return false
+    }, primaryCategory)
+
+    tools.setSelectedBrush(selection)
     tools.setActiveTool('draw')
-  }, [tools])
+
+    if (location) {
+      paletteRef.current?.navigateTo(location.category, location.tilesetName)
+    } else {
+      paletteRef.current?.navigateTo('all', 'ALL')
+    }
+
+    setShowPalette(true)
+    setEditorSettings(s => { const u = { ...s, showPalette: true }; saveSettings(u); return u })
+  }, [tools, tilesets])
+
+  const handleSelectAsRaw = useCallback((itemId: number) => {
+    navigatePaletteAndDraw({ mode: 'raw', itemId }, 'items')
+  }, [navigatePaletteAndDraw])
+
+  const handleSelectAsBrush = useCallback((itemId: number) => {
+    const registry = brushRegistryState
+
+    // Determine what brush this item belongs to and build a selection
+    let selection: BrushSelection
+    let primaryCategory: CategoryType = 'raw'
+
+    const ground = registry?.getBrushForItem(itemId)
+    if (ground) {
+      selection = { mode: 'brush', brushType: 'ground', brushName: ground.name }
+      primaryCategory = 'terrain'
+    } else {
+      const wall = registry?.getWallBrushForItem(itemId)
+      if (wall) {
+        selection = { mode: 'brush', brushType: 'wall', brushName: wall.name }
+        primaryCategory = 'terrain'
+      } else {
+        const carpet = registry?.getCarpetBrushForItem(itemId)
+        if (carpet) {
+          selection = { mode: 'brush', brushType: 'carpet', brushName: carpet.name }
+          primaryCategory = 'terrain'
+        } else {
+          const table = registry?.getTableBrushForItem(itemId)
+          if (table) {
+            selection = { mode: 'brush', brushType: 'table', brushName: table.name }
+            primaryCategory = 'terrain'
+          } else {
+            const doodad = registry?.getDoodadBrushForItem(itemId)
+            if (doodad) {
+              selection = { mode: 'brush', brushType: 'doodad', brushName: doodad.name }
+              primaryCategory = 'doodad'
+            } else {
+              selection = { mode: 'raw', itemId }
+              primaryCategory = 'items'
+            }
+          }
+        }
+      }
+    }
+
+    navigatePaletteAndDraw(selection, primaryCategory)
+  }, [brushRegistryState, navigatePaletteAndDraw])
 
   const handleItemSelectionChange = useCallback((items: typeof tools.selectedItems) => {
     tools.setSelectedItems(items)
@@ -485,6 +556,27 @@ function App() {
         : [],
     }
 
+    // Brush selection group — "Select RAW" for top item, "Select Ground Brush" for ground
+    const brushSelectItems: ContextMenuAction[] = []
+    if (topItem) {
+      brushSelectItems.push({
+        label: 'Select RAW',
+        onClick: () => handleSelectAsRaw(topItem.id),
+      })
+    }
+    // Find ground item (first item with bank/ground flag) and check if it has a ground brush
+    const groundItem = tile?.items?.find(i => {
+      const app = appearancesData?.objects.get(i.id)
+      return !!app?.flags?.bank
+    })
+    if (groundItem && brushRegistryState?.getBrushForItem(groundItem.id)) {
+      brushSelectItems.push({
+        label: 'Select Ground Brush',
+        onClick: () => handleSelectAsBrush(groundItem.id),
+      })
+    }
+    const brushSelectGroup: ContextMenuGroup = { items: brushSelectItems }
+
     const teleportItem = tile?.items?.find(i => i.teleportDestination)
     const dest = teleportItem?.teleportDestination
     const teleportGroup: ContextMenuGroup = {
@@ -507,7 +599,7 @@ function App() {
         : [],
     }
 
-    return [clipboardGroup, positionGroup, itemInfoGroup, doorGroup, teleportGroup]
+    return [clipboardGroup, positionGroup, itemInfoGroup, brushSelectGroup, doorGroup, teleportGroup]
   }
 
   if (error) {
@@ -539,7 +631,8 @@ function App() {
           canRedo={tools.canRedo}
           onUndo={tools.undo}
           onRedo={tools.redo}
-          selectedItemId={tools.selectedItemId}
+          selectedBrush={tools.selectedBrush}
+          brushRegistry={brushRegistryState}
           appearances={appearancesData}
           registry={itemRegistry}
           onCut={tools.cut}
@@ -612,14 +705,14 @@ function App() {
       {/* Brush palette — left side */}
       {!loading && showPalette && itemRegistry && appearancesData && (
         <BrushPalette
+          ref={paletteRef}
           tilesets={tilesets}
           registry={itemRegistry}
           appearances={appearancesData}
-          brushRegistry={brushRegistryState}
           onClose={handleClosePalette}
-          selectedItemId={tools.selectedItemId}
-          onItemSelect={(id) => {
-            tools.setSelectedItemId(id)
+          selectedBrush={tools.selectedBrush}
+          onBrushSelect={(sel) => {
+            tools.setSelectedBrush(sel)
             tools.setActiveTool('draw')
           }}
         />

@@ -16,13 +16,43 @@ export interface Tileset {
   categories: TilesetCategory[]
 }
 
+// ── Resolved palette entries ────────────────────────────────────────
+
+export interface ResolvedBrushEntry {
+  type: 'brush'
+  brushType: 'ground' | 'wall' | 'carpet' | 'table' | 'doodad'
+  brushName: string
+  lookId: number       // preview sprite ID
+  displayName: string  // human-readable brush name
+}
+
+export interface ResolvedItemEntry {
+  type: 'item'
+  itemId: number
+  displayName: string
+}
+
+export type ResolvedPaletteEntry = ResolvedBrushEntry | ResolvedItemEntry
+
+// ── Resolved tilesets ───────────────────────────────────────────────
+
 export interface ResolvedTilesetSection {
   type: 'terrain' | 'doodad' | 'items' | 'raw'
-  itemIds: number[]
+  entries: ResolvedPaletteEntry[]
 }
 
 export interface ResolvedTileset {
   name: string
   sections: ResolvedTilesetSection[]
-  itemIds: number[]  // flat list of all item IDs (for search/count)
+  entryCount: number  // total entries across all sections (for counts)
+}
+
+// ── Palette navigation ──────────────────────────────────────────────
+
+export type CategoryType = 'all' | 'terrain' | 'doodad' | 'items' | 'raw'
+
+export interface PaletteLocation {
+  category: CategoryType
+  tilesetName: string
+  entry: ResolvedPaletteEntry
 }

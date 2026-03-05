@@ -1,9 +1,11 @@
 import type React from 'react'
 import clsx from 'clsx'
-import type { EditorTool, BrushShape } from '../hooks/useEditorTools'
+import type { EditorTool, BrushShape, BrushSelection } from '../hooks/useEditorTools'
 import type { AppearanceData } from '../lib/appearances'
+import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
 import type { ItemRegistry } from '../lib/items'
 import { getItemDisplayName } from '../lib/items'
+import { getSelectionPreviewId } from '../hooks/tools/types'
 import { ItemSprite } from './ItemSprite'
 import { HamburgerMenu, type MenuSection } from './HamburgerMenu'
 import {
@@ -18,7 +20,8 @@ interface ToolbarProps {
   canRedo: boolean
   onUndo: () => void
   onRedo: () => void
-  selectedItemId: number | null
+  selectedBrush: BrushSelection | null
+  brushRegistry: BrushRegistry | null
   appearances: AppearanceData | null
   registry: ItemRegistry | null
   onCut: () => void
@@ -116,7 +119,8 @@ export function Toolbar({
   canRedo,
   onUndo,
   onRedo,
-  selectedItemId,
+  selectedBrush,
+  brushRegistry,
   appearances,
   registry,
   onCut,
@@ -141,8 +145,11 @@ export function Toolbar({
   showLights,
   onToggleLights,
 }: ToolbarProps) {
-  const itemName = selectedItemId != null && registry && appearances
-    ? getItemDisplayName(selectedItemId, registry, appearances)
+  const previewId = selectedBrush ? getSelectionPreviewId(selectedBrush, brushRegistry) : 0
+  const brushLabel = selectedBrush
+    ? selectedBrush.mode === 'brush'
+      ? selectedBrush.brushName.replace(/\b\w/g, c => c.toUpperCase())
+      : (registry && appearances ? getItemDisplayName(selectedBrush.itemId, registry, appearances) : null)
     : null
 
   const menuSections: MenuSection[] = [
@@ -296,18 +303,18 @@ export function Toolbar({
         </>
       )}
 
-      {/* Selected item indicator */}
-      {selectedItemId != null && appearances && (
+      {/* Selected brush indicator */}
+      {selectedBrush && previewId > 0 && appearances && (
         <>
           <div className="h-[22px] w-px shrink-0 bg-border-subtle" />
           <div className="flex items-center gap-2">
-            <ItemSprite itemId={selectedItemId} appearances={appearances} size={24} />
+            <ItemSprite itemId={previewId} appearances={appearances} size={24} />
             <div className="flex flex-col gap-[1px]">
               <span className="max-w-[120px] truncate font-ui text-sm text-fg">
-                {itemName}
+                {brushLabel}
               </span>
               <span className="font-mono text-xs text-fg-faint">
-                #{selectedItemId}
+                {selectedBrush.mode === 'brush' ? selectedBrush.brushType : `#${selectedBrush.itemId}`}
               </span>
             </div>
           </div>

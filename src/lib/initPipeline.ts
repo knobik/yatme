@@ -142,7 +142,7 @@ export async function loadAssets(
   try {
     const rawTilesets = await loadTilesets()
     if (brushRegistry) {
-      tilesets = resolveTilesets(rawTilesets, brushRegistry, appearances)
+      tilesets = resolveTilesets(rawTilesets, brushRegistry, appearances, registry)
       console.log(`[TilesetLoader] Loaded ${tilesets.length} tilesets`)
     }
   } catch (e) {

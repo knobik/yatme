@@ -1,29 +1,24 @@
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import { useState, useMemo, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react'
 import clsx from 'clsx'
-import type { ItemRegistry } from '../lib/items'
 import type { AppearanceData } from '../lib/appearances'
-import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
-import type { ResolvedTileset } from '../lib/tilesets/TilesetTypes'
+import type { ResolvedTileset, ResolvedPaletteEntry, ResolvedItemEntry, CategoryType } from '../lib/tilesets/TilesetTypes'
+import type { BrushSelection } from '../hooks/tools/types'
 import { getItemDisplayName } from '../lib/items'
+import type { ItemRegistry } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
-
-type SmartBrushType = 'ground' | 'wall' | 'carpet' | 'table' | 'doodad' | null
 
 interface BrushPaletteProps {
   tilesets: ResolvedTileset[]
   registry: ItemRegistry
   appearances: AppearanceData
-  brushRegistry?: BrushRegistry | null
   onClose: () => void
-  selectedItemId?: number | null
-  onItemSelect?: (itemId: number) => void
+  selectedBrush?: BrushSelection | null
+  onBrushSelect?: (selection: BrushSelection) => void
 }
 
 const COLS = 4
 const CELL_HEIGHT = 64
 const BUFFER_ROWS = 2
-
-type CategoryType = 'all' | 'terrain' | 'doodad' | 'items' | 'raw'
 
 const CATEGORIES: { id: CategoryType; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -33,7 +28,41 @@ const CATEGORIES: { id: CategoryType; label: string }[] = [
   { id: 'raw', label: 'Raw' },
 ]
 
-export function BrushPalette({ tilesets, registry, appearances, brushRegistry, onClose, selectedItemId, onItemSelect }: BrushPaletteProps) {
+/** Unique key for a palette entry. */
+function entryKey(entry: ResolvedPaletteEntry): string {
+  return entry.type === 'brush' ? `b:${entry.brushName}` : `i:${entry.itemId}`
+}
+
+/** Check if an entry matches the current selection. */
+function isEntrySelected(entry: ResolvedPaletteEntry, sel: BrushSelection | null | undefined): boolean {
+  if (!sel) return false
+  if (entry.type === 'brush' && sel.mode === 'brush') {
+    return entry.brushName === sel.brushName && entry.brushType === sel.brushType
+  }
+  if (entry.type === 'item' && sel.mode === 'raw') {
+    return entry.itemId === sel.itemId
+  }
+  return false
+}
+
+/** Convert a palette entry to a BrushSelection. */
+function entryToSelection(entry: ResolvedPaletteEntry): BrushSelection {
+  if (entry.type === 'brush') {
+    return { mode: 'brush', brushType: entry.brushType, brushName: entry.brushName }
+  }
+  return { mode: 'raw', itemId: entry.itemId }
+}
+
+/** Get sprite ID for rendering an entry's preview. */
+function entrySpriteId(entry: ResolvedPaletteEntry): number {
+  return entry.type === 'brush' ? entry.lookId : entry.itemId
+}
+
+export interface BrushPaletteHandle {
+  navigateTo(category: CategoryType, tilesetName: string): void
+}
+
+export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(function BrushPalette({ tilesets, registry, appearances, onClose, selectedBrush, onBrushSelect }, ref) {
   const [activeCategory, setActiveCategory] = useState<CategoryType>('all')
   const [selectedTileset, setSelectedTileset] = useState<string>('ALL')
   const [tilesetSearch, setTilesetSearch] = useState('')
@@ -44,6 +73,18 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
   const searchTimerRef = useRef<number>(0)
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Expose navigation API to parent
+  useImperativeHandle(ref, () => ({
+    navigateTo(category: CategoryType, tilesetName: string) {
+      setActiveCategory(category)
+      setSelectedTileset(tilesetName)
+      setSearch('')
+      setDebouncedSearch('')
+      setTilesetSearch('')
+      setTilesetOpen(false)
+    },
+  }), [])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -67,32 +108,21 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
     }, 150)
   }, [])
 
-  // Build brush type cache for all items
-  const brushTypeCache = useMemo(() => {
-    const cache = new Map<number, SmartBrushType>()
-    if (!brushRegistry) return cache
-    for (const [id] of appearances.objects) {
-      if (brushRegistry.getBrushForItem(id)) cache.set(id, 'ground')
-      else if (brushRegistry.getWallBrushForItem(id)) cache.set(id, 'wall')
-      else if (brushRegistry.getCarpetBrushForItem(id)) cache.set(id, 'carpet')
-      else if (brushRegistry.getTableBrushForItem(id)) cache.set(id, 'table')
-      else if (brushRegistry.getDoodadBrushForItem(id)) cache.set(id, 'doodad')
-    }
-    return cache
-  }, [appearances, brushRegistry])
-
-  // Build the "ALL" item list
-  const allItems = useMemo(() => {
-    const items: { id: number; name: string }[] = []
+  // Build the "ALL" entry list (all items as raw entries, for when no category filter)
+  const allEntries = useMemo((): ResolvedPaletteEntry[] => {
+    const entries: ResolvedItemEntry[] = []
     for (const [id] of appearances.objects) {
       const appearance = appearances.objects.get(id)
       const info = appearance?.frameGroup?.[0]?.spriteInfo
       if (!info || info.spriteId.length === 0 || info.spriteId[0] === 0) continue
-      const name = getItemDisplayName(id, registry, appearances)
-      items.push({ id, name })
+      entries.push({
+        type: 'item',
+        itemId: id,
+        displayName: getItemDisplayName(id, registry, appearances),
+      })
     }
-    items.sort((a, b) => a.id - b.id)
-    return items
+    entries.sort((a, b) => a.itemId - b.itemId)
+    return entries
   }, [appearances, registry])
 
   // Filter tilesets that have content in the active category
@@ -101,66 +131,64 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
     return tilesets.filter(t => t.sections.some(s => s.type === activeCategory))
   }, [tilesets, activeCategory])
 
-  // Reset tileset selection when category changes (if current tileset isn't in the new category)
+  // Reset tileset selection when category changes
   useEffect(() => {
     if (selectedTileset === 'ALL') return
     const stillValid = categoryTilesets.some(t => t.name === selectedTileset)
     if (!stillValid) setSelectedTileset('ALL')
   }, [categoryTilesets, selectedTileset])
 
-  // Build item list based on category + tileset selection
-  const tilesetItems = useMemo(() => {
-    if (selectedTileset === 'ALL' && activeCategory === 'all') return allItems
+  // Build entry list based on category + tileset selection
+  const currentEntries = useMemo((): ResolvedPaletteEntry[] => {
+    if (selectedTileset === 'ALL' && activeCategory === 'all') return allEntries
 
     if (selectedTileset === 'ALL') {
-      const seen = new Set<number>()
-      const items: { id: number; name: string }[] = []
+      // Collect entries from all tilesets for the active category
+      const seenKeys = new Set<string>()
+      const entries: ResolvedPaletteEntry[] = []
       for (const t of categoryTilesets) {
         for (const s of t.sections) {
           if (s.type !== activeCategory) continue
-          for (const id of s.itemIds) {
-            if (seen.has(id)) continue
-            seen.add(id)
-            items.push({ id, name: getItemDisplayName(id, registry, appearances) })
+          for (const entry of s.entries) {
+            const key = entryKey(entry)
+            if (seenKeys.has(key)) continue
+            seenKeys.add(key)
+            entries.push(entry)
           }
         }
       }
-      return items
+      return entries
     }
 
     const tileset = tilesets.find(t => t.name === selectedTileset)
     if (!tileset) return []
 
     if (activeCategory === 'all') {
-      return tileset.itemIds.map(id => ({
-        id,
-        name: getItemDisplayName(id, registry, appearances),
-      }))
+      // All entries from all sections of this tileset
+      const entries: ResolvedPaletteEntry[] = []
+      for (const s of tileset.sections) entries.push(...s.entries)
+      return entries
     }
 
     const section = tileset.sections.find(s => s.type === activeCategory)
-    if (!section) return []
-    return section.itemIds.map(id => ({
-      id,
-      name: getItemDisplayName(id, registry, appearances),
-    }))
-  }, [selectedTileset, activeCategory, tilesets, categoryTilesets, allItems, registry, appearances])
+    return section?.entries ?? []
+  }, [selectedTileset, activeCategory, tilesets, categoryTilesets, allEntries])
 
   // Filter by search
-  const filteredItems = useMemo(() => {
-    let items = tilesetItems
-    if (debouncedSearch.length >= 2) {
-      const isNumeric = /^\d+$/.test(debouncedSearch)
-      if (isNumeric) {
-        const searchId = parseInt(debouncedSearch, 10)
-        items = items.filter(item => item.id === searchId || item.id.toString().includes(debouncedSearch))
-      } else {
-        const lower = debouncedSearch.toLowerCase()
-        items = items.filter(item => item.name.toLowerCase().includes(lower))
-      }
+  const filteredEntries = useMemo(() => {
+    if (debouncedSearch.length < 2) return currentEntries
+    const isNumeric = /^\d+$/.test(debouncedSearch)
+    if (isNumeric) {
+      const searchStr = debouncedSearch
+      const searchId = parseInt(debouncedSearch, 10)
+      return currentEntries.filter(e => {
+        if (e.type === 'item') return e.itemId === searchId || e.itemId.toString().includes(searchStr)
+        return e.lookId === searchId || e.lookId.toString().includes(searchStr)
+      })
     }
-    return items
-  }, [tilesetItems, debouncedSearch])
+    const lower = debouncedSearch.toLowerCase()
+    return currentEntries.filter(e => e.displayName.toLowerCase().includes(lower))
+  }, [currentEntries, debouncedSearch])
 
   // Filter tileset dropdown list by search
   const filteredDropdownTilesets = useMemo(() => {
@@ -169,11 +197,11 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
     return categoryTilesets.filter(t => t.name.toLowerCase().includes(lower))
   }, [categoryTilesets, tilesetSearch])
 
-  // Get item count for a tileset within the active category
+  // Get entry count for a tileset within the active category
   const getTilesetCount = useCallback((tileset: ResolvedTileset) => {
-    if (activeCategory === 'all') return tileset.itemIds.length
+    if (activeCategory === 'all') return tileset.entryCount
     const section = tileset.sections.find(s => s.type === activeCategory)
-    return section?.itemIds.length ?? 0
+    return section?.entries.length ?? 0
   }, [activeCategory])
 
   // Reset scroll when filter changes
@@ -183,7 +211,7 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
   }, [selectedTileset, activeCategory, debouncedSearch])
 
   // Virtual scrolling calculations
-  const totalRows = Math.ceil(filteredItems.length / COLS)
+  const totalRows = Math.ceil(filteredEntries.length / COLS)
   const totalHeight = totalRows * CELL_HEIGHT
 
   const handleScroll = useCallback(() => {
@@ -195,7 +223,7 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
   const viewportHeight = scrollRef.current?.clientHeight ?? 400
   const startRow = Math.max(0, Math.floor(scrollTop / CELL_HEIGHT) - BUFFER_ROWS)
   const endRow = Math.min(totalRows, Math.ceil((scrollTop + viewportHeight) / CELL_HEIGHT) + BUFFER_ROWS)
-  const visibleItems = filteredItems.slice(startRow * COLS, endRow * COLS)
+  const visibleEntries = filteredEntries.slice(startRow * COLS, endRow * COLS)
 
   const selectedLabel = selectedTileset === 'ALL' ? 'All Tilesets' : selectedTileset
 
@@ -207,7 +235,7 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
           BRUSHES
         </span>
         <span className="font-mono text-sm text-fg-faint">
-          {filteredItems.length.toLocaleString()}
+          {filteredEntries.length.toLocaleString()}
         </span>
         <div className="flex-1" />
         <button className="btn btn-icon h-[22px] w-[22px] border-none bg-transparent" onClick={onClose} title="Close (Esc)">
@@ -280,7 +308,7 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
         <input
           className="search-input"
           type="text"
-          placeholder="Search items..."
+          placeholder="Search brushes..."
           value={search}
           onChange={(e) => handleSearch(e.target.value)}
         />
@@ -304,16 +332,22 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
               right: 0,
             }}
           >
-            {visibleItems.map((item) => {
-              const brush = brushTypeCache.get(item.id) ?? null
+            {visibleEntries.map((entry) => {
+              const spriteId = entrySpriteId(entry)
+              const isBrush = entry.type === 'brush'
+              const title = isBrush
+                ? `${entry.displayName} (${entry.brushType})`
+                : `${entry.displayName} (ID: ${entry.itemId})`
+
               return (
                 <div
-                  key={item.id}
-                  className={clsx('item-cell', item.id === selectedItemId && 'selected')}
-                  onClick={() => onItemSelect?.(item.id)}
+                  key={entryKey(entry)}
+                  className={clsx('item-cell', isEntrySelected(entry, selectedBrush) && 'selected')}
+                  onClick={() => onBrushSelect?.(entryToSelection(entry))}
                   draggable
                   onDragStart={(e) => {
-                    e.dataTransfer.setData('application/x-tibia-item', String(item.id))
+                    const itemId = isBrush ? entry.lookId : entry.itemId
+                    e.dataTransfer.setData('application/x-tibia-item', String(itemId))
                     e.dataTransfer.effectAllowed = 'copy'
                     const canvas = e.currentTarget.querySelector('canvas')
                     if (canvas) {
@@ -327,19 +361,19 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
                       requestAnimationFrame(() => document.body.removeChild(ghost))
                     }
                   }}
-                  title={`${item.name} (ID: ${item.id})`}
+                  title={title}
                 >
                   <div className="relative">
-                    <ItemSprite itemId={item.id} appearances={appearances} size={36} />
-                    {brush && (
-                      <span className={`brush-badge brush-badge-${brush}`} title={`Smart brush: ${brush}`}>
+                    <ItemSprite itemId={spriteId} appearances={appearances} size={36} />
+                    {isBrush && (
+                      <span className={`brush-badge brush-badge-${entry.brushType}`} title={`Brush: ${entry.brushType}`}>
                         <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
                           <path d="M15.2 0.8a2.7 2.7 0 0 0-3.8 0L4 8.2l-.2.6L2.4 13a.5.5 0 0 0 .6.6l4.2-1.4.6-.2L15.2 4.6a2.7 2.7 0 0 0 0-3.8zM5.4 9L11 3.4l1.6 1.6L7 11 5.4 9z"/>
                         </svg>
                       </span>
                     )}
                   </div>
-                  <span className="item-name">{item.name}</span>
+                  <span className="item-name">{entry.displayName}</span>
                 </div>
               )
             })}
@@ -348,4 +382,4 @@ export function BrushPalette({ tilesets, registry, appearances, brushRegistry, o
       </div>
     </div>
   )
-}
+})

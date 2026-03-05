@@ -11,6 +11,14 @@ import type { SelectedItemInfo } from '../useSelection'
 export type EditorTool = 'select' | 'draw' | 'erase' | 'door'
 export type BrushShape = 'square' | 'circle'
 
+// ── Brush selection (what the user picked in the palette) ───────────
+
+export type BrushSelectionBrushType = 'ground' | 'wall' | 'carpet' | 'table' | 'doodad'
+
+export type BrushSelection =
+  | { mode: 'brush'; brushType: BrushSelectionBrushType; brushName: string }
+  | { mode: 'raw'; itemId: number }
+
 export interface TilePos {
   x: number
   y: number
@@ -23,7 +31,7 @@ export interface ToolContext {
   renderer: MapRenderer
   mapData: OtbmMap
   // Brush config refs
-  selectedItemIdRef: React.RefObject<number | null>
+  selectedBrushRef: React.RefObject<BrushSelection | null>
   brushSizeRef: React.RefObject<number>
   brushShapeRef: React.RefObject<BrushShape>
   brushRegistryRef: React.RefObject<BrushRegistry | null>
@@ -68,22 +76,44 @@ export type ResolvedBrush =
   | { type: 'doodad'; brush: DoodadBrush }
   | { type: 'raw'; itemId: number }
 
-export function resolveBrush(itemId: number, registry: BrushRegistry | null): ResolvedBrush {
-  if (registry) {
-    const ground = registry.getBrushForItem(itemId)
-    if (ground) return { type: 'ground', brush: ground }
-    const door = registry.getDoorInfo(itemId)
-    if (door) return { type: 'door', doorType: door.type }
-    const wall = registry.getWallBrushForItem(itemId)
-    if (wall) return { type: 'wall', brush: wall }
-    const carpet = registry.getCarpetBrushForItem(itemId)
-    if (carpet) return { type: 'carpet', brush: carpet }
-    const table = registry.getTableBrushForItem(itemId)
-    if (table) return { type: 'table', brush: table }
-    const doodad = registry.getDoodadBrushForItem(itemId)
-    if (doodad) return { type: 'doodad', brush: doodad }
+export function resolveBrush(selection: BrushSelection, registry: BrushRegistry | null): ResolvedBrush {
+  if (selection.mode === 'raw') {
+    return { type: 'raw', itemId: selection.itemId }
   }
-  return { type: 'raw', itemId }
+
+  // Brush mode — look up by name
+  if (registry) {
+    switch (selection.brushType) {
+      case 'ground': {
+        const brush = registry.getBrushByName(selection.brushName)
+        if (brush) return { type: 'ground', brush }
+        break
+      }
+      case 'wall': {
+        const brush = registry.getWallBrushByName(selection.brushName)
+        if (brush) return { type: 'wall', brush }
+        break
+      }
+      case 'carpet': {
+        const brush = registry.getCarpetBrushByName(selection.brushName)
+        if (brush) return { type: 'carpet', brush }
+        break
+      }
+      case 'table': {
+        const brush = registry.getTableBrushByName(selection.brushName)
+        if (brush) return { type: 'table', brush }
+        break
+      }
+      case 'doodad': {
+        const brush = registry.getDoodadBrushByName(selection.brushName)
+        if (brush) return { type: 'doodad', brush }
+        break
+      }
+    }
+  }
+
+  // Fallback: brush not found in registry
+  return { type: 'raw', itemId: 0 }
 }
 
 export function brushBatchName(brush: ResolvedBrush): string {
@@ -124,6 +154,19 @@ export function getPreviewItemId(brush: ResolvedBrush, fallbackId: number): numb
     case 'table': return brush.brush.lookId > 0 ? brush.brush.lookId : fallbackId
     case 'doodad': return brush.brush.lookId > 0 ? brush.brush.lookId : fallbackId
     default: return fallbackId
+  }
+}
+
+/** Get a preview item ID directly from a BrushSelection without full resolution. */
+export function getSelectionPreviewId(selection: BrushSelection, registry: BrushRegistry | null): number {
+  if (selection.mode === 'raw') return selection.itemId
+  if (!registry) return 0
+  switch (selection.brushType) {
+    case 'ground': return registry.getBrushByName(selection.brushName)?.lookId ?? 0
+    case 'wall': return registry.getWallBrushByName(selection.brushName)?.lookId ?? 0
+    case 'carpet': return registry.getCarpetBrushByName(selection.brushName)?.lookId ?? 0
+    case 'table': return registry.getTableBrushByName(selection.brushName)?.lookId ?? 0
+    case 'doodad': return registry.getDoodadBrushByName(selection.brushName)?.lookId ?? 0
   }
 }
 

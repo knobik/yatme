@@ -1,7 +1,14 @@
 import { sanitizeXml } from '../brushes/BrushLoader'
 import type { BrushRegistry } from '../brushes/BrushRegistry'
 import type { AppearanceData } from '../appearances'
-import type { Tileset, TilesetCategory, TilesetEntry, ResolvedTileset, ResolvedTilesetSection } from './TilesetTypes'
+import type { ItemRegistry } from '../items'
+import { getItemDisplayName } from '../items'
+import type {
+  Tileset, TilesetCategory, TilesetEntry,
+  ResolvedTileset, ResolvedTilesetSection,
+  ResolvedPaletteEntry, ResolvedBrushEntry,
+  CategoryType, PaletteLocation,
+} from './TilesetTypes'
 
 // ── XML Parsing ──────────────────────────────────────────────────────
 
@@ -85,118 +92,178 @@ function hasSprite(id: number, appearances: AppearanceData): boolean {
   return !!(info && info.spriteId.length > 0 && info.spriteId[0] !== 0)
 }
 
-function collectBrushItemIds(name: string, registry: BrushRegistry): number[] {
-  // Try ground brush
+type BrushType = ResolvedBrushEntry['brushType']
+
+/** Determine what brush type a named brush is. */
+function classifyBrush(name: string, registry: BrushRegistry): { brushType: BrushType; lookId: number } | null {
   const ground = registry.getBrushByName(name)
-  if (ground) return ground.items.map(i => i.id)
+  if (ground) return { brushType: 'ground', lookId: ground.lookId }
 
-  // Try wall brush
   const wall = registry.getWallBrushByName(name)
-  if (wall) {
-    // Use lookId as representative
-    if (wall.lookId > 0) return [wall.lookId]
-    const ids: number[] = []
-    for (const node of wall.wallItems) {
-      for (const item of node.items) ids.push(item.id)
-    }
-    return ids
-  }
+  if (wall) return { brushType: 'wall', lookId: wall.lookId }
 
-  // Try carpet brush
   const carpet = registry.getCarpetBrushByName(name)
-  if (carpet) {
-    if (carpet.lookId > 0) return [carpet.lookId]
-    const ids: number[] = []
-    for (const node of carpet.carpetItems) {
-      for (const item of node.items) ids.push(item.id)
-    }
-    return ids
-  }
+  if (carpet) return { brushType: 'carpet', lookId: carpet.lookId }
 
-  // Try table brush
   const table = registry.getTableBrushByName(name)
-  if (table) {
-    if (table.lookId > 0) return [table.lookId]
-    const ids: number[] = []
-    for (const node of table.tableItems) {
-      for (const item of node.items) ids.push(item.id)
-    }
-    return ids
-  }
+  if (table) return { brushType: 'table', lookId: table.lookId }
 
-  // Try doodad brush
   const doodad = registry.getDoodadBrushByName(name)
-  if (doodad) {
-    if (doodad.lookId > 0) return [doodad.lookId]
-    const ids: number[] = []
-    for (const alt of doodad.alternatives) {
-      for (const single of alt.singles) ids.push(single.itemId)
-    }
-    return ids
-  }
+  if (doodad) return { brushType: 'doodad', lookId: doodad.lookId }
 
-  return []
+  return null
+}
+
+/** Format a brush name for display: "grass" → "Grass", "stone wall" → "Stone Wall" */
+function formatBrushName(name: string): string {
+  return name.replace(/\b\w/g, c => c.toUpperCase())
 }
 
 function resolveEntries(
   entries: TilesetEntry[],
+  sectionType: TilesetCategory['type'],
   registry: BrushRegistry,
   appearances: AppearanceData,
-  seen: Set<number>,
-): number[] {
-  const itemIds: number[] = []
-  const addId = (id: number) => {
-    if (!seen.has(id) && hasSprite(id, appearances)) {
-      seen.add(id)
-      itemIds.push(id)
-    }
+  itemRegistry: ItemRegistry,
+  seenBrushes: Set<string>,
+  seenItems: Set<number>,
+): ResolvedPaletteEntry[] {
+  const result: ResolvedPaletteEntry[] = []
+  const isCuratedSection = sectionType === 'terrain' || sectionType === 'doodad'
+
+  const addItem = (id: number) => {
+    if (seenItems.has(id) || !hasSprite(id, appearances)) return
+    seenItems.add(id)
+    result.push({
+      type: 'item',
+      itemId: id,
+      displayName: getItemDisplayName(id, itemRegistry, appearances),
+    })
   }
 
   for (const entry of entries) {
     switch (entry.type) {
+      case 'brush': {
+        if (!entry.name) break
+        if (isCuratedSection) {
+          // In terrain/doodad: emit a single brush entry
+          if (seenBrushes.has(entry.name)) break
+          const info = classifyBrush(entry.name, registry)
+          if (!info) break
+          // Only add if lookId has a sprite
+          if (info.lookId > 0 && hasSprite(info.lookId, appearances)) {
+            seenBrushes.add(entry.name)
+            result.push({
+              type: 'brush',
+              brushType: info.brushType,
+              brushName: entry.name,
+              lookId: info.lookId,
+              displayName: formatBrushName(entry.name),
+            })
+          }
+        } else {
+          // In items/raw: expand brush to individual items
+          const ground = registry.getBrushByName(entry.name)
+          if (ground) { for (const i of ground.items) addItem(i.id); break }
+          const wall = registry.getWallBrushByName(entry.name)
+          if (wall) { if (wall.lookId > 0) addItem(wall.lookId); break }
+          const carpet = registry.getCarpetBrushByName(entry.name)
+          if (carpet) {
+            for (const node of carpet.carpetItems) for (const i of node.items) addItem(i.id)
+            break
+          }
+          const table = registry.getTableBrushByName(entry.name)
+          if (table) {
+            for (const node of table.tableItems) for (const i of node.items) addItem(i.id)
+            break
+          }
+          const doodad = registry.getDoodadBrushByName(entry.name)
+          if (doodad) {
+            for (const alt of doodad.alternatives) for (const s of alt.singles) addItem(s.itemId)
+            break
+          }
+        }
+        break
+      }
       case 'item':
-        if (entry.id != null) addId(entry.id)
+        if (entry.id != null) addItem(entry.id)
         break
       case 'range':
         if (entry.fromId != null && entry.toId != null) {
-          for (let id = entry.fromId; id <= entry.toId; id++) addId(id)
-        }
-        break
-      case 'brush':
-        if (entry.name) {
-          const ids = collectBrushItemIds(entry.name, registry)
-          for (const id of ids) addId(id)
+          for (let id = entry.fromId; id <= entry.toId; id++) addItem(id)
         }
         break
     }
   }
-  return itemIds
+  return result
 }
 
 export function resolveTilesets(
   tilesets: Tileset[],
   registry: BrushRegistry,
   appearances: AppearanceData,
+  itemRegistry: ItemRegistry,
 ): ResolvedTileset[] {
   const resolved: ResolvedTileset[] = []
 
   for (const tileset of tilesets) {
-    const seen = new Set<number>()
+    const seenBrushes = new Set<string>()
+    const seenItems = new Set<number>()
     const sections: ResolvedTilesetSection[] = []
-    const allItemIds: number[] = []
+    let entryCount = 0
 
     for (const category of tileset.categories) {
-      const sectionIds = resolveEntries(category.entries, registry, appearances, seen)
-      if (sectionIds.length > 0) {
-        sections.push({ type: category.type, itemIds: sectionIds })
-        allItemIds.push(...sectionIds)
+      const entries = resolveEntries(
+        category.entries, category.type, registry, appearances, itemRegistry,
+        seenBrushes, seenItems,
+      )
+      if (entries.length > 0) {
+        sections.push({ type: category.type, entries })
+        entryCount += entries.length
       }
     }
 
-    if (allItemIds.length > 0) {
-      resolved.push({ name: tileset.name, sections, itemIds: allItemIds })
+    if (entryCount > 0) {
+      resolved.push({ name: tileset.name, sections, entryCount })
     }
   }
 
   return resolved
+}
+
+// ── Palette search ──────────────────────────────────────────────────
+
+const CATEGORY_SEARCH_ORDER: ReadonlyArray<'terrain' | 'doodad' | 'items' | 'raw'> = [
+  'terrain', 'doodad', 'items', 'raw',
+]
+
+/**
+ * Search resolved tilesets for an entry matching the predicate.
+ * Searches primaryCategory first (if given), then the remaining categories in order.
+ * Returns the first match with its category + tileset name, or null.
+ */
+export function findEntryInTilesets(
+  tilesets: ResolvedTileset[],
+  predicate: (entry: ResolvedPaletteEntry) => boolean,
+  primaryCategory?: CategoryType,
+): PaletteLocation | null {
+  // Build ordered list of section types to search
+  const order = primaryCategory && primaryCategory !== 'all'
+    ? [primaryCategory, ...CATEGORY_SEARCH_ORDER.filter(c => c !== primaryCategory)]
+    : [...CATEGORY_SEARCH_ORDER]
+
+  for (const cat of order) {
+    for (const tileset of tilesets) {
+      for (const section of tileset.sections) {
+        if (section.type !== cat) continue
+        for (const entry of section.entries) {
+          if (predicate(entry)) {
+            return { category: cat, tilesetName: tileset.name, entry }
+          }
+        }
+      }
+    }
+  }
+
+  return null
 }
