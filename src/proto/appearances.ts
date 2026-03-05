@@ -3,14 +3,16 @@ import * as _m0 from "protobufjs/minimal";
 
 export const protobufPackage = "otclient.protobuf.appearances";
 
-export enum playerAction {
-  PLAYER_ACTION_NONE = 0,
-  PLAYER_ACTION_LOOK = 1,
-  PLAYER_ACTION_USE = 2,
-  PLAYER_ACTION_OPEN = 3,
-  PLAYER_ACTION_AUTOWALK_HIGHLIGHT = 4,
-  UNRECOGNIZED = -1,
-}
+export const playerAction = {
+  PLAYER_ACTION_NONE: 0,
+  PLAYER_ACTION_LOOK: 1,
+  PLAYER_ACTION_USE: 2,
+  PLAYER_ACTION_OPEN: 3,
+  PLAYER_ACTION_AUTOWALK_HIGHLIGHT: 4,
+  UNRECOGNIZED: -1,
+} as const;
+
+export type playerAction = typeof playerAction[keyof typeof playerAction];
 
 export function playerActionFromJSON(object: any): playerAction {
   switch (object) {
@@ -54,36 +56,38 @@ export function playerActionToJSON(object: playerAction): string {
   }
 }
 
-export enum itemCategory {
-  ITEM_CATEGORY_ARMORS = 1,
-  ITEM_CATEGORY_AMULETS = 2,
-  ITEM_CATEGORY_BOOTS = 3,
-  ITEM_CATEGORY_CONTAINERS = 4,
-  ITEM_CATEGORY_DECORATION = 5,
-  ITEM_CATEGORY_FOOD = 6,
-  ITEM_CATEGORY_HELMETS_HATS = 7,
-  ITEM_CATEGORY_LEGS = 8,
-  ITEM_CATEGORY_OTHERS = 9,
-  ITEM_CATEGORY_POTIONS = 10,
-  ITEM_CATEGORY_RINGS = 11,
-  ITEM_CATEGORY_RUNES = 12,
-  ITEM_CATEGORY_SHIELDS = 13,
-  ITEM_CATEGORY_TOOLS = 14,
-  ITEM_CATEGORY_VALUABLES = 15,
-  ITEM_CATEGORY_AMMUNITION = 16,
-  ITEM_CATEGORY_AXES = 17,
-  ITEM_CATEGORY_CLUBS = 18,
-  ITEM_CATEGORY_DISTANCE_WEAPONS = 19,
-  ITEM_CATEGORY_SWORDS = 20,
-  ITEM_CATEGORY_WANDS_RODS = 21,
-  ITEM_CATEGORY_PREMIUM_SCROLLS = 22,
-  ITEM_CATEGORY_TIBIA_COINS = 23,
-  ITEM_CATEGORY_CREATURE_PRODUCTS = 24,
-  ITEM_CATEGORY_QUIVER = 25,
-  ITEM_CATEGORY_SOUL_CORES = 26,
-  ITEM_CATEGORY_FIST_WEAPONS = 27,
-  UNRECOGNIZED = -1,
-}
+export const itemCategory = {
+  ITEM_CATEGORY_ARMORS: 1,
+  ITEM_CATEGORY_AMULETS: 2,
+  ITEM_CATEGORY_BOOTS: 3,
+  ITEM_CATEGORY_CONTAINERS: 4,
+  ITEM_CATEGORY_DECORATION: 5,
+  ITEM_CATEGORY_FOOD: 6,
+  ITEM_CATEGORY_HELMETS_HATS: 7,
+  ITEM_CATEGORY_LEGS: 8,
+  ITEM_CATEGORY_OTHERS: 9,
+  ITEM_CATEGORY_POTIONS: 10,
+  ITEM_CATEGORY_RINGS: 11,
+  ITEM_CATEGORY_RUNES: 12,
+  ITEM_CATEGORY_SHIELDS: 13,
+  ITEM_CATEGORY_TOOLS: 14,
+  ITEM_CATEGORY_VALUABLES: 15,
+  ITEM_CATEGORY_AMMUNITION: 16,
+  ITEM_CATEGORY_AXES: 17,
+  ITEM_CATEGORY_CLUBS: 18,
+  ITEM_CATEGORY_DISTANCE_WEAPONS: 19,
+  ITEM_CATEGORY_SWORDS: 20,
+  ITEM_CATEGORY_WANDS_RODS: 21,
+  ITEM_CATEGORY_PREMIUM_SCROLLS: 22,
+  ITEM_CATEGORY_TIBIA_COINS: 23,
+  ITEM_CATEGORY_CREATURE_PRODUCTS: 24,
+  ITEM_CATEGORY_QUIVER: 25,
+  ITEM_CATEGORY_SOUL_CORES: 26,
+  ITEM_CATEGORY_FIST_WEAPONS: 27,
+  UNRECOGNIZED: -1,
+} as const;
+
+export type itemCategory = typeof itemCategory[keyof typeof itemCategory];
 
 export function itemCategoryFromJSON(object: any): itemCategory {
   switch (object) {
@@ -237,17 +241,19 @@ export function itemCategoryToJSON(object: itemCategory): string {
   }
 }
 
-export enum playerProfession {
-  PLAYER_PROFESSION_ANY = -1,
-  PLAYER_PROFESSION_NONE = 0,
-  PLAYER_PROFESSION_KNIGHT = 1,
-  PLAYER_PROFESSION_PALADIN = 2,
-  PLAYER_PROFESSION_SORCERER = 3,
-  PLAYER_PROFESSION_DRUID = 4,
-  PLAYER_PROFESSION_MONK = 5,
-  PLAYER_PROFESSION_PROMOTED = 10,
-  UNRECOGNIZED = -1,
-}
+export const playerProfession = {
+  PLAYER_PROFESSION_ANY: -1,
+  PLAYER_PROFESSION_NONE: 0,
+  PLAYER_PROFESSION_KNIGHT: 1,
+  PLAYER_PROFESSION_PALADIN: 2,
+  PLAYER_PROFESSION_SORCERER: 3,
+  PLAYER_PROFESSION_DRUID: 4,
+  PLAYER_PROFESSION_MONK: 5,
+  PLAYER_PROFESSION_PROMOTED: 10,
+  UNRECOGNIZED: -1,
+} as const;
+
+export type playerProfession = typeof playerProfession[keyof typeof playerProfession];
 
 export function playerProfessionFromJSON(object: any): playerProfession {
   switch (object) {
@@ -306,12 +312,14 @@ export function playerProfessionToJSON(object: playerProfession): string {
   }
 }
 
-export enum animationLoopType {
-  ANIMATION_LOOP_TYPE_PINGPONG = -1,
-  ANIMATION_LOOP_TYPE_INFINITE = 0,
-  ANIMATION_LOOP_TYPE_COUNTED = 1,
-  UNRECOGNIZED = -1,
-}
+export const animationLoopType = {
+  ANIMATION_LOOP_TYPE_PINGPONG: -1,
+  ANIMATION_LOOP_TYPE_INFINITE: 0,
+  ANIMATION_LOOP_TYPE_COUNTED: 1,
+  UNRECOGNIZED: -1,
+} as const;
+
+export type animationLoopType = typeof animationLoopType[keyof typeof animationLoopType];
 
 export function animationLoopTypeFromJSON(object: any): animationLoopType {
   switch (object) {
@@ -345,11 +353,9 @@ export function animationLoopTypeToJSON(object: animationLoopType): string {
   }
 }
 
-export enum hookType {
-  HOOK_TYPE_SOUTH = 1,
-  HOOK_TYPE_EAST = 2,
-  UNRECOGNIZED = -1,
-}
+export const hookType = { HOOK_TYPE_SOUTH: 1, HOOK_TYPE_EAST: 2, UNRECOGNIZED: -1 } as const;
+
+export type hookType = typeof hookType[keyof typeof hookType];
 
 export function hookTypeFromJSON(object: any): hookType {
   switch (object) {
@@ -378,12 +384,14 @@ export function hookTypeToJSON(object: hookType): string {
   }
 }
 
-export enum fixedFrameGroup {
-  FIXED_FRAME_GROUP_OUTFIT_IDLE = 0,
-  FIXED_FRAME_GROUP_OUTFIT_MOVING = 1,
-  FIXED_FRAME_GROUP_OBJECT_INITIAL = 2,
-  UNRECOGNIZED = -1,
-}
+export const fixedFrameGroup = {
+  FIXED_FRAME_GROUP_OUTFIT_IDLE: 0,
+  FIXED_FRAME_GROUP_OUTFIT_MOVING: 1,
+  FIXED_FRAME_GROUP_OBJECT_INITIAL: 2,
+  UNRECOGNIZED: -1,
+} as const;
+
+export type fixedFrameGroup = typeof fixedFrameGroup[keyof typeof fixedFrameGroup];
 
 export function fixedFrameGroupFromJSON(object: any): fixedFrameGroup {
   switch (object) {

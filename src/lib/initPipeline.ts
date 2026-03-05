@@ -1,0 +1,160 @@
+import { Application } from 'pixi.js'
+import { loadAppearances, type AppearanceData } from './appearances'
+import { loadSpriteCatalog } from './sprites'
+import { loadOtbm, type OtbmMap } from './otbm'
+import { loadItems, type ItemRegistry } from './items'
+import { loadBrushData } from './brushes/BrushLoader'
+import { parseWallBrushesXml } from './brushes/WallLoader'
+import { parseCarpetBrushesXml } from './brushes/CarpetLoader'
+import { parseDoodadBrushesXml } from './brushes/DoodadLoader'
+import type { CarpetBrush, TableBrush } from './brushes/CarpetTypes'
+import type { DoodadBrush } from './brushes/DoodadTypes'
+import { BrushRegistry } from './brushes/BrushRegistry'
+import { loadTilesets, resolveTilesets } from './tilesets/TilesetLoader'
+import type { ResolvedTileset } from './tilesets/TilesetTypes'
+
+export interface InitProgress {
+  setStatus: (msg: string) => void
+  setProgress: (fraction: number) => void
+}
+
+export interface InitResult {
+  app: Application
+  appearances: AppearanceData
+  mapData: OtbmMap
+  registry: ItemRegistry
+  brushRegistry: BrushRegistry | null
+  tilesets: ResolvedTileset[]
+}
+
+/**
+ * Load all assets needed by the editor (steps 1-7 of init).
+ * Pure async — no React state. Returns null if aborted.
+ */
+export async function loadAssets(
+  container: HTMLElement,
+  progress: InitProgress,
+  signal: { destroyed: boolean },
+): Promise<InitResult | null> {
+  // Weights: pixi, catalog, appearances, items, brushes, tilesets, map data
+  const stepWeights = [2, 15, 3, 12, 8, 3, 55]
+  const totalWeight = stepWeights.reduce((a, b) => a + b, 0)
+  let currentStep = 0
+  const stepStarts: number[] = []
+  let acc = 0
+  for (const w of stepWeights) {
+    stepStarts.push(acc / totalWeight)
+    acc += w
+  }
+
+  function stepProgress(fraction: number) {
+    const start = stepStarts[currentStep]
+    const weight = stepWeights[currentStep] / totalWeight
+    progress.setProgress(Math.min(start + fraction * weight, 1))
+  }
+
+  function nextStep() {
+    currentStep++
+    if (currentStep < stepWeights.length) {
+      progress.setProgress(stepStarts[currentStep])
+    }
+  }
+
+  // Step 1: Init PixiJS
+  progress.setStatus('Starting renderer...')
+  stepProgress(0)
+  const app = new Application()
+  await app.init({
+    resizeTo: container,
+    backgroundColor: 0x07070a,
+    antialias: false,
+    roundPixels: true,
+    resolution: window.devicePixelRatio || 1,
+    autoDensity: true,
+    preference: 'webgl',
+  })
+
+  if (signal.destroyed) { app.destroy(true); return null }
+  container.appendChild(app.canvas as HTMLCanvasElement)
+  nextStep()
+
+  // Step 2: Sprite catalog
+  progress.setStatus('Loading sprite catalog...')
+  const catalog = await loadSpriteCatalog(undefined, stepProgress)
+  if (signal.destroyed) return null
+  nextStep()
+
+  // Step 3: Appearances
+  progress.setStatus('Loading appearances...')
+  const appearancesUrl = catalog.appearancesFile
+    ? `/sprites-png/${catalog.appearancesFile}`
+    : '/appearances.dat'
+  const appearances = await loadAppearances(appearancesUrl, stepProgress)
+  if (signal.destroyed) return null
+  nextStep()
+
+  // Step 4: Item registry
+  progress.setStatus('Loading item data...')
+  const registry = await loadItems(undefined, stepProgress)
+  if (signal.destroyed) return null
+  nextStep()
+
+  // Step 5: Brushes
+  progress.setStatus('Loading brush data...')
+  let brushRegistry: BrushRegistry | null = null
+  try {
+    const brushData = await loadBrushData(stepProgress)
+    const nextId = { value: brushData.brushes.length + 1 }
+
+    const wallsXml = await fetch('/data/materials/brushs/walls.xml').then(r => r.text())
+    const wallBrushes = parseWallBrushesXml(wallsXml, nextId)
+    console.log(`[WallLoader] Loaded ${wallBrushes.length} wall brushes`)
+
+    const doodadFiles = ['doodads.xml', 'tiny_borders.xml', 'trees.xml']
+    const allCarpets: CarpetBrush[] = []
+    const allTables: TableBrush[] = []
+    const allDoodads: DoodadBrush[] = []
+    for (const file of doodadFiles) {
+      try {
+        const xml = await fetch(`/data/materials/brushs/${file}`).then(r => r.text())
+        const { carpets, tables } = parseCarpetBrushesXml(xml, nextId)
+        const doodads = parseDoodadBrushesXml(xml, nextId)
+        allCarpets.push(...carpets)
+        allTables.push(...tables)
+        allDoodads.push(...doodads)
+      } catch (e) {
+        console.warn(`[BrushLoader] Failed to load ${file}:`, e)
+      }
+    }
+    console.log(`[CarpetLoader] Loaded ${allCarpets.length} carpet brushes, ${allTables.length} table brushes`)
+    console.log(`[DoodadLoader] Loaded ${allDoodads.length} doodad brushes`)
+
+    brushRegistry = new BrushRegistry(brushData.brushes, brushData.borders, wallBrushes, allCarpets, allTables, allDoodads)
+  } catch (e) {
+    console.warn('[App] Failed to load brush data, smart brushes disabled:', e)
+  }
+  if (signal.destroyed) return null
+  nextStep()
+
+  // Step 6: Tilesets
+  progress.setStatus('Loading tilesets...')
+  let tilesets: ResolvedTileset[] = []
+  try {
+    const rawTilesets = await loadTilesets()
+    if (brushRegistry) {
+      tilesets = resolveTilesets(rawTilesets, brushRegistry, appearances)
+      console.log(`[TilesetLoader] Loaded ${tilesets.length} tilesets`)
+    }
+  } catch (e) {
+    console.warn('[App] Failed to load tilesets:', e)
+  }
+  if (signal.destroyed) return null
+  nextStep()
+
+  // Step 7: Map data (heaviest step)
+  progress.setStatus('Loading map data...')
+  const mapData = await loadOtbm(undefined, stepProgress)
+  if (signal.destroyed) return null
+
+  return { app, appearances, mapData, registry, brushRegistry, tilesets }
+}

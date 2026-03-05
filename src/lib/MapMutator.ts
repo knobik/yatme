@@ -1,6 +1,5 @@
 import { type OtbmMap, type OtbmTile, type OtbmItem, deepCloneItem } from './otbm'
 import type { AppearanceData } from './appearances'
-import { CHUNK_SIZE } from './constants'
 import { chunkKeyForTile } from './ChunkManager'
 import type { GroundBrush } from './brushes/BrushTypes'
 import type { WallBrush } from './brushes/WallTypes'

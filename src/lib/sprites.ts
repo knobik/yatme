@@ -7,14 +7,6 @@ const SPRITE_DIMENSIONS: Record<number, { width: number; height: number }> = {
   3: { width: 64, height: 64 },
 };
 
-interface CatalogSpriteEntry {
-  type: 'sprite';
-  file: string;
-  spritetype: number;
-  firstspriteid: number;
-  lastspriteid: number;
-}
-
 interface CatalogAppearancesEntry {
   type: 'appearances';
   file: string;

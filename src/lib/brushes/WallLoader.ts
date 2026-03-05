@@ -1,7 +1,7 @@
 // Parse RME XML wall brush definitions into our data structures.
 
 import {
-  type WallBrush, type WallDoor,
+  type WallBrush,
   createWallBrush, WALL_TYPE_MAP,
   DOOR_ARCHWAY, DOOR_NORMAL, DOOR_LOCKED, DOOR_QUEST,
   DOOR_MAGIC, DOOR_WINDOW, DOOR_HATCH_WINDOW,

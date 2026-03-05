@@ -1,22 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Application } from 'pixi.js'
-import { loadAppearances, type AppearanceData } from './lib/appearances'
-import { loadSpriteCatalog } from './lib/sprites'
-import { loadOtbm, type OtbmMap, type OtbmTile } from './lib/otbm'
+import type { AppearanceData } from './lib/appearances'
+import type { OtbmMap, OtbmTile } from './lib/otbm'
 import { MapRenderer, type FloorViewMode } from './lib/MapRenderer'
 import { MapMutator } from './lib/MapMutator'
-import { loadItems, type ItemRegistry } from './lib/items'
+import type { ItemRegistry } from './lib/items'
 import { useEditorTools, deriveHighlights } from './hooks/useEditorTools'
-import { loadBrushData } from './lib/brushes/BrushLoader'
-import { parseWallBrushesXml } from './lib/brushes/WallLoader'
-import { parseCarpetBrushesXml } from './lib/brushes/CarpetLoader'
-import { parseDoodadBrushesXml } from './lib/brushes/DoodadLoader'
-import type { CarpetBrush, TableBrush } from './lib/brushes/CarpetTypes'
-import type { DoodadBrush } from './lib/brushes/DoodadTypes'
-import { BrushRegistry } from './lib/brushes/BrushRegistry'
+import type { BrushRegistry } from './lib/brushes/BrushRegistry'
 import { Inspector } from './components/Inspector'
 import { BrushPalette } from './components/BrushPalette'
-import { loadTilesets, resolveTilesets } from './lib/tilesets/TilesetLoader'
 import type { ResolvedTileset } from './lib/tilesets/TilesetTypes'
 import { Toolbar } from './components/Toolbar'
 import { ContextMenu, type ContextMenuGroup } from './components/ContextMenu'
@@ -24,6 +16,8 @@ import { GoToPositionDialog } from './components/GoToPositionDialog'
 import { SettingsModal } from './components/SettingsModal'
 import { loadSettings, saveSettings, type EditorSettings } from './lib/EditorSettings'
 import { getItemDisplayName } from './lib/items'
+import { loadAssets } from './lib/initPipeline'
+import { setupEditor } from './lib/setupEditor'
 
 interface CameraState {
   x: number
@@ -194,180 +188,67 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!containerRef.current) return
+    const container = containerRef.current
+    if (!container) return
 
-    let destroyed = false
-    let initialized = false
-    const app = new Application()
-    appRef.current = app
-
-    const stepWeights = [2, 15, 3, 55, 12, 8, 3, 2]
-    const totalWeight = stepWeights.reduce((a, b) => a + b, 0)
-    let currentStep = 0
-    const stepStarts: number[] = []
-    let acc = 0
-    for (const w of stepWeights) {
-      stepStarts.push(acc / totalWeight)
-      acc += w
-    }
-
-    function stepProgress(fraction: number) {
-      const start = stepStarts[currentStep]
-      const weight = stepWeights[currentStep] / totalWeight
-      setLoadingProgress(Math.min(start + fraction * weight, 1))
-    }
-
-    function nextStep() {
-      currentStep++
-      if (currentStep < stepWeights.length) {
-        setLoadingProgress(stepStarts[currentStep])
-      }
-    }
+    const signal = { destroyed: false }
+    let appInstance: Application | null = null
 
     async function init() {
-      const container = containerRef.current!
+      const result = await loadAssets(container!, {
+        setStatus: setLoadingStatus,
+        setProgress: setLoadingProgress,
+      }, signal)
+      if (!result) return
 
-      setLoadingStatus('Starting renderer...')
-      stepProgress(0)
-      await app.init({
-        resizeTo: container,
-        backgroundColor: 0x07070a,
-        antialias: false,
-        roundPixels: true,
-        resolution: window.devicePixelRatio || 1,
-        autoDensity: true,
-        preference: 'webgl',
-      })
+      const { app, appearances, mapData, registry, brushRegistry, tilesets } = result
+      appInstance = app
+      appRef.current = app
 
-      if (destroyed) { app.destroy(true); return }
-      initialized = true
-      container.appendChild(app.canvas as HTMLCanvasElement)
-      nextStep()
-
-      setLoadingStatus('Loading sprite catalog...')
-      const catalog = await loadSpriteCatalog(undefined, stepProgress)
-      if (destroyed) return
-      nextStep()
-
-      setLoadingStatus('Loading appearances...')
-      const appearancesUrl = catalog.appearancesFile
-        ? `/sprites-png/${catalog.appearancesFile}`
-        : '/appearances.dat'
-      const appearances = await loadAppearances(appearancesUrl, stepProgress)
-      if (destroyed) return
+      // Update React state with loaded data
       setAppearancesData(appearances)
-      nextStep()
-
-      setLoadingStatus('Loading map data...')
-      const mapData = await loadOtbm(undefined, stepProgress)
-      if (destroyed) return
-      nextStep()
-
-      setLoadingStatus('Loading item data...')
-      const registry = await loadItems(undefined, stepProgress)
-      if (destroyed) return
       setItemRegistry(registry)
-      nextStep()
-
       setMapInfo({
         tiles: mapData.tiles.size,
         towns: mapData.towns.map((t) => t.name),
       })
+      if (brushRegistry) setBrushRegistryState(brushRegistry)
+      setTilesets(tilesets)
 
-      setLoadingStatus('Loading brush data...')
-      let brushRegistry: BrushRegistry | null = null
-      try {
-        const brushData = await loadBrushData(stepProgress)
-        const nextId = { value: brushData.brushes.length + 1 }
-
-        const wallsXml = await fetch('/data/materials/brushs/walls.xml').then(r => r.text())
-        const wallBrushes = parseWallBrushesXml(wallsXml, nextId)
-        console.log(`[WallLoader] Loaded ${wallBrushes.length} wall brushes`)
-
-        const doodadFiles = ['doodads.xml', 'tiny_borders.xml', 'trees.xml']
-        const allCarpets: CarpetBrush[] = []
-        const allTables: TableBrush[] = []
-        const allDoodads: DoodadBrush[] = []
-        for (const file of doodadFiles) {
-          try {
-            const xml = await fetch(`/data/materials/brushs/${file}`).then(r => r.text())
-            const { carpets, tables } = parseCarpetBrushesXml(xml, nextId)
-            const doodads = parseDoodadBrushesXml(xml, nextId)
-            allCarpets.push(...carpets)
-            allTables.push(...tables)
-            allDoodads.push(...doodads)
-          } catch (e) {
-            console.warn(`[BrushLoader] Failed to load ${file}:`, e)
-          }
-        }
-        console.log(`[CarpetLoader] Loaded ${allCarpets.length} carpet brushes, ${allTables.length} table brushes`)
-        console.log(`[DoodadLoader] Loaded ${allDoodads.length} doodad brushes`)
-
-        brushRegistry = new BrushRegistry(brushData.brushes, brushData.borders, wallBrushes, allCarpets, allTables, allDoodads)
-        ;(window as any).__brushRegistry = brushRegistry
-        if (!destroyed) setBrushRegistryState(brushRegistry)
-      } catch (e) {
-        console.warn('[App] Failed to load brush data, smart brushes disabled:', e)
-      }
-      if (destroyed) return
-      nextStep()
-
-      setLoadingStatus('Loading tilesets...')
-      try {
-        const rawTilesets = await loadTilesets()
-        if (brushRegistry) {
-          const resolved = resolveTilesets(rawTilesets, brushRegistry, appearances)
-          if (!destroyed) setTilesets(resolved)
-          console.log(`[TilesetLoader] Loaded ${resolved.length} tilesets`)
-        }
-      } catch (e) {
-        console.warn('[App] Failed to load tilesets:', e)
-      }
-      if (destroyed) return
-      nextStep()
-
-      setLoadingStatus('Building renderer...')
-      const renderer = new MapRenderer(app, appearances, mapData)
+      // Build renderer + mutator
+      const { renderer, mutator } = setupEditor(app, appearances, mapData, brushRegistry)
       rendererRef.current = renderer
-      ;(window as any).__renderer = renderer
-
-      const mutator = new MapMutator(mapData, appearances)
-      mutator.brushRegistry = brushRegistry
       mutatorRef.current = mutator
-      mutator.onChunksInvalidated = (keys) => {
-        renderer.invalidateChunks(keys)
-      }
+
+      // Wire mutator → React callbacks
       mutator.onTileChanged = (x, y, z) => {
         const tile = mapData.tiles.get(`${x},${y},${z}`)
         if (tile) renderer.updateChunkIndex(tile)
         setTileVersion(v => v + 1)
       }
 
+      // Wire renderer → React callbacks
       renderer.onCameraChange = (x, y, zoom, floor, floorViewMode, showTransparentUpper) => {
         setCamera({ x, y, zoom, floor, floorViewMode, showTransparentUpper })
         setContextMenu(null)
       }
 
-      renderer.onTileClick = (tile, worldX, worldY) => {
+      renderer.onTileClick = (tile, _worldX, _worldY) => {
         if (tile) {
           setSelectedTilePos({ x: tile.x, y: tile.y, z: tile.z })
-          // Sync Inspector anchor to map's selected item (top item)
           inspectorAnchorRef.current = tile.items.length > 0 ? tile.items.length - 1 : null
         } else {
           setSelectedTilePos(null)
           inspectorAnchorRef.current = null
-          // Clear per-item selection when clicking empty ground
           toolsRef.current.setSelectedItems([])
         }
       }
 
       renderer.onTileContextMenu = (pos, tile, screenX, screenY) => {
-        // Right-click cancels paste mode without opening context menu
         if (toolsRef.current.isPasting) {
           toolsRef.current.cancelPaste()
           return
         }
-        // Right-click switches back to select tool (context menu still opens)
         const currentTool = toolsRef.current.activeTool
         if (currentTool === 'draw' || currentTool === 'erase') {
           toolsRef.current.setActiveTool('select')
@@ -388,6 +269,7 @@ function App() {
         showTransparentUpper: renderer.showTransparentUpper,
       })
 
+      // Restore saved settings
       const savedSettings = loadSettings()
       renderer.setFloorViewMode(savedSettings.floorViewMode)
       renderer.setShowTransparentUpper(savedSettings.showTransparentUpper)
@@ -402,16 +284,16 @@ function App() {
     }
 
     init().catch((e) => {
-      if (!destroyed) setError(e.message)
+      if (!signal.destroyed) setError(e.message)
       setLoading(false)
     })
 
     return () => {
-      destroyed = true
+      signal.destroyed = true
       rendererRef.current?.destroy()
       rendererRef.current = null
-      if (initialized) {
-        app.destroy(true)
+      if (appInstance) {
+        appInstance.destroy(true)
       }
       appRef.current = null
     }

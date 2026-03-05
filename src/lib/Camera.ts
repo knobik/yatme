@@ -23,7 +23,10 @@ export class Camera {
   // Reusable range output (avoids per-call allocation)
   private _range = { startX: 0, startY: 0, endX: 0, endY: 0 }
 
-  constructor(private screen: ScreenSize) {}
+  private screen: ScreenSize
+  constructor(screen: ScreenSize) {
+    this.screen = screen
+  }
 
   // ── Getters ─────────────────────────────────────────────────────
 

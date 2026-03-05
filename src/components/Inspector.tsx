@@ -343,7 +343,7 @@ function TrashIcon() {
 
 function ItemRow({
   item,
-  index,
+  index: _index,
   isGround,
   isSelected,
   isDragging,
@@ -532,7 +532,7 @@ function PropertyEditor({
     })
   }
 
-  const itemFlags = flags ? getItemFlags(flags) : []
+  const itemFlags = flags ? getItemFlags(flags as unknown as Record<string, unknown>) : []
 
   // Group subtype (count/charges) and duration into one row
   // Stackable → "COUNT", Charged → "CHARGES" — both use subtype field

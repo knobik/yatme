@@ -26,7 +26,7 @@ const COLS = 4
 const CELL_HEIGHT = 64
 const BUFFER_ROWS = 2
 
-const EQUIPMENT_CATEGORIES = new Set([
+const EQUIPMENT_CATEGORIES = new Set<itemCategory>([
   itemCategory.ITEM_CATEGORY_ARMORS,
   itemCategory.ITEM_CATEGORY_HELMETS_HATS,
   itemCategory.ITEM_CATEGORY_LEGS,
@@ -36,7 +36,7 @@ const EQUIPMENT_CATEGORIES = new Set([
   itemCategory.ITEM_CATEGORY_RINGS,
 ])
 
-const WEAPON_CATEGORIES = new Set([
+const WEAPON_CATEGORIES = new Set<itemCategory>([
   itemCategory.ITEM_CATEGORY_AXES,
   itemCategory.ITEM_CATEGORY_CLUBS,
   itemCategory.ITEM_CATEGORY_SWORDS,

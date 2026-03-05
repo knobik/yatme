@@ -467,8 +467,8 @@ export function parseOtbm(raw: Uint8Array): OtbmMap {
   const version = root.readU32()
   const width = root.readU16()
   const height = root.readU16()
-  const _majorItems = root.readU32()
-  const _minorItems = root.readU32()
+  root.readU32() // majorItems
+  root.readU32() // minorItems
 
   const map: OtbmMap = {
     version,
@@ -564,6 +564,7 @@ export function parseOtbm(raw: Uint8Array): OtbmMap {
         break
       }
     }
+
   }
 
   return map

@@ -40,9 +40,6 @@ export class LightEngine {
   private _lights: LightSource[] = []
   private _lastRangeKey = ''
 
-  // Tile-space bounds the texture covers
-  private _tileStartX = 0
-  private _tileStartY = 0
 
   constructor() {
     this._canvas = document.createElement('canvas')
@@ -179,9 +176,6 @@ export class LightEngine {
 
     const w = maxTX - minTX
     const h = maxTY - minTY
-    this._tileStartX = minTX
-    this._tileStartY = minTY
-
     // Resize canvas if needed
     if (this._canvas.width !== w || this._canvas.height !== h) {
       this._canvas.width = w

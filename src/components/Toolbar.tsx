@@ -1,3 +1,4 @@
+import type React from 'react'
 import clsx from 'clsx'
 import type { EditorTool, BrushShape } from '../hooks/useEditorTools'
 import type { AppearanceData } from '../lib/appearances'
@@ -53,7 +54,7 @@ const BRUSH_SIZES = [
   { value: 6, label: '13' },
 ]
 
-const TOOLS: { id: EditorTool; label: string; shortcut: string; icon: JSX.Element }[] = [
+const TOOLS: { id: EditorTool; label: string; shortcut: string; icon: React.ReactElement }[] = [
   {
     id: 'select',
     label: 'Select',

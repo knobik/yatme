@@ -7,11 +7,15 @@ export class FloorManager {
   private _containers = new Map<number, Container>()
   private _lastVisibleFloors: number[] = []
 
-  constructor(
-    private _parent: Container,
-    private _overlay: Container,
-    private _lightOverlay?: Container,
-  ) {}
+  private _parent: Container
+  private _overlay: Container
+  private _lightOverlay?: Container
+
+  constructor(parent: Container, overlay: Container, lightOverlay?: Container) {
+    this._parent = parent
+    this._overlay = overlay
+    this._lightOverlay = lightOverlay
+  }
 
   /** Get (or lazily create) the container for a floor. */
   getContainer(z: number): Container {

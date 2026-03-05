@@ -18,7 +18,10 @@ export class TileRenderer {
   // Highlight state: tile key → item indices (null = all items on tile)
   private _highlightedTiles = new Map<string, number[] | null>()
 
-  constructor(private appearances: AppearanceData) {}
+  private appearances: AppearanceData
+  constructor(appearances: AppearanceData) {
+    this.appearances = appearances
+  }
 
   // ── Highlight API ───────────────────────────────────────────────
 

@@ -56,8 +56,6 @@ function parseDoodadBrush(
   // Collect root-level items and composites (outside <alternate> tags)
   const rootSingles: DoodadSingleItem[] = []
   const rootComposites: DoodadComposite[] = []
-  let hasAlternates = false
-
   for (const child of brushEl.children) {
     const tag = child.tagName.toLowerCase()
 
@@ -68,7 +66,6 @@ function parseDoodadBrush(
       const comp = parseComposite(child)
       if (comp) rootComposites.push(comp)
     } else if (tag === 'alternate') {
-      hasAlternates = true
       const alt = parseAlternative(child)
       if (alt && alt.totalChance > 0) brush.alternatives.push(alt)
     }
