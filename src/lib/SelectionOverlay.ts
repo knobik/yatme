@@ -1,9 +1,8 @@
 import { Container, Graphics, Sprite, type Texture } from 'pixi.js'
 import { TILE_SIZE } from './constants'
+import { renderTileItems } from './renderTileItems'
 import type { OtbmTile } from './otbm'
 import type { AppearanceData } from './appearances'
-import { getItemSpriteId } from './SpriteResolver'
-import { getTextureSync } from './TextureManager'
 
 type TilePos = { x: number; y: number; z: number }
 
@@ -170,31 +169,14 @@ export class SelectionOverlay {
       const tile = tileMap.get(tileKey)
       if (!tile) continue
 
-      const baseX = (t.x + dx) * TILE_SIZE
-      const baseY = (t.y + dy) * TILE_SIZE
-      let elevation = 0
-
-      for (const item of tile.items) {
-        const appearance = appearances.objects.get(item.id)
-        if (!appearance) continue
-
-        const spriteId = getItemSpriteId(appearance, item, tile)
-        if (spriteId == null || spriteId === 0) continue
-
-        const texture = getTextureSync(spriteId)
-        if (!texture) continue
-
-        const sprite = new Sprite(texture)
-        sprite.roundPixels = true
-        const shift = appearance.flags?.shift
-        sprite.x = baseX + TILE_SIZE - texture.width - elevation - (shift?.x ?? 0)
-        sprite.y = baseY + TILE_SIZE - texture.height - elevation - (shift?.y ?? 0)
-        this._dragPreviewContainer.addChild(sprite)
-
-        if (appearance.flags?.height) {
-          elevation += appearance.flags.height.elevation ?? 0
-        }
-      }
+      renderTileItems({
+        parent: this._dragPreviewContainer!,
+        items: tile.items,
+        tile,
+        baseX: (t.x + dx) * TILE_SIZE,
+        baseY: (t.y + dy) * TILE_SIZE,
+        appearances,
+      })
     }
 
     this._dragPreviewContainer.visible = true
