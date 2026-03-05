@@ -511,12 +511,23 @@ function App() {
           },
         },
         ...(tile
-          ? [{
-              label: 'Browse Tile',
-              onClick: () => {
-                setSelectedTilePos({ x: tilePos.x, y: tilePos.y, z: tilePos.z })
+          ? [
+              {
+                label: 'Browse Tile',
+                onClick: () => {
+                  setSelectedTilePos({ x: tilePos.x, y: tilePos.y, z: tilePos.z })
+                },
               },
-            }]
+              ...(tile.items && tile.items.length > 0
+                ? [{
+                    label: 'Properties',
+                    onClick: () => {
+                      setSelectedTilePos({ x: tilePos.x, y: tilePos.y, z: tilePos.z })
+                      setEditItemIndex(tile.items!.length - 1)
+                    },
+                  }]
+                : []),
+            ]
           : []),
       ],
     }
