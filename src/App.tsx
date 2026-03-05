@@ -106,51 +106,14 @@ function App() {
     tools.setActiveTool('draw')
   }, [tools])
 
-  const inspectorAnchorRef = useRef<number | null>(null)
-
-  const handleSelectItem = useCallback((index: number, e: React.MouseEvent) => {
-    if (!selectedTilePos || !mapData) return
-    const { x, y, z } = selectedTilePos
-    const renderer = rendererRef.current
-
-    if (e.ctrlKey || e.metaKey) {
-      // Toggle item in/out of selection
-      const existing = tools.selectedItems.filter(
-        it => it.x === x && it.y === y && it.z === z
-      )
-      const alreadySelected = existing.some(it => it.itemIndex === index)
-      const otherOnTile = alreadySelected
-        ? existing.filter(it => it.itemIndex !== index)
-        : [...existing, { x, y, z, itemIndex: index }]
-      const otherTiles = tools.selectedItems.filter(
-        it => !(it.x === x && it.y === y && it.z === z)
-      )
-      const newItems = [...otherTiles, ...otherOnTile]
-      tools.setSelectedItems(newItems)
-      if (newItems.length === 0) {
-        renderer?.clearItemHighlight()
-      } else {
-        // Use deriveHighlights logic via setHighlights
-        renderer?.setHighlights(deriveHighlights(newItems, mapData))
-      }
-      inspectorAnchorRef.current = alreadySelected ? null : index
-    } else if (e.shiftKey && inspectorAnchorRef.current !== null) {
-      // Range select from anchor to clicked index
-      const from = Math.min(inspectorAnchorRef.current, index)
-      const to = Math.max(inspectorAnchorRef.current, index)
-      const rangeItems: typeof tools.selectedItems = []
-      for (let i = from; i <= to; i++) {
-        rangeItems.push({ x, y, z, itemIndex: i })
-      }
-      tools.setSelectedItems(rangeItems)
-      renderer?.setHighlights(deriveHighlights(rangeItems, mapData))
-    } else {
-      // Plain click — select single item
-      tools.setSelectedItems([{ x, y, z, itemIndex: index }])
-      renderer?.setHighlights([{ pos: { x, y, z }, indices: [index] }])
-      inspectorAnchorRef.current = index
+  const handleItemSelectionChange = useCallback((items: typeof tools.selectedItems) => {
+    tools.setSelectedItems(items)
+    if (items.length === 0) {
+      rendererRef.current?.clearItemHighlight()
+    } else if (mapData) {
+      rendererRef.current?.setHighlights(deriveHighlights(items, mapData))
     }
-  }, [selectedTilePos, tools, mapData])
+  }, [tools, mapData])
 
   const handleClosePalette = useCallback(() => {
     setShowPalette(false)
@@ -236,10 +199,8 @@ function App() {
       renderer.onTileClick = (tile, _worldX, _worldY) => {
         if (tile) {
           setSelectedTilePos({ x: tile.x, y: tile.y, z: tile.z })
-          inspectorAnchorRef.current = tile.items.length > 0 ? tile.items.length - 1 : null
         } else {
           setSelectedTilePos(null)
-          inspectorAnchorRef.current = null
           toolsRef.current.setSelectedItems([])
         }
       }
@@ -561,18 +522,6 @@ function App() {
     )
   }
 
-  const inspectorSelectedIndices = (() => {
-    const s = new Set<number>()
-    if (selectedTilePos) {
-      for (const it of tools.selectedItems) {
-        if (it.x === selectedTilePos.x && it.y === selectedTilePos.y && it.z === selectedTilePos.z) {
-          s.add(it.itemIndex)
-        }
-      }
-    }
-    return s
-  })()
-
   return (
     <div className="relative h-screen w-screen overflow-hidden">
       {/* Map viewport */}
@@ -687,8 +636,8 @@ function App() {
           mutator={mutatorReady}
           onClose={handleCloseInspector}
           onSelectAsBrush={handleSelectAsBrush}
-          onSelectItem={handleSelectItem}
-          selectedItemIndices={inspectorSelectedIndices}
+          selectedItems={tools.selectedItems}
+          onItemSelectionChange={handleItemSelectionChange}
           offset={showPalette}
           initialEditIndex={editItemIndex}
           onEditIndexConsumed={() => setEditItemIndex(null)}

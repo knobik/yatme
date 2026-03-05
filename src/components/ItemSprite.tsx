@@ -1,4 +1,5 @@
 import { useRef, useEffect } from 'react'
+import type { Texture } from 'pixi.js'
 import { getTextureSync, preloadSheets } from '../lib/TextureManager'
 import type { AppearanceData } from '../lib/appearances'
 
@@ -10,7 +11,6 @@ interface ItemSpriteProps {
 
 export function ItemSprite({ itemId, appearances, size = 32 }: ItemSpriteProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const drawnRef = useRef<number>(-1)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -26,7 +26,6 @@ export function ItemSprite({ itemId, appearances, size = 32 }: ItemSpriteProps) 
     const texture = getTextureSync(spriteId)
     if (texture) {
       drawTexture(canvas, texture, size)
-      drawnRef.current = spriteId
       return
     }
 
@@ -35,7 +34,6 @@ export function ItemSprite({ itemId, appearances, size = 32 }: ItemSpriteProps) 
       const tex = getTextureSync(spriteId)
       if (tex && canvasRef.current) {
         drawTexture(canvasRef.current, tex, size)
-        drawnRef.current = spriteId
       }
     })
   }, [itemId, appearances, size])
@@ -55,7 +53,7 @@ export function ItemSprite({ itemId, appearances, size = 32 }: ItemSpriteProps) 
   )
 }
 
-function drawTexture(canvas: HTMLCanvasElement, texture: any, size: number): void {
+function drawTexture(canvas: HTMLCanvasElement, texture: Texture, size: number): void {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 

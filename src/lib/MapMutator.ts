@@ -13,6 +13,16 @@ import { findDoorForAlignment, switchDoor } from './brushes/DoorSystem'
 import { doCarpets, doTables } from './brushes/CarpetSystem'
 const MAX_UNDO = 200
 
+const OFFSETS_8: ReadonlyArray<[number, number]> = [
+  [-1, -1], [0, -1], [1, -1],
+  [-1,  0],          [1,  0],
+  [-1,  1], [0,  1], [1,  1],
+]
+
+const OFFSETS_4: ReadonlyArray<[number, number]> = [
+  [0, -1], [-1, 0], [1, 0], [0, 1],
+]
+
 function tileKey(x: number, y: number, z: number): string {
   return `${x},${y},${z}`
 }
@@ -368,38 +378,13 @@ export class MapMutator {
       this.onTileChanged?.(x, y, z)
 
       // 5. Recompute borders for 8 neighbors
-      const neighborOffsets: [number, number][] = [
-        [-1, -1], [0, -1], [1, -1],
-        [-1, 0],           [1, 0],
-        [-1, 1],  [0, 1],  [1, 1],
-      ]
-      for (const [dx, dy] of neighborOffsets) {
-        const nx = x + dx
-        const ny = y + dy
-        if (nx < 0 || ny < 0) continue
-
-        const neighborTile = this.mapData.tiles.get(`${nx},${ny},${z}`)
-        if (!neighborTile) continue
-
-        const neighborOld = deepCloneItems(neighborTile.items)
-
-        // Remove old border items
-        this.removeBorderItems(neighborTile, registry)
-
-        // Recompute borders
-        const newBorders = computeBorders(nx, ny, z, this.mapData, registry)
-        this.insertBorderItems(neighborTile, newBorders)
-
-        // Only record if items actually changed
-        if (!this.itemsEqual(neighborOld, neighborTile.items)) {
-          this.recordAction({
-            type: 'setTileItems', x: nx, y: ny, z,
-            oldItems: neighborOld,
-            newItems: deepCloneItems(neighborTile.items),
-          })
-          this.onTileChanged?.(nx, ny, z)
-        }
-      }
+      this.updateNeighborTiles(x, y, z, OFFSETS_8, {
+        update: (tile, nx, ny) => {
+          this.removeBorderItems(tile, registry)
+          const newBorders = computeBorders(nx, ny, z, this.mapData, registry)
+          this.insertBorderItems(tile, newBorders)
+        },
+      })
     })
   }
 
@@ -448,37 +433,13 @@ export class MapMutator {
       this.onTileChanged?.(x, y, z)
 
       // Update 4 cardinal neighbors
-      const neighborOffsets: [number, number][] = [
-        [0, -1], [-1, 0], [1, 0], [0, 1],
-      ]
-      for (const [dx, dy] of neighborOffsets) {
-        const nx = x + dx
-        const ny = y + dy
-        if (nx < 0 || ny < 0) continue
-
-        const neighborTile = this.mapData.tiles.get(`${nx},${ny},${z}`)
-        if (!neighborTile) continue
-
-        // Check if neighbor has any wall items
-        const hasWalls = neighborTile.items.some(item => registry.isWallItem(item.id))
-        if (!hasWalls) continue
-
-        const neighborOld = deepCloneItems(neighborTile.items)
-
-        // Run doWalls() on neighbor
-        const neighborWalls = doWalls(nx, ny, z, this.mapData, registry)
-        this.replaceWallItems(neighborTile, neighborWalls, registry)
-
-        // Only record if items actually changed
-        if (!this.itemsEqual(neighborOld, neighborTile.items)) {
-          this.recordAction({
-            type: 'setTileItems', x: nx, y: ny, z,
-            oldItems: neighborOld,
-            newItems: deepCloneItems(neighborTile.items),
-          })
-          this.onTileChanged?.(nx, ny, z)
-        }
-      }
+      this.updateNeighborTiles(x, y, z, OFFSETS_4, {
+        filter: (tile) => tile.items.some(item => registry.isWallItem(item.id)),
+        update: (tile, nx, ny) => {
+          const neighborWalls = doWalls(nx, ny, z, this.mapData, registry)
+          this.replaceWallItems(tile, neighborWalls, registry)
+        },
+      })
     })
   }
 
@@ -522,33 +483,13 @@ export class MapMutator {
       this.onTileChanged?.(x, y, z)
 
       // Re-align 4 cardinal neighbors (door is a wall item, neighbors should adjust)
-      const neighborOffsets: [number, number][] = [
-        [0, -1], [-1, 0], [1, 0], [0, 1],
-      ]
-      for (const [dx, dy] of neighborOffsets) {
-        const nx = x + dx
-        const ny = y + dy
-        if (nx < 0 || ny < 0) continue
-
-        const neighborTile = this.mapData.tiles.get(`${nx},${ny},${z}`)
-        if (!neighborTile) continue
-
-        const hasWalls = neighborTile.items.some(item => registry.isWallItem(item.id))
-        if (!hasWalls) continue
-
-        const neighborOld = deepCloneItems(neighborTile.items)
-        const neighborWalls = doWalls(nx, ny, z, this.mapData, registry)
-        this.replaceWallItems(neighborTile, neighborWalls, registry)
-
-        if (!this.itemsEqual(neighborOld, neighborTile.items)) {
-          this.recordAction({
-            type: 'setTileItems', x: nx, y: ny, z,
-            oldItems: neighborOld,
-            newItems: deepCloneItems(neighborTile.items),
-          })
-          this.onTileChanged?.(nx, ny, z)
-        }
-      }
+      this.updateNeighborTiles(x, y, z, OFFSETS_4, {
+        filter: (tile) => tile.items.some(item => registry.isWallItem(item.id)),
+        update: (tile, nx, ny) => {
+          const neighborWalls = doWalls(nx, ny, z, this.mapData, registry)
+          this.replaceWallItems(tile, neighborWalls, registry)
+        },
+      })
     })
   }
 
@@ -821,30 +762,40 @@ export class MapMutator {
     registry: BrushRegistry,
     brushType: 'carpet' | 'table',
   ): void {
-    const neighborOffsets: [number, number][] = [
-      [-1, -1], [0, -1], [1, -1],
-      [-1, 0], [1, 0],
-      [-1, 1], [0, 1], [1, 1],
-    ]
-    for (const [dx, dy] of neighborOffsets) {
+    this.updateNeighborTiles(x, y, z, OFFSETS_8, {
+      filter: (tile) => brushType === 'carpet'
+        ? tile.items.some(item => registry.isCarpetItem(item.id))
+        : tile.items.some(item => registry.isTableItem(item.id)),
+      update: (tile, nx, ny) => {
+        const aligned = brushType === 'carpet'
+          ? doCarpets(nx, ny, z, this.mapData, registry)
+          : doTables(nx, ny, z, this.mapData, registry)
+        this.replaceBrushItems(tile, aligned, registry, brushType)
+      },
+    })
+  }
+
+  // Generic neighbor-update loop: clone → mutate → diff → record
+  private updateNeighborTiles(
+    x: number, y: number, z: number,
+    offsets: ReadonlyArray<[number, number]>,
+    options: {
+      filter?: (tile: OtbmTile) => boolean
+      update: (tile: OtbmTile, nx: number, ny: number) => void
+    },
+  ): void {
+    for (const [dx, dy] of offsets) {
       const nx = x + dx
       const ny = y + dy
       if (nx < 0 || ny < 0) continue
 
-      const neighborTile = this.mapData.tiles.get(`${nx},${ny},${z}`)
+      const neighborTile = this.mapData.tiles.get(tileKey(nx, ny, z))
       if (!neighborTile) continue
 
-      const hasItems = brushType === 'carpet'
-        ? neighborTile.items.some(item => registry.isCarpetItem(item.id))
-        : neighborTile.items.some(item => registry.isTableItem(item.id))
-      if (!hasItems) continue
+      if (options.filter && !options.filter(neighborTile)) continue
 
       const neighborOld = deepCloneItems(neighborTile.items)
-
-      const aligned = brushType === 'carpet'
-        ? doCarpets(nx, ny, z, this.mapData, registry)
-        : doTables(nx, ny, z, this.mapData, registry)
-      this.replaceBrushItems(neighborTile, aligned, registry, brushType)
+      options.update(neighborTile, nx, ny)
 
       if (!this.itemsEqual(neighborOld, neighborTile.items)) {
         this.recordAction({

@@ -11,8 +11,7 @@ export interface EditorInstances {
 }
 
 /**
- * Build the MapRenderer and MapMutator, wire mutator chunk invalidation,
- * and expose debug globals.
+ * Build the MapRenderer and MapMutator, wire mutator chunk invalidation.
  */
 export function setupEditor(
   app: Application,
@@ -21,11 +20,8 @@ export function setupEditor(
   brushRegistry: BrushRegistry | null,
 ): EditorInstances {
   const renderer = new MapRenderer(app, appearances, mapData)
-  ;(window as any).__renderer = renderer
-
   const mutator = new MapMutator(mapData, appearances)
   mutator.brushRegistry = brushRegistry
-  ;(window as any).__brushRegistry = brushRegistry
 
   mutator.onChunksInvalidated = (keys) => {
     renderer.invalidateChunks(keys)

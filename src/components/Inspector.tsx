@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import clsx from 'clsx'
 import type { OtbmMap, OtbmItem } from '../lib/otbm'
 import { deepCloneItem } from '../lib/otbm'
@@ -9,6 +9,7 @@ import { classifyItem } from '../lib/MapMutator'
 import { getItemDisplayName } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
 import { parsePositionString } from '../lib/position'
+import type { SelectedItemInfo } from '../hooks/useSelection'
 
 interface InspectorProps {
   tilePos: { x: number; y: number; z: number } | null
@@ -19,8 +20,8 @@ interface InspectorProps {
   mutator: MapMutator
   onClose: () => void
   onSelectAsBrush: (itemId: number) => void
-  onSelectItem?: (index: number, e: React.MouseEvent) => void
-  selectedItemIndices?: Set<number>
+  selectedItems: SelectedItemInfo[]
+  onItemSelectionChange: (items: SelectedItemInfo[]) => void
   offset?: boolean
   initialEditIndex?: number | null
   onEditIndexConsumed?: () => void
@@ -35,8 +36,8 @@ export function Inspector({
   mutator,
   onClose,
   onSelectAsBrush,
-  onSelectItem,
-  selectedItemIndices,
+  selectedItems,
+  onItemSelectionChange,
   offset,
   initialEditIndex,
   onEditIndexConsumed,
@@ -47,11 +48,67 @@ export function Inspector({
   const [dragOverHalf, setDragOverHalf] = useState<'top' | 'bottom'>('bottom')
   const hoveredIndexRef = useRef<number | null>(null)
   const deleteRef = useRef<((index: number) => void) | null>(null)
+  const anchorRef = useRef<number | null>(null)
 
-  // Reset editing when tile changes
+  // Reset editing and anchor when tile changes
   useEffect(() => {
     setEditingIndex(null)
-  }, [tilePos?.x, tilePos?.y, tilePos?.z])
+    if (tilePos) {
+      const tile = mapData.tiles.get(`${tilePos.x},${tilePos.y},${tilePos.z}`)
+      anchorRef.current = tile && tile.items.length > 0 ? tile.items.length - 1 : null
+    } else {
+      anchorRef.current = null
+    }
+  }, [tilePos?.x, tilePos?.y, tilePos?.z, mapData])
+
+  // Derive selected indices for this tile from selectedItems prop
+  const selectedItemIndices = useMemo(() => {
+    const s = new Set<number>()
+    if (tilePos) {
+      for (const it of selectedItems) {
+        if (it.x === tilePos.x && it.y === tilePos.y && it.z === tilePos.z) {
+          s.add(it.itemIndex)
+        }
+      }
+    }
+    return s
+  }, [selectedItems, tilePos])
+
+  // Handle item click with ctrl/shift/plain selection logic
+  const handleItemClick = useCallback((index: number, e: React.MouseEvent) => {
+    if (!tilePos) return
+    const { x, y, z } = tilePos
+
+    if (e.ctrlKey || e.metaKey) {
+      // Toggle item in/out of selection
+      const existing = selectedItems.filter(
+        it => it.x === x && it.y === y && it.z === z
+      )
+      const alreadySelected = existing.some(it => it.itemIndex === index)
+      const otherOnTile = alreadySelected
+        ? existing.filter(it => it.itemIndex !== index)
+        : [...existing, { x, y, z, itemIndex: index }]
+      const otherTiles = selectedItems.filter(
+        it => !(it.x === x && it.y === y && it.z === z)
+      )
+      const newItems = [...otherTiles, ...otherOnTile]
+      onItemSelectionChange(newItems)
+      anchorRef.current = alreadySelected ? null : index
+    } else if (e.shiftKey && anchorRef.current !== null) {
+      // Range select from anchor to clicked index
+      const from = Math.min(anchorRef.current, index)
+      const to = Math.max(anchorRef.current, index)
+      const rangeItems: SelectedItemInfo[] = []
+      for (let i = from; i <= to; i++) {
+        rangeItems.push({ x, y, z, itemIndex: i })
+      }
+      onItemSelectionChange(rangeItems)
+    } else {
+      // Plain click — select single item
+      onItemSelectionChange([{ x, y, z, itemIndex: index }])
+      anchorRef.current = index
+    }
+  }, [tilePos, selectedItems, onItemSelectionChange])
 
   // Open property editor on double-click request from outside
   useEffect(() => {
@@ -245,7 +302,7 @@ export function Inspector({
                   registry={registry}
                   appearances={appearances}
                   depth={0}
-                  onClick={(e) => onSelectItem?.(i, e)}
+                  onClick={(e) => handleItemClick(i, e)}
                   onDelete={() => handleDelete(i)}
                   onSelectAsBrush={() => onSelectAsBrush(item.id)}
                   onEditToggle={() => setEditingIndex(editingIndex === i ? null : i)}
