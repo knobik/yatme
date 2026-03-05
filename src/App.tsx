@@ -285,6 +285,16 @@ function App() {
         if (currentTool === 'draw' || currentTool === 'erase') {
           toolsRef.current.setActiveTool('select')
         }
+        // Select the top item (like left-click) if tile not already in selection
+        const alreadySelected = toolsRef.current.selectedItems.some(
+          i => i.x === pos.x && i.y === pos.y && i.z === pos.z
+        )
+        if (!alreadySelected && tile && tile.items && tile.items.length > 0) {
+          const topIdx = tile.items.length - 1
+          const newSel = [{ x: pos.x, y: pos.y, z: pos.z, itemIndex: topIdx }]
+          toolsRef.current.setSelectedItems(newSel)
+          renderer.setHighlights([{ pos: { x: pos.x, y: pos.y, z: pos.z }, indices: [topIdx] }])
+        }
         setContextMenu({ x: screenX, y: screenY, tilePos: pos, tile })
       }
 
@@ -567,7 +577,7 @@ function App() {
         : [],
     }
 
-    // Brush selection group — "Select RAW" for top item, "Select Ground Brush" for ground
+    // Brush selection group — scan tile items for all applicable brush types
     const brushSelectItems: ContextMenuAction[] = []
     if (topItem) {
       brushSelectItems.push({
@@ -575,16 +585,74 @@ function App() {
         onClick: () => handleSelectAsRaw(topItem.id),
       })
     }
-    // Find ground item (first item with bank/ground flag) and check if it has a ground brush
-    const groundItem = tile?.items?.find(i => {
-      const app = appearancesData?.objects.get(i.id)
-      return !!app?.flags?.bank
-    })
-    if (groundItem && brushRegistryState?.getBrushForItem(groundItem.id)) {
-      brushSelectItems.push({
-        label: 'Select Ground Brush',
-        onClick: () => handleSelectAsBrush(groundItem.id),
+
+    if (tile?.items && brushRegistryState) {
+      const registry = brushRegistryState
+
+      // Ground brush — from the ground item (first item with bank flag)
+      const groundItem = tile.items.find(i => {
+        const app = appearancesData?.objects.get(i.id)
+        return !!app?.flags?.bank
       })
+      if (groundItem && registry.getBrushForItem(groundItem.id)) {
+        brushSelectItems.push({
+          label: 'Select Ground Brush',
+          onClick: () => handleSelectAsBrush(groundItem.id),
+        })
+      }
+
+      // Wall brush — any non-door item on tile that belongs to a wall brush
+      const wallItem = tile.items.find(i => !registry.isDoorItem(i.id) && registry.getWallBrushForItem(i.id))
+      if (wallItem) {
+        brushSelectItems.push({
+          label: 'Select Wall Brush',
+          onClick: () => handleSelectAsBrush(wallItem.id),
+        })
+      }
+
+      // Carpet brush — any item on tile that belongs to a carpet brush
+      const carpetItem = tile.items.find(i => registry.getCarpetBrushForItem(i.id))
+      if (carpetItem) {
+        brushSelectItems.push({
+          label: 'Select Carpet Brush',
+          onClick: () => handleSelectAsBrush(carpetItem.id),
+        })
+      }
+
+      // Table brush — any item on tile that belongs to a table brush
+      const tableItem = tile.items.find(i => registry.getTableBrushForItem(i.id))
+      if (tableItem) {
+        brushSelectItems.push({
+          label: 'Select Table Brush',
+          onClick: () => handleSelectAsBrush(tableItem.id),
+        })
+      }
+
+      // Doodad brush — from the top item specifically (like RME)
+      if (topItem && registry.getDoodadBrushForItem(topItem.id)) {
+        brushSelectItems.push({
+          label: 'Select Doodad Brush',
+          onClick: () => handleSelectAsBrush(topItem.id),
+        })
+      }
+
+      // TODO: Add "Select House", "Select Monster", "Select Monster Spawn",
+      // "Select NPC", and "Select NPC Spawn" once those systems are implemented.
+
+      // Door brush — from the top item specifically (like RME)
+      if (topItem && registry.isDoorItem(topItem.id)) {
+        const doorInfo = registry.getDoorInfo(topItem.id)
+        if (doorInfo) {
+          // Find the wall brush that owns this door
+          const wallBrush = registry.getWallBrushForItem(topItem.id)
+          if (wallBrush) {
+            brushSelectItems.push({
+              label: 'Select Door Brush',
+              onClick: () => handleSelectAsBrush(topItem.id),
+            })
+          }
+        }
+      }
     }
     const brushSelectGroup: ContextMenuGroup = { items: brushSelectItems }
 

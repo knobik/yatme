@@ -60,13 +60,14 @@ export function setupMapInput(
       activeButton = 1
       canvas.setPointerCapture(e.pointerId)
     } else if (e.button === 2) {
-      // Right mouse: track for context menu
+      // Right mouse: select like left-click, then track for context menu
       dragging = true
       dragDist = 0
       dragStartX = e.clientX
       dragStartY = e.clientY
       activeButton = 2
       canvas.setPointerCapture(e.pointerId)
+
     } else if (e.button === 0) {
       // Left mouse: tool callbacks or pan fallback
       dragging = true
