@@ -564,8 +564,7 @@ function App() {
           disabled: !tile,
           onClick: () => {
             if (!isInSelection) currentTools.selectTiles([tilePos])
-            currentTools.copy()
-            currentTools.deleteSelection()
+            currentTools.cut()
           },
         },
         {

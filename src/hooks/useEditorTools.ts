@@ -3,6 +3,10 @@ import type { MapRenderer } from '../lib/MapRenderer'
 import type { MapMutator } from '../lib/MapMutator'
 import { type OtbmMap, type OtbmItem, deepCloneItem } from '../lib/otbm'
 import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
+import type { GroundBrush } from '../lib/brushes/BrushTypes'
+import type { WallBrush } from '../lib/brushes/WallTypes'
+import type { CarpetBrush, TableBrush } from '../lib/brushes/CarpetTypes'
+import type { DoodadBrush } from '../lib/brushes/DoodadTypes'
 import { DOOR_NORMAL } from '../lib/brushes/WallTypes'
 
 export type EditorTool = 'select' | 'draw' | 'erase' | 'door'
@@ -14,6 +18,78 @@ export interface SelectedItemInfo {
   z: number
   itemIndex: number
 }
+
+// ── Brush resolution (discriminated union) ───────────────────────────
+
+type ResolvedBrush =
+  | { type: 'ground'; brush: GroundBrush; registry: BrushRegistry }
+  | { type: 'door'; doorType: number; registry: BrushRegistry }
+  | { type: 'wall'; brush: WallBrush; registry: BrushRegistry }
+  | { type: 'carpet'; brush: CarpetBrush; registry: BrushRegistry }
+  | { type: 'table'; brush: TableBrush; registry: BrushRegistry }
+  | { type: 'doodad'; brush: DoodadBrush; registry: BrushRegistry }
+  | { type: 'raw'; itemId: number }
+
+function resolveBrush(itemId: number, registry: BrushRegistry | null): ResolvedBrush {
+  if (registry) {
+    const ground = registry.getBrushForItem(itemId)
+    if (ground) return { type: 'ground', brush: ground, registry }
+    const door = registry.getDoorInfo(itemId)
+    if (door) return { type: 'door', doorType: door.type, registry }
+    const wall = registry.getWallBrushForItem(itemId)
+    if (wall) return { type: 'wall', brush: wall, registry }
+    const carpet = registry.getCarpetBrushForItem(itemId)
+    if (carpet) return { type: 'carpet', brush: carpet, registry }
+    const table = registry.getTableBrushForItem(itemId)
+    if (table) return { type: 'table', brush: table, registry }
+    const doodad = registry.getDoodadBrushForItem(itemId)
+    if (doodad) return { type: 'doodad', brush: doodad, registry }
+  }
+  return { type: 'raw', itemId }
+}
+
+function brushBatchName(brush: ResolvedBrush): string {
+  switch (brush.type) {
+    case 'ground': return 'Paint ground'
+    case 'door': return 'Place door'
+    case 'wall': return 'Paint wall'
+    case 'carpet': return 'Paint carpet'
+    case 'table': return 'Paint table'
+    case 'doodad': return 'Paint doodad'
+    case 'raw': return 'Draw items'
+  }
+}
+
+function applyBrushToTile(
+  mutator: MapMutator, x: number, y: number, z: number,
+  brush: ResolvedBrush, brushSize: number,
+): void {
+  switch (brush.type) {
+    case 'ground': mutator.paintGround(x, y, z, brush.brush, brush.registry); break
+    case 'door': mutator.paintDoor(x, y, z, brush.doorType, brush.registry); break
+    case 'wall': mutator.paintWall(x, y, z, brush.brush, brush.registry); break
+    case 'carpet': mutator.paintCarpet(x, y, z, brush.brush, brush.registry); break
+    case 'table': mutator.paintTable(x, y, z, brush.brush, brush.registry); break
+    case 'doodad':
+      if (brushSize > 0 && Math.random() * brush.brush.thicknessCeiling >= brush.brush.thickness) return
+      mutator.paintDoodad(x, y, z, brush.brush, brush.registry)
+      break
+    case 'raw': mutator.addItem(x, y, z, { id: brush.itemId }); break
+  }
+}
+
+function getPreviewItemId(brush: ResolvedBrush, fallbackId: number): number {
+  switch (brush.type) {
+    case 'ground': return brush.brush.lookId > 0 ? brush.brush.lookId : fallbackId
+    case 'wall': return brush.brush.lookId > 0 ? brush.brush.lookId : fallbackId
+    case 'carpet': return brush.brush.lookId > 0 ? brush.brush.lookId : fallbackId
+    case 'table': return brush.brush.lookId > 0 ? brush.brush.lookId : fallbackId
+    case 'doodad': return brush.brush.lookId > 0 ? brush.brush.lookId : fallbackId
+    default: return fallbackId
+  }
+}
+
+// ── Utility functions ────────────────────────────────────────────────
 
 function getTilesInBrush(cx: number, cy: number, size: number, shape: BrushShape): { x: number; y: number }[] {
   if (size === 0) return [{ x: cx, y: cy }]
@@ -226,420 +302,380 @@ export function useEditorTools(
   useEffect(() => {
     if (!renderer || !mutator) return
 
-    renderer.onTilePointerDown = (pos, event) => {
-      // Paste preview mode: click commits paste and exits paste mode
-      if (isPastingRef.current && clipboardRef.current) {
-        executePasteAt(pos.x, pos.y, renderer.floor)
-        cancelPaste()
+    // ── Draw tool handlers ─────────────────────────────────────────
+
+    function handleDrawDown(pos: { x: number; y: number; z: number }) {
+      const itemId = selectedItemIdRef.current
+      if (itemId == null) return
+      paintedTilesRef.current.clear()
+      const brush = resolveBrush(itemId, brushRegistryRef.current)
+      mutator.beginBatch(brushBatchName(brush))
+      const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
+      for (const t of tiles) {
+        const key = `${t.x},${t.y}`
+        paintedTilesRef.current.add(key)
+        applyBrushToTile(mutator, t.x, t.y, pos.z, brush, brushSizeRef.current)
+      }
+      mutator.flushChunkUpdates()
+    }
+
+    function handleDrawMove(pos: { x: number; y: number; z: number }) {
+      const itemId = selectedItemIdRef.current
+      if (itemId == null) return
+      const brush = resolveBrush(itemId, brushRegistryRef.current)
+      const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
+      let any = false
+      for (const t of tiles) {
+        const key = `${t.x},${t.y}`
+        if (paintedTilesRef.current.has(key)) continue
+        paintedTilesRef.current.add(key)
+        applyBrushToTile(mutator, t.x, t.y, pos.z, brush, brushSizeRef.current)
+        any = true
+      }
+      if (any) mutator.flushChunkUpdates()
+    }
+
+    // ── Erase tool handlers ────────────────────────────────────────
+
+    function handleEraseDown(pos: { x: number; y: number; z: number }) {
+      paintedTilesRef.current.clear()
+      mutator.beginBatch('Erase items')
+      const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
+      for (const t of tiles) {
+        const key = `${t.x},${t.y}`
+        paintedTilesRef.current.add(key)
+        mutator.removeTopItem(t.x, t.y, pos.z)
+      }
+      mutator.flushChunkUpdates()
+    }
+
+    function handleEraseMove(pos: { x: number; y: number; z: number }) {
+      const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
+      let any = false
+      for (const t of tiles) {
+        const key = `${t.x},${t.y}`
+        if (paintedTilesRef.current.has(key)) continue
+        paintedTilesRef.current.add(key)
+        mutator.removeTopItem(t.x, t.y, pos.z)
+        any = true
+      }
+      if (any) mutator.flushChunkUpdates()
+    }
+
+    // ── Door tool handlers ─────────────────────────────────────────
+
+    function handleDoorDown(pos: { x: number; y: number; z: number }) {
+      const registry = brushRegistryRef.current
+      if (!registry) return
+      const doorType = activeDoorTypeRef.current
+      paintedTilesRef.current.clear()
+      mutator.beginBatch('Place door')
+      const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
+      for (const t of tiles) {
+        const key = `${t.x},${t.y}`
+        paintedTilesRef.current.add(key)
+        mutator.paintDoor(t.x, t.y, pos.z, doorType, registry)
+      }
+      mutator.flushChunkUpdates()
+    }
+
+    function handleDoorMove(pos: { x: number; y: number; z: number }) {
+      const registry = brushRegistryRef.current
+      if (!registry) return
+      const doorType = activeDoorTypeRef.current
+      const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
+      let any = false
+      for (const t of tiles) {
+        const key = `${t.x},${t.y}`
+        if (paintedTilesRef.current.has(key)) continue
+        paintedTilesRef.current.add(key)
+        mutator.paintDoor(t.x, t.y, pos.z, doorType, registry)
+        any = true
+      }
+      if (any) mutator.flushChunkUpdates()
+    }
+
+    // ── Select tool handlers ───────────────────────────────────────
+
+    function handleSelectDown(pos: { x: number; y: number; z: number }, event: PointerEvent) {
+      const ctrlKey = event.ctrlKey || event.metaKey
+      selectStartRef.current = pos
+      isShiftDragRef.current = event.shiftKey
+      isCtrlDragRef.current = ctrlKey
+
+      // Plain click (no modifiers): select top item immediately and begin drag-move
+      if (!event.shiftKey && !ctrlKey) {
+        const tileKey = `${pos.x},${pos.y},${pos.z}`
+        const tile = mapData?.tiles.get(tileKey) ?? null
+
+        // Check if clicking an already-selected tile
+        const isAlreadySelected = selectedItemsRef.current.some(
+          s => s.x === pos.x && s.y === pos.y && s.z === pos.z
+        )
+
+        if (!isAlreadySelected && tile && tile.items.length > 0) {
+          // Select top item immediately so drag can begin in same gesture
+          const topIdx = tile.items.length - 1
+          const newSel: SelectedItemInfo = { x: pos.x, y: pos.y, z: pos.z, itemIndex: topIdx }
+          setSelectedItems([newSel])
+          selectedItemsRef.current = [newSel]
+          renderer.setHighlights([{ pos: { x: pos.x, y: pos.y, z: pos.z }, indices: [topIdx] }])
+        }
+
+        // Begin drag-move if tile has any selection
+        if (isAlreadySelected || (tile && tile.items.length > 0)) {
+          isDragMovingRef.current = true
+          dragMoveOriginRef.current = pos
+          dragMoveLastPosRef.current = pos
+        }
+      }
+
+      if (ctrlKey && !event.shiftKey) {
+        // Ctrl+Click: toggle top item in selection (immediate, additive)
+        const tileKey = `${pos.x},${pos.y},${pos.z}`
+        const tile = mapData?.tiles.get(tileKey) ?? null
+        if (tile && tile.items.length > 0) {
+          const topIdx = tile.items.length - 1
+          const newItem: SelectedItemInfo = { x: pos.x, y: pos.y, z: pos.z, itemIndex: topIdx }
+          const newItems = toggleItemInSelection(selectedItemsRef.current, newItem)
+          setSelectedItems(newItems)
+          selectedItemsRef.current = newItems
+          applyHighlights(renderer, newItems)
+        }
+      } else if (ctrlKey && event.shiftKey) {
+        // Ctrl+Shift: boundbox mode, do NOT clear existing selection (append mode)
+        // Snapshot current selectedItems to merge with during drag
+        selectedItemsSnapshotRef.current = [...selectedItemsRef.current]
+      }
+      // Shift (no Ctrl): boundbox mode, clearing happens naturally as rectangle replaces during move
+      // Plain click (no modifiers): handled in pointerUp
+    }
+
+    function handleSelectMove(pos: { x: number; y: number; z: number }) {
+      // Drag-move: track target position and show ghost preview
+      if (isDragMovingRef.current) {
+        dragMoveLastPosRef.current = pos
+        const origin = dragMoveOriginRef.current
+        if (origin) {
+          const dx = pos.x - origin.x
+          const dy = pos.y - origin.y
+          if (dx === 0 && dy === 0) {
+            renderer.clearDragPreview()
+            return
+          }
+          // Collect unique source tile positions from selectedItems
+          const sourceTiles: { x: number; y: number; z: number }[] = []
+          const seen = new Set<string>()
+          for (const s of selectedItemsRef.current) {
+            const key = `${s.x},${s.y},${s.z}`
+            if (!seen.has(key)) { seen.add(key); sourceTiles.push({ x: s.x, y: s.y, z: s.z }) }
+          }
+          renderer.updateDragPreview(sourceTiles, dx, dy)
+        }
         return
       }
-
-      const tool = activeToolRef.current
-      isDraggingRef.current = true
-
-      if (tool === 'draw') {
-        const itemId = selectedItemIdRef.current
-        if (itemId == null) return
-        paintedTilesRef.current.clear()
-        const registry = brushRegistryRef.current
-        const groundBrush = registry?.getBrushForItem(itemId) ?? null
-        const doorInfo = !groundBrush ? registry?.getDoorInfo(itemId) ?? null : null
-        const wallBrush = !groundBrush && !doorInfo ? registry?.getWallBrushForItem(itemId) ?? null : null
-        const carpetBrush = !groundBrush && !doorInfo && !wallBrush ? registry?.getCarpetBrushForItem(itemId) ?? null : null
-        const tableBrush = !groundBrush && !doorInfo && !wallBrush && !carpetBrush ? registry?.getTableBrushForItem(itemId) ?? null : null
-        const doodadBrush = !groundBrush && !doorInfo && !wallBrush && !carpetBrush && !tableBrush ? registry?.getDoodadBrushForItem(itemId) ?? null : null
-        mutator.beginBatch(groundBrush ? 'Paint ground' : doorInfo ? 'Place door' : wallBrush ? 'Paint wall' : carpetBrush ? 'Paint carpet' : tableBrush ? 'Paint table' : doodadBrush ? 'Paint doodad' : 'Draw items')
-        const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
-        for (const t of tiles) {
-          const key = `${t.x},${t.y}`
-          paintedTilesRef.current.add(key)
-          if (groundBrush && registry) {
-            mutator.paintGround(t.x, t.y, pos.z, groundBrush, registry)
-          } else if (doorInfo && registry) {
-            mutator.paintDoor(t.x, t.y, pos.z, doorInfo.type, registry)
-          } else if (wallBrush && registry) {
-            mutator.paintWall(t.x, t.y, pos.z, wallBrush, registry)
-          } else if (carpetBrush && registry) {
-            mutator.paintCarpet(t.x, t.y, pos.z, carpetBrush, registry)
-          } else if (tableBrush && registry) {
-            mutator.paintTable(t.x, t.y, pos.z, tableBrush, registry)
-          } else if (doodadBrush && registry) {
-            if (brushSizeRef.current > 0 && Math.random() * doodadBrush.thicknessCeiling >= doodadBrush.thickness) continue
-            mutator.paintDoodad(t.x, t.y, pos.z, doodadBrush, registry)
-          } else {
-            mutator.addItem(t.x, t.y, pos.z, { id: itemId })
-          }
+      // Plain drag without shift: do nothing
+      if (!isShiftDragRef.current) return
+      // Shift+drag: rectangle selection
+      const start = selectStartRef.current
+      if (!start) return
+      const minX = Math.min(start.x, pos.x)
+      const maxX = Math.max(start.x, pos.x)
+      const minY = Math.min(start.y, pos.y)
+      const maxY = Math.max(start.y, pos.y)
+      const rectTiles: { x: number; y: number; z: number }[] = []
+      for (let y = minY; y <= maxY; y++) {
+        for (let x = minX; x <= maxX; x++) {
+          rectTiles.push({ x, y, z: pos.z })
         }
-        mutator.flushChunkUpdates()
-      } else if (tool === 'erase') {
-        paintedTilesRef.current.clear()
-        mutator.beginBatch('Erase items')
-        const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
-        for (const t of tiles) {
-          const key = `${t.x},${t.y}`
-          paintedTilesRef.current.add(key)
-          mutator.removeTopItem(t.x, t.y, pos.z)
-        }
-        mutator.flushChunkUpdates()
-      } else if (tool === 'door') {
-        const registry = brushRegistryRef.current
-        if (!registry) return
-        const doorType = activeDoorTypeRef.current
-        paintedTilesRef.current.clear()
-        mutator.beginBatch('Place door')
-        const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
-        for (const t of tiles) {
-          const key = `${t.x},${t.y}`
-          paintedTilesRef.current.add(key)
-          mutator.paintDoor(t.x, t.y, pos.z, doorType, registry)
-        }
-        mutator.flushChunkUpdates()
-      } else if (tool === 'select') {
-        const ctrlKey = event.ctrlKey || event.metaKey
-        selectStartRef.current = pos
-        isShiftDragRef.current = event.shiftKey
-        isCtrlDragRef.current = ctrlKey
-
-        // Plain click (no modifiers): select top item immediately and begin drag-move
-        if (!event.shiftKey && !ctrlKey) {
-          const tileKey = `${pos.x},${pos.y},${pos.z}`
-          const tile = mapData?.tiles.get(tileKey) ?? null
-
-          // Check if clicking an already-selected tile
-          const isAlreadySelected = selectedItemsRef.current.some(
-            s => s.x === pos.x && s.y === pos.y && s.z === pos.z
-          )
-
-          if (!isAlreadySelected && tile && tile.items.length > 0) {
-            // Select top item immediately so drag can begin in same gesture
-            const topIdx = tile.items.length - 1
-            const newSel: SelectedItemInfo = { x: pos.x, y: pos.y, z: pos.z, itemIndex: topIdx }
-            setSelectedItems([newSel])
-            selectedItemsRef.current = [newSel]
-            renderer.setHighlights([{ pos: { x: pos.x, y: pos.y, z: pos.z }, indices: [topIdx] }])
-          }
-
-          // Begin drag-move if tile has any selection
-          if (isAlreadySelected || (tile && tile.items.length > 0)) {
-            isDragMovingRef.current = true
-            dragMoveOriginRef.current = pos
-            dragMoveLastPosRef.current = pos
-          }
-        }
-
-        if (ctrlKey && !event.shiftKey) {
-          // Ctrl+Click: toggle top item in selection (immediate, additive)
-          const tileKey = `${pos.x},${pos.y},${pos.z}`
-          const tile = mapData?.tiles.get(tileKey) ?? null
-          if (tile && tile.items.length > 0) {
-            const topIdx = tile.items.length - 1
-            const newItem: SelectedItemInfo = { x: pos.x, y: pos.y, z: pos.z, itemIndex: topIdx }
-            const newItems = toggleItemInSelection(selectedItemsRef.current, newItem)
-            setSelectedItems(newItems)
-            selectedItemsRef.current = newItems
-            applyHighlights(renderer, newItems)
-          }
-        } else if (ctrlKey && event.shiftKey) {
-          // Ctrl+Shift: boundbox mode, do NOT clear existing selection (append mode)
-          // Snapshot current selectedItems to merge with during drag
-          selectedItemsSnapshotRef.current = [...selectedItemsRef.current]
-        } else if (event.shiftKey && !ctrlKey) {
-          // Shift (no Ctrl): boundbox mode, clear existing selection first
-          // (clearing happens naturally as rectangle replaces during move)
-        }
-        // Plain click (no modifiers): handled in pointerUp
       }
-    }
 
-    renderer.onTilePointerMove = (pos, _event) => {
-      const tool = activeToolRef.current
-      if (!isDraggingRef.current) return
-
-      if (tool === 'draw') {
-        const itemId = selectedItemIdRef.current
-        if (itemId == null) return
-        const registry = brushRegistryRef.current
-        const groundBrush = registry?.getBrushForItem(itemId) ?? null
-        const doorInfo = !groundBrush ? registry?.getDoorInfo(itemId) ?? null : null
-        const wallBrush = !groundBrush && !doorInfo ? registry?.getWallBrushForItem(itemId) ?? null : null
-        const carpetBrush = !groundBrush && !doorInfo && !wallBrush ? registry?.getCarpetBrushForItem(itemId) ?? null : null
-        const tableBrush = !groundBrush && !doorInfo && !wallBrush && !carpetBrush ? registry?.getTableBrushForItem(itemId) ?? null : null
-        const doodadBrush = !groundBrush && !doorInfo && !wallBrush && !carpetBrush && !tableBrush ? registry?.getDoodadBrushForItem(itemId) ?? null : null
-        const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
-        let any = false
-        for (const t of tiles) {
-          const key = `${t.x},${t.y}`
-          if (paintedTilesRef.current.has(key)) continue
-          paintedTilesRef.current.add(key)
-          if (groundBrush && registry) {
-            mutator.paintGround(t.x, t.y, pos.z, groundBrush, registry)
-          } else if (doorInfo && registry) {
-            mutator.paintDoor(t.x, t.y, pos.z, doorInfo.type, registry)
-          } else if (wallBrush && registry) {
-            mutator.paintWall(t.x, t.y, pos.z, wallBrush, registry)
-          } else if (carpetBrush && registry) {
-            mutator.paintCarpet(t.x, t.y, pos.z, carpetBrush, registry)
-          } else if (tableBrush && registry) {
-            mutator.paintTable(t.x, t.y, pos.z, tableBrush, registry)
-          } else if (doodadBrush && registry) {
-            if (brushSizeRef.current > 0 && Math.random() * doodadBrush.thicknessCeiling >= doodadBrush.thickness) continue
-            mutator.paintDoodad(t.x, t.y, pos.z, doodadBrush, registry)
-          } else {
-            mutator.addItem(t.x, t.y, pos.z, { id: itemId })
-          }
-          any = true
-        }
-        if (any) mutator.flushChunkUpdates()
-      } else if (tool === 'erase') {
-        const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
-        let any = false
-        for (const t of tiles) {
-          const key = `${t.x},${t.y}`
-          if (paintedTilesRef.current.has(key)) continue
-          paintedTilesRef.current.add(key)
-          mutator.removeTopItem(t.x, t.y, pos.z)
-          any = true
-        }
-        if (any) mutator.flushChunkUpdates()
-      } else if (tool === 'door') {
-        const registry = brushRegistryRef.current
-        if (!registry) return
-        const doorType = activeDoorTypeRef.current
-        const tiles = getTilesInBrush(pos.x, pos.y, brushSizeRef.current, brushShapeRef.current)
-        let any = false
-        for (const t of tiles) {
-          const key = `${t.x},${t.y}`
-          if (paintedTilesRef.current.has(key)) continue
-          paintedTilesRef.current.add(key)
-          mutator.paintDoor(t.x, t.y, pos.z, doorType, registry)
-          any = true
-        }
-        if (any) mutator.flushChunkUpdates()
-      } else if (tool === 'select') {
-        // Drag-move: track target position and show ghost preview
-        if (isDragMovingRef.current) {
-          dragMoveLastPosRef.current = pos
-          const origin = dragMoveOriginRef.current
-          if (origin) {
-            const dx = pos.x - origin.x
-            const dy = pos.y - origin.y
-            if (dx === 0 && dy === 0) {
-              renderer.clearDragPreview()
-              return
-            }
-            // Collect unique source tile positions from selectedItems
-            const sourceTiles: { x: number; y: number; z: number }[] = []
-            const seen = new Set<string>()
-            for (const s of selectedItemsRef.current) {
-              const key = `${s.x},${s.y},${s.z}`
-              if (!seen.has(key)) { seen.add(key); sourceTiles.push({ x: s.x, y: s.y, z: s.z }) }
-            }
-            renderer.updateDragPreview(sourceTiles, dx, dy)
-          }
-          return
-        }
-        // Plain drag without shift: do nothing
-        if (!isShiftDragRef.current) return
-        // Shift+drag: rectangle selection
-        const start = selectStartRef.current
-        if (!start) return
-        const minX = Math.min(start.x, pos.x)
-        const maxX = Math.max(start.x, pos.x)
-        const minY = Math.min(start.y, pos.y)
-        const maxY = Math.max(start.y, pos.y)
-        const rectTiles: { x: number; y: number; z: number }[] = []
-        for (let y = minY; y <= maxY; y++) {
-          for (let x = minX; x <= maxX; x++) {
-            rectTiles.push({ x, y, z: pos.z })
-          }
-        }
-
-        if (mapData) {
-          const rectItems = selectAllItemsOnTiles(rectTiles, mapData)
-          if (isCtrlDragRef.current) {
-            // Ctrl+Shift+Drag: append rectangle to existing selection
-            const merged = mergeItemSelections(selectedItemsSnapshotRef.current, rectItems)
-            setSelectedItems(merged)
-            selectedItemsRef.current = merged
-            applyHighlights(renderer, merged)
-          } else {
-            // Shift+Drag: replace selection with rectangle
-            setSelectedItems(rectItems)
-            selectedItemsRef.current = rectItems
-            applyHighlights(renderer, rectItems)
-          }
+      if (mapData) {
+        const rectItems = selectAllItemsOnTiles(rectTiles, mapData)
+        if (isCtrlDragRef.current) {
+          // Ctrl+Shift+Drag: append rectangle to existing selection
+          const merged = mergeItemSelections(selectedItemsSnapshotRef.current, rectItems)
+          setSelectedItems(merged)
+          selectedItemsRef.current = merged
+          applyHighlights(renderer, merged)
+        } else {
+          // Shift+Drag: replace selection with rectangle
+          setSelectedItems(rectItems)
+          selectedItemsRef.current = rectItems
+          applyHighlights(renderer, rectItems)
         }
       }
     }
 
-    renderer.onTilePointerUp = (pos, _event) => {
-      const tool = activeToolRef.current
-      isDraggingRef.current = false
+    function commitDragMove(pos: { x: number; y: number; z: number }) {
+      const origin = dragMoveOriginRef.current
+      const target = dragMoveLastPosRef.current
+      isDragMovingRef.current = false
+      dragMoveOriginRef.current = null
+      dragMoveLastPosRef.current = null
+      renderer.clearDragPreview()
 
-      if (tool === 'draw' || tool === 'erase' || tool === 'door') {
-        paintedTilesRef.current.clear()
-        mutator.commitBatch()
-      } else if (tool === 'select') {
-        const start = selectStartRef.current
-        const wasClick = start && start.x === pos.x && start.y === pos.y
-        const ctrlKey = isCtrlDragRef.current
-        const shiftKey = isShiftDragRef.current
+      const didMove = origin && target && (origin.x !== target.x || origin.y !== target.y)
 
-        // Handle drag-move completion
-        if (isDragMovingRef.current) {
-          const origin = dragMoveOriginRef.current
-          const target = dragMoveLastPosRef.current
-          isDragMovingRef.current = false
-          dragMoveOriginRef.current = null
-          dragMoveLastPosRef.current = null
-          renderer.clearDragPreview()
+      if (didMove) {
+        const dx = target.x - origin.x
+        const dy = target.y - origin.y
 
-          if (origin && target && (origin.x !== target.x || origin.y !== target.y)) {
-            const dx = target.x - origin.x
-            const dy = target.y - origin.y
-
-            const itemsToMove = selectedItemsRef.current
-            if (itemsToMove.length === 0) {
-              selectStartRef.current = null
-              isShiftDragRef.current = false
-              isCtrlDragRef.current = false
-              return
-            }
-
-            // Group by source tile, sort indices descending for safe removal
-            const byTile = new Map<string, SelectedItemInfo[]>()
-            for (const item of itemsToMove) {
-              const key = `${item.x},${item.y},${item.z}`
-              const list = byTile.get(key) ?? []
-              list.push(item)
-              byTile.set(key, list)
-            }
-
-            mutator.beginBatch('Move items')
-            const newItems: SelectedItemInfo[] = []
-
-            for (const [, tileItems] of byTile) {
-              // Deduplicate indices and sort descending
-              const uniqueIndices = [...new Set(tileItems.map(t => t.itemIndex))].sort((a, b) => b - a)
-              const removed: OtbmItem[] = []
-              const srcX = tileItems[0].x
-              const srcY = tileItems[0].y
-              const srcZ = tileItems[0].z
-
-              for (const idx of uniqueIndices) {
-                const tileKey = `${srcX},${srcY},${srcZ}`
-                const tile = mapData?.tiles.get(tileKey)
-                if (!tile || idx >= tile.items.length) continue
-                const item = deepCloneItem(tile.items[idx])
-                removed.unshift(item) // preserve original order
-                mutator.removeItem(srcX, srcY, srcZ, idx)
-              }
-
-              // Add items to target tile
-              const destX = srcX + dx
-              const destY = srcY + dy
-              const destKey = `${destX},${destY},${srcZ}`
-              const destTile = mapData?.tiles.get(destKey)
-              const baseIndex = destTile ? destTile.items.length : 0
-              for (let ri = 0; ri < removed.length; ri++) {
-                mutator.addItem(destX, destY, srcZ, removed[ri])
-                newItems.push({ x: destX, y: destY, z: srcZ, itemIndex: baseIndex + ri })
-              }
-            }
-
-            mutator.commitBatch()
-
-            // Update selection to new positions - expand to all items on dest tiles
-            if (mapData) {
-              const destTilePositions: { x: number; y: number; z: number }[] = []
-              const seen = new Set<string>()
-              for (const item of newItems) {
-                const key = `${item.x},${item.y},${item.z}`
-                if (!seen.has(key)) { seen.add(key); destTilePositions.push({ x: item.x, y: item.y, z: item.z }) }
-              }
-              const expandedItems = selectAllItemsOnTiles(destTilePositions, mapData)
-              setSelectedItems(expandedItems)
-              selectedItemsRef.current = expandedItems
-              applyHighlights(renderer, expandedItems)
-            }
-          }
-          // Same tile — selection already happened in pointerDown, just open inspector
+        const itemsToMove = selectedItemsRef.current
+        if (itemsToMove.length === 0) {
           selectStartRef.current = null
           isShiftDragRef.current = false
           isCtrlDragRef.current = false
-          if (clickToInspectRef.current) {
-            const key = `${pos.x},${pos.y},${pos.z}`
-            const tile = mapData?.tiles.get(key) ?? null
-            renderer.onTileClick?.(tile, pos.x, pos.y)
-          }
           return
         }
 
-        if (wasClick && !shiftKey && !ctrlKey) {
-          // Plain click — selection already happened in pointerDown
-          // Just open inspector
-          const key = `${pos.x},${pos.y},${pos.z}`
-          const tile = mapData?.tiles.get(key) ?? null
+        // Group by source tile, sort indices descending for safe removal
+        const byTile = new Map<string, SelectedItemInfo[]>()
+        for (const item of itemsToMove) {
+          const key = `${item.x},${item.y},${item.z}`
+          const list = byTile.get(key) ?? []
+          list.push(item)
+          byTile.set(key, list)
+        }
 
-          // Handle click on empty tile (deselect)
-          if (!tile || tile.items.length === 0) {
-            setSelectedItems([])
-            selectedItemsRef.current = []
-            renderer.clearItemHighlight()
+        mutator.beginBatch('Move items')
+        const newItems: SelectedItemInfo[] = []
+
+        for (const [, tileItems] of byTile) {
+          // Deduplicate indices and sort descending
+          const uniqueIndices = [...new Set(tileItems.map(t => t.itemIndex))].sort((a, b) => b - a)
+          const removed: OtbmItem[] = []
+          const srcX = tileItems[0].x
+          const srcY = tileItems[0].y
+          const srcZ = tileItems[0].z
+
+          for (const idx of uniqueIndices) {
+            const tileKey = `${srcX},${srcY},${srcZ}`
+            const tile = mapData?.tiles.get(tileKey)
+            if (!tile || idx >= tile.items.length) continue
+            const item = deepCloneItem(tile.items[idx])
+            removed.unshift(item) // preserve original order
+            mutator.removeItem(srcX, srcY, srcZ, idx)
           }
 
-          // Open inspector (if click-to-inspect is enabled)
-          if (clickToInspectRef.current) {
-            renderer.onTileClick?.(tile, pos.x, pos.y)
-          }
-        } else if (wasClick && ctrlKey && !shiftKey) {
-          // Ctrl+Click — already handled in pointerDown (toggle top item)
-          if (clickToInspectRef.current) {
-            const key = `${pos.x},${pos.y},${pos.z}`
-            const tile = mapData?.tiles.get(key) ?? null
-            renderer.onTileClick?.(tile, pos.x, pos.y)
-          }
-        } else if (wasClick && ctrlKey && shiftKey) {
-          // Ctrl+Shift+Click (no drag) — toggle all items for tile in/out of selection
-          if (mapData) {
-            const tileKey = `${pos.x},${pos.y},${pos.z}`
-            const tile = mapData.tiles.get(tileKey)
-            const tileItemCount = tile?.items.length ?? 0
-            // Check if all items on this tile are already selected
-            const currentOnTile = selectedItemsRef.current.filter(
-              s => s.x === pos.x && s.y === pos.y && s.z === pos.z
-            )
-            let newItems: SelectedItemInfo[]
-            if (currentOnTile.length >= tileItemCount && tileItemCount > 0) {
-              // All selected — remove them
-              newItems = selectedItemsRef.current.filter(
-                s => !(s.x === pos.x && s.y === pos.y && s.z === pos.z)
-              )
-            } else {
-              // Not all selected — add all items for this tile
-              const otherItems = selectedItemsRef.current.filter(
-                s => !(s.x === pos.x && s.y === pos.y && s.z === pos.z)
-              )
-              const tileItems: SelectedItemInfo[] = []
-              for (let i = 0; i < tileItemCount; i++) {
-                tileItems.push({ x: pos.x, y: pos.y, z: pos.z, itemIndex: i })
-              }
-              newItems = [...otherItems, ...tileItems]
-            }
-            setSelectedItems(newItems)
-            selectedItemsRef.current = newItems
-            applyHighlights(renderer, newItems)
+          // Add items to target tile
+          const destX = srcX + dx
+          const destY = srcY + dy
+          const destKey = `${destX},${destY},${srcZ}`
+          const destTile = mapData?.tiles.get(destKey)
+          const baseIndex = destTile ? destTile.items.length : 0
+          for (let ri = 0; ri < removed.length; ri++) {
+            mutator.addItem(destX, destY, srcZ, removed[ri])
+            newItems.push({ x: destX, y: destY, z: srcZ, itemIndex: baseIndex + ri })
           }
         }
-        // If shift+drag ended, rectangle was already built during move
 
-        selectStartRef.current = null
-        isShiftDragRef.current = false
-        isCtrlDragRef.current = false
+        mutator.commitBatch()
+
+        // Update selection to new positions - expand to all items on dest tiles
+        if (mapData) {
+          const destTilePositions: { x: number; y: number; z: number }[] = []
+          const seen = new Set<string>()
+          for (const item of newItems) {
+            const key = `${item.x},${item.y},${item.z}`
+            if (!seen.has(key)) { seen.add(key); destTilePositions.push({ x: item.x, y: item.y, z: item.z }) }
+          }
+          const expandedItems = selectAllItemsOnTiles(destTilePositions, mapData)
+          setSelectedItems(expandedItems)
+          selectedItemsRef.current = expandedItems
+          applyHighlights(renderer, expandedItems)
+        }
+      }
+
+      selectStartRef.current = null
+      isShiftDragRef.current = false
+      isCtrlDragRef.current = false
+
+      // Same tile — selection already happened in pointerDown, just open inspector
+      if (!didMove && clickToInspectRef.current) {
+        const key = `${pos.x},${pos.y},${pos.z}`
+        const tile = mapData?.tiles.get(key) ?? null
+        renderer.onTileClick?.(tile, pos.x, pos.y)
       }
     }
 
-    renderer.onTileHover = (pos) => {
+    function handleSelectUp(pos: { x: number; y: number; z: number }) {
+      // Handle drag-move completion
+      if (isDragMovingRef.current) {
+        commitDragMove(pos)
+        return
+      }
+
+      const start = selectStartRef.current
+      const wasClick = start && start.x === pos.x && start.y === pos.y
+      const ctrlKey = isCtrlDragRef.current
+      const shiftKey = isShiftDragRef.current
+
+      if (wasClick && !shiftKey && !ctrlKey) {
+        // Plain click — selection already happened in pointerDown
+        const key = `${pos.x},${pos.y},${pos.z}`
+        const tile = mapData?.tiles.get(key) ?? null
+
+        // Handle click on empty tile (deselect)
+        if (!tile || tile.items.length === 0) {
+          setSelectedItems([])
+          selectedItemsRef.current = []
+          renderer.clearItemHighlight()
+        }
+
+        // Open inspector (if click-to-inspect is enabled)
+        if (clickToInspectRef.current) {
+          renderer.onTileClick?.(tile, pos.x, pos.y)
+        }
+      } else if (wasClick && ctrlKey && !shiftKey) {
+        // Ctrl+Click — already handled in pointerDown (toggle top item)
+        if (clickToInspectRef.current) {
+          const key = `${pos.x},${pos.y},${pos.z}`
+          const tile = mapData?.tiles.get(key) ?? null
+          renderer.onTileClick?.(tile, pos.x, pos.y)
+        }
+      } else if (wasClick && ctrlKey && shiftKey) {
+        // Ctrl+Shift+Click (no drag) — toggle all items for tile in/out of selection
+        if (mapData) {
+          const tileKey = `${pos.x},${pos.y},${pos.z}`
+          const tile = mapData.tiles.get(tileKey)
+          const tileItemCount = tile?.items.length ?? 0
+          // Check if all items on this tile are already selected
+          const currentOnTile = selectedItemsRef.current.filter(
+            s => s.x === pos.x && s.y === pos.y && s.z === pos.z
+          )
+          let newItems: SelectedItemInfo[]
+          if (currentOnTile.length >= tileItemCount && tileItemCount > 0) {
+            // All selected — remove them
+            newItems = selectedItemsRef.current.filter(
+              s => !(s.x === pos.x && s.y === pos.y && s.z === pos.z)
+            )
+          } else {
+            // Not all selected — add all items for this tile
+            const otherItems = selectedItemsRef.current.filter(
+              s => !(s.x === pos.x && s.y === pos.y && s.z === pos.z)
+            )
+            const tileItems: SelectedItemInfo[] = []
+            for (let i = 0; i < tileItemCount; i++) {
+              tileItems.push({ x: pos.x, y: pos.y, z: pos.z, itemIndex: i })
+            }
+            newItems = [...otherItems, ...tileItems]
+          }
+          setSelectedItems(newItems)
+          selectedItemsRef.current = newItems
+          applyHighlights(renderer, newItems)
+        }
+      }
+      // If shift+drag ended, rectangle was already built during move
+
+      selectStartRef.current = null
+      isShiftDragRef.current = false
+      isCtrlDragRef.current = false
+    }
+
+    // ── Hover handler ──────────────────────────────────────────────
+
+    function handleHover(pos: { x: number; y: number; z: number }) {
       hoverPosRef.current = pos
 
       // Paste preview mode: show clipboard ghost at hover position
@@ -662,33 +698,8 @@ export function useEditorTools(
       if (tool === 'draw') {
         const itemId = selectedItemIdRef.current
         if (itemId != null) {
-          const registry = brushRegistryRef.current
-          let previewItemId = itemId
-          const groundBrush = registry?.getBrushForItem(itemId)
-          if (groundBrush && groundBrush.lookId > 0) {
-            previewItemId = groundBrush.lookId
-          } else if (!groundBrush) {
-            const wallBrush = registry?.getWallBrushForItem(itemId)
-            if (wallBrush && wallBrush.lookId > 0) {
-              previewItemId = wallBrush.lookId
-            } else if (!wallBrush) {
-              const carpetBrush = registry?.getCarpetBrushForItem(itemId)
-              if (carpetBrush && carpetBrush.lookId > 0) {
-                previewItemId = carpetBrush.lookId
-              } else if (!carpetBrush) {
-                const tableBrush = registry?.getTableBrushForItem(itemId)
-                if (tableBrush && tableBrush.lookId > 0) {
-                  previewItemId = tableBrush.lookId
-                } else if (!tableBrush) {
-                  const doodadBrush = registry?.getDoodadBrushForItem(itemId)
-                  if (doodadBrush && doodadBrush.lookId > 0) {
-                    previewItemId = doodadBrush.lookId
-                  }
-                }
-              }
-            }
-          }
-          renderer.updateGhostPreview(previewItemId, tiles)
+          const brush = resolveBrush(itemId, brushRegistryRef.current)
+          renderer.updateGhostPreview(getPreviewItemId(brush, itemId), tiles)
         } else {
           renderer.clearGhostPreview()
         }
@@ -696,6 +707,53 @@ export function useEditorTools(
         renderer.clearGhostPreview()
       }
     }
+
+    // ── Wire callbacks as thin dispatchers ──────────────────────────
+
+    renderer.onTilePointerDown = (pos, event) => {
+      // Paste preview mode: click commits paste and exits paste mode
+      if (isPastingRef.current && clipboardRef.current) {
+        executePasteAt(pos.x, pos.y, renderer.floor)
+        cancelPaste()
+        return
+      }
+
+      const tool = activeToolRef.current
+      isDraggingRef.current = true
+
+      switch (tool) {
+        case 'draw': handleDrawDown(pos); break
+        case 'erase': handleEraseDown(pos); break
+        case 'door': handleDoorDown(pos); break
+        case 'select': handleSelectDown(pos, event); break
+      }
+    }
+
+    renderer.onTilePointerMove = (pos, _event) => {
+      const tool = activeToolRef.current
+      if (!isDraggingRef.current) return
+
+      switch (tool) {
+        case 'draw': handleDrawMove(pos); break
+        case 'erase': handleEraseMove(pos); break
+        case 'door': handleDoorMove(pos); break
+        case 'select': handleSelectMove(pos); break
+      }
+    }
+
+    renderer.onTilePointerUp = (pos, _event) => {
+      const tool = activeToolRef.current
+      isDraggingRef.current = false
+
+      if (tool === 'draw' || tool === 'erase' || tool === 'door') {
+        paintedTilesRef.current.clear()
+        mutator.commitBatch()
+      } else if (tool === 'select') {
+        handleSelectUp(pos)
+      }
+    }
+
+    renderer.onTileHover = handleHover
 
     renderer.onTileDoubleClick = (pos, _event) => {
       if (activeToolRef.current !== 'select') return
