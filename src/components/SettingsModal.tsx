@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 import {
   type EditorSettings,
   saveSettings,
@@ -17,18 +18,7 @@ export function SettingsModal({ settings, onChange, onClose }: SettingsModalProp
   const scrimRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Escape dismissal
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        onClose()
-      }
-    }
-    document.addEventListener('keydown', handler, true)
-    return () => document.removeEventListener('keydown', handler, true)
-  }, [onClose])
+  useEscapeKey(onClose)
 
   function handleScrimClick(e: React.MouseEvent) {
     if (e.target === scrimRef.current) onClose()

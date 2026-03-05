@@ -3,8 +3,7 @@ import { getTilesInBrush } from './types'
 
 export function createDoorHandlers(ctx: ToolContext) {
   function onDown(pos: TilePos) {
-    const registry = ctx.brushRegistryRef.current
-    if (!registry) return
+    if (!ctx.brushRegistryRef.current) return
     const doorType = ctx.activeDoorTypeRef.current
     ctx.paintedTilesRef.current.clear()
     ctx.mutator.beginBatch('Place door')
@@ -12,14 +11,13 @@ export function createDoorHandlers(ctx: ToolContext) {
     for (const t of tiles) {
       const key = `${t.x},${t.y}`
       ctx.paintedTilesRef.current.add(key)
-      ctx.mutator.paintDoor(t.x, t.y, pos.z, doorType, registry)
+      ctx.mutator.paintDoor(t.x, t.y, pos.z, doorType)
     }
     ctx.mutator.flushChunkUpdates()
   }
 
   function onMove(pos: TilePos) {
-    const registry = ctx.brushRegistryRef.current
-    if (!registry) return
+    if (!ctx.brushRegistryRef.current) return
     const doorType = ctx.activeDoorTypeRef.current
     const tiles = getTilesInBrush(pos.x, pos.y, ctx.brushSizeRef.current, ctx.brushShapeRef.current)
     let any = false
@@ -27,7 +25,7 @@ export function createDoorHandlers(ctx: ToolContext) {
       const key = `${t.x},${t.y}`
       if (ctx.paintedTilesRef.current.has(key)) continue
       ctx.paintedTilesRef.current.add(key)
-      ctx.mutator.paintDoor(t.x, t.y, pos.z, doorType, registry)
+      ctx.mutator.paintDoor(t.x, t.y, pos.z, doorType)
       any = true
     }
     if (any) ctx.mutator.flushChunkUpdates()

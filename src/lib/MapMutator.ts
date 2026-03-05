@@ -342,7 +342,8 @@ export class MapMutator {
 
   // --- Ground brush painting ---
 
-  paintGround(x: number, y: number, z: number, brush: GroundBrush, registry: BrushRegistry): void {
+  paintGround(x: number, y: number, z: number, brush: GroundBrush): void {
+    const registry = this._brushRegistry!
     this.autoBatch('Paint ground', () => {
       // 1. Pick random ground item from brush
       const groundItemId = registry.pickRandomItem(brush)
@@ -390,7 +391,8 @@ export class MapMutator {
 
   // --- Wall brush painting ---
 
-  paintWall(x: number, y: number, z: number, brush: WallBrush, registry: BrushRegistry): void {
+  paintWall(x: number, y: number, z: number, brush: WallBrush): void {
+    const registry = this._brushRegistry!
     this.autoBatch('Paint wall', () => {
       const tile = this.getOrCreateTile(x, y, z)
       const oldItems = deepCloneItems(tile.items)
@@ -445,7 +447,8 @@ export class MapMutator {
 
   // --- Door brush painting ---
 
-  paintDoor(x: number, y: number, z: number, doorType: number, registry: BrushRegistry): void {
+  paintDoor(x: number, y: number, z: number, doorType: number): void {
+    const registry = this._brushRegistry!
     this.autoBatch('Place door', () => {
       const tile = this.mapData.tiles.get(tileKey(x, y, z))
       if (!tile) return
@@ -493,7 +496,8 @@ export class MapMutator {
     })
   }
 
-  switchDoorItem(x: number, y: number, z: number, itemIndex: number, registry: BrushRegistry): void {
+  switchDoorItem(x: number, y: number, z: number, itemIndex: number): void {
+    const registry = this._brushRegistry!
     this.autoBatch('Switch door', () => {
       const tile = this.mapData.tiles.get(tileKey(x, y, z))
       if (!tile || itemIndex < 0 || itemIndex >= tile.items.length) return
@@ -516,7 +520,8 @@ export class MapMutator {
 
   // --- Carpet brush painting ---
 
-  paintCarpet(x: number, y: number, z: number, brush: CarpetBrush, registry: BrushRegistry): void {
+  paintCarpet(x: number, y: number, z: number, brush: CarpetBrush): void {
+    const registry = this._brushRegistry!
     this.autoBatch('Paint carpet', () => {
       const tile = this.getOrCreateTile(x, y, z)
       const oldItems = deepCloneItems(tile.items)
@@ -564,7 +569,8 @@ export class MapMutator {
 
   // --- Table brush painting ---
 
-  paintTable(x: number, y: number, z: number, brush: TableBrush, registry: BrushRegistry): void {
+  paintTable(x: number, y: number, z: number, brush: TableBrush): void {
+    const registry = this._brushRegistry!
     this.autoBatch('Paint table', () => {
       const tile = this.getOrCreateTile(x, y, z)
       const oldItems = deepCloneItems(tile.items)
@@ -609,7 +615,8 @@ export class MapMutator {
 
   // --- Doodad brush painting ---
 
-  paintDoodad(x: number, y: number, z: number, brush: DoodadBrush, registry: BrushRegistry): void {
+  paintDoodad(x: number, y: number, z: number, brush: DoodadBrush): void {
+    if (!this._brushRegistry) return
     // Select alternative (use first for v1; alternatives provide variation groups)
     const alt = brush.alternatives[0]
     if (!alt || alt.totalChance === 0) return
@@ -617,7 +624,7 @@ export class MapMutator {
     // Pre-clean: remove old doodad items from ALL possible composite tile positions
     // so that switching between composite variants doesn't leave orphaned items
     if (!brush.onDuplicate) {
-      this.cleanDoodadTiles(x, y, z, alt, brush, registry)
+      this.cleanDoodadTiles(x, y, z, alt, brush)
     }
 
     // Weighted random: composites and singles compete in the same pool
@@ -647,8 +654,8 @@ export class MapMutator {
     x: number, y: number, z: number,
     alt: DoodadAlternative,
     brush: DoodadBrush,
-    registry: BrushRegistry,
   ): void {
+    const registry = this._brushRegistry!
     // Collect all unique tile offsets across all composites + the center tile
     const offsets = new Set<string>()
     offsets.add('0,0,0')
@@ -731,7 +738,8 @@ export class MapMutator {
     }
   }
 
-  removeDoodadItems(x: number, y: number, z: number, brush: DoodadBrush, registry: BrushRegistry): void {
+  removeDoodadItems(x: number, y: number, z: number, brush: DoodadBrush): void {
+    const registry = this._brushRegistry!
     this.autoBatch('Remove doodad', () => {
       const tile = this.mapData.tiles.get(tileKey(x, y, z))
       if (!tile) return

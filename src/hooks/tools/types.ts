@@ -60,28 +60,28 @@ export interface ToolContext {
 // ── Brush resolution ─────────────────────────────────────────────────
 
 export type ResolvedBrush =
-  | { type: 'ground'; brush: GroundBrush; registry: BrushRegistry }
-  | { type: 'door'; doorType: number; registry: BrushRegistry }
-  | { type: 'wall'; brush: WallBrush; registry: BrushRegistry }
-  | { type: 'carpet'; brush: CarpetBrush; registry: BrushRegistry }
-  | { type: 'table'; brush: TableBrush; registry: BrushRegistry }
-  | { type: 'doodad'; brush: DoodadBrush; registry: BrushRegistry }
+  | { type: 'ground'; brush: GroundBrush }
+  | { type: 'door'; doorType: number }
+  | { type: 'wall'; brush: WallBrush }
+  | { type: 'carpet'; brush: CarpetBrush }
+  | { type: 'table'; brush: TableBrush }
+  | { type: 'doodad'; brush: DoodadBrush }
   | { type: 'raw'; itemId: number }
 
 export function resolveBrush(itemId: number, registry: BrushRegistry | null): ResolvedBrush {
   if (registry) {
     const ground = registry.getBrushForItem(itemId)
-    if (ground) return { type: 'ground', brush: ground, registry }
+    if (ground) return { type: 'ground', brush: ground }
     const door = registry.getDoorInfo(itemId)
-    if (door) return { type: 'door', doorType: door.type, registry }
+    if (door) return { type: 'door', doorType: door.type }
     const wall = registry.getWallBrushForItem(itemId)
-    if (wall) return { type: 'wall', brush: wall, registry }
+    if (wall) return { type: 'wall', brush: wall }
     const carpet = registry.getCarpetBrushForItem(itemId)
-    if (carpet) return { type: 'carpet', brush: carpet, registry }
+    if (carpet) return { type: 'carpet', brush: carpet }
     const table = registry.getTableBrushForItem(itemId)
-    if (table) return { type: 'table', brush: table, registry }
+    if (table) return { type: 'table', brush: table }
     const doodad = registry.getDoodadBrushForItem(itemId)
-    if (doodad) return { type: 'doodad', brush: doodad, registry }
+    if (doodad) return { type: 'doodad', brush: doodad }
   }
   return { type: 'raw', itemId }
 }
@@ -103,14 +103,14 @@ export function applyBrushToTile(
   brush: ResolvedBrush, brushSize: number,
 ): void {
   switch (brush.type) {
-    case 'ground': mutator.paintGround(x, y, z, brush.brush, brush.registry); break
-    case 'door': mutator.paintDoor(x, y, z, brush.doorType, brush.registry); break
-    case 'wall': mutator.paintWall(x, y, z, brush.brush, brush.registry); break
-    case 'carpet': mutator.paintCarpet(x, y, z, brush.brush, brush.registry); break
-    case 'table': mutator.paintTable(x, y, z, brush.brush, brush.registry); break
+    case 'ground': mutator.paintGround(x, y, z, brush.brush); break
+    case 'door': mutator.paintDoor(x, y, z, brush.doorType); break
+    case 'wall': mutator.paintWall(x, y, z, brush.brush); break
+    case 'carpet': mutator.paintCarpet(x, y, z, brush.brush); break
+    case 'table': mutator.paintTable(x, y, z, brush.brush); break
     case 'doodad':
       if (brushSize > 0 && Math.random() * brush.brush.thicknessCeiling >= brush.brush.thickness) return
-      mutator.paintDoodad(x, y, z, brush.brush, brush.registry)
+      mutator.paintDoodad(x, y, z, brush.brush)
       break
     case 'raw': mutator.addItem(x, y, z, { id: brush.itemId }); break
   }

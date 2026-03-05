@@ -479,7 +479,7 @@ function App() {
             onClick: () => {
               if (!mutatorReady || !brushRegistryState || !tile) return
               const idx = tile.items.length - 1
-              mutatorReady.switchDoorItem(tilePos.x, tilePos.y, tilePos.z, idx, brushRegistryState)
+              mutatorReady.switchDoorItem(tilePos.x, tilePos.y, tilePos.z, idx)
             },
           }]
         : [],

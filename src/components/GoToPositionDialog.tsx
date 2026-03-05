@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { parsePositionString } from '../lib/position'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 
 interface GoToPositionDialogProps {
   currentX: number
@@ -28,18 +29,7 @@ export function GoToPositionDialog({
     xRef.current?.select()
   }, [])
 
-  // Escape dismissal
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        onClose()
-      }
-    }
-    document.addEventListener('keydown', handler, true)
-    return () => document.removeEventListener('keydown', handler, true)
-  }, [onClose])
+  useEscapeKey(onClose)
 
   function handlePaste(e: React.ClipboardEvent) {
     const pos = parsePositionString(e.clipboardData.getData('text'))

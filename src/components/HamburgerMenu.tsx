@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { useEscapeKey } from '../hooks/useEscapeKey'
+import { useClickOutside } from '../hooks/useClickOutside'
 
 export interface MenuAction {
   label: string
@@ -36,43 +38,9 @@ export function HamburgerMenu({ sections }: HamburgerMenuProps) {
     updatePos()
   }, [open, updatePos])
 
-  // Click-outside dismissal
-  useEffect(() => {
-    if (!open) return
-    let rafId = requestAnimationFrame(() => {
-      rafId = 0
-      const handler = (e: PointerEvent) => {
-        const target = e.target as Node
-        if (
-          menuRef.current && !menuRef.current.contains(target) &&
-          buttonRef.current && !buttonRef.current.contains(target)
-        ) {
-          setOpen(false)
-        }
-      }
-      document.addEventListener('pointerdown', handler, true)
-      cleanup = () => document.removeEventListener('pointerdown', handler, true)
-    })
-    let cleanup: (() => void) | undefined
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId)
-      cleanup?.()
-    }
-  }, [open])
-
-  // Escape key dismissal
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        setOpen(false)
-      }
-    }
-    document.addEventListener('keydown', handler, true)
-    return () => document.removeEventListener('keydown', handler, true)
-  }, [open])
+  const closeMenu = useCallback(() => setOpen(false), [])
+  useClickOutside([menuRef, buttonRef], closeMenu, open)
+  useEscapeKey(closeMenu, open)
 
   const dropdown = open ? createPortal(
     <div

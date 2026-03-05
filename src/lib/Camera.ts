@@ -12,12 +12,12 @@ export class Camera {
   x = 0 // world pixel position
   y = 0
   private _zoom = 1
-  private _floor = 7
+  private _floor = GROUND_LAYER
   private _floorViewMode: FloorViewMode = 'single'
   private _showTransparentUpper = false
 
   // Cached visible floors (recomputed only when floor/mode changes)
-  private _visibleFloorsCache: number[] = [7]
+  private _visibleFloorsCache: number[] = [GROUND_LAYER]
   private _visibleFloorsDirty = true
 
   // Reusable range output (avoids per-call allocation)
