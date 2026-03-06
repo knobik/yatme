@@ -214,7 +214,6 @@ export function Inspector({
     item.actionId = props.actionId ?? undefined
     item.uniqueId = props.uniqueId ?? undefined
     item.count = props.count ?? undefined
-    item.charges = props.charges ?? undefined
     item.duration = props.duration ?? undefined
     item.depotId = props.depotId ?? undefined
     item.houseDoorId = props.houseDoorId ?? undefined
@@ -440,7 +439,7 @@ function ItemRow({
   onHoverChange?: (hovered: boolean) => void
 }) {
   const name = getItemDisplayName(item.id, registry, appearances)
-  const attrs = getItemAttributes(item)
+  const attrs = getItemAttributes(item, registry)
   const isTopLevel = depth === 0
   const hasActions = isTopLevel && !isGround && onDelete
   const canDrag = isTopLevel && !isGround && onDragStart
@@ -549,7 +548,6 @@ function PropertyEditor({
   // Both map to item.count in our model.
   const subtypeDefault = isStackable ? '1' : isCharged ? String(defaultCharges) : ''
   const [subtype, setSubtype] = useState(item.count != null ? String(item.count) : subtypeDefault)
-  const [charges, setCharges] = useState(item.charges != null ? String(item.charges) : '')
   const [duration, setDuration] = useState(item.duration != null ? String(item.duration) : '')
   const [text, setText] = useState(item.text ?? '')
   const [description, setDescription] = useState(item.description ?? '')
@@ -575,7 +573,6 @@ function PropertyEditor({
       actionId: parseNum(actionId),
       uniqueId: parseNum(uniqueId),
       count: parseNum(subtype),
-      charges: parseNum(charges),
       duration: parseNum(duration),
       text: text || undefined,
       description: description || undefined,
@@ -592,14 +589,11 @@ function PropertyEditor({
   const itemFlags = flags ? getItemFlags(flags as unknown as Record<string, unknown>) : []
 
   // Group subtype (count/charges) and duration into one row
-  // Stackable → "COUNT", Charged → "CHARGES" — both use subtype field
-  // OTBM_ATTR_CHARGES (u16) is separate and only shown if present
+  // Stackable → "COUNT", Charged → "CHARGES" — both use the subtype (item.count) field
   const hasSubtype = isStackable || isCharged
   const subtypeLabel = isCharged ? 'CHARGES' : 'COUNT'
-  const hasU16Charges = item.charges != null
   const numericFields = [
     hasSubtype && { label: subtypeLabel, value: subtype, onChange: setSubtype },
-    hasU16Charges && { label: 'CHARGES', value: charges, onChange: setCharges },
     hasDuration && { label: 'DURATION', value: duration, onChange: setDuration },
   ].filter(Boolean) as { label: string; value: string; onChange: (v: string) => void }[]
 
@@ -726,11 +720,17 @@ function getItemFlags(flags: Record<string, unknown>): string[] {
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-function getItemAttributes(item: OtbmItem): string[] {
+function getItemAttributes(item: OtbmItem, registry: ItemRegistry): string[] {
   const attrs: string[] = []
   if (item.actionId != null) attrs.push(`AID: ${item.actionId}`)
   if (item.uniqueId != null) attrs.push(`UID: ${item.uniqueId}`)
-  if (item.count != null && item.count > 1) attrs.push(`Count: ${item.count}`)
+  if (item.count != null && item.count > 1) {
+    const itemInfo = registry.get(item.id)
+    const defaultCharges = itemInfo?.charges
+    const isCharged = defaultCharges != null && defaultCharges > 0
+    const label = isCharged ? 'Charges' : 'Count'
+    attrs.push(`${label}: ${item.count}`)
+  }
   if (item.text) attrs.push(`Text: "${item.text}"`)
   if (item.description) attrs.push(`Desc: "${item.description}"`)
   if (item.teleportDestination) {
@@ -739,7 +739,6 @@ function getItemAttributes(item: OtbmItem): string[] {
   }
   if (item.depotId != null) attrs.push(`Depot: ${item.depotId}`)
   if (item.houseDoorId != null) attrs.push(`Door: ${item.houseDoorId}`)
-  if (item.charges != null) attrs.push(`Charges: ${item.charges}`)
   if (item.duration != null) attrs.push(`Duration: ${item.duration}`)
   return attrs
 }

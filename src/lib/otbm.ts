@@ -74,7 +74,6 @@ export interface OtbmItem {
   teleportDestination?: { x: number; y: number; z: number }
   depotId?: number
   houseDoorId?: number
-  charges?: number
   duration?: number
   items?: OtbmItem[]
 }
@@ -89,7 +88,6 @@ export function deepCloneItem(item: OtbmItem): OtbmItem {
   if (item.teleportDestination) clone.teleportDestination = { ...item.teleportDestination }
   if (item.depotId != null) clone.depotId = item.depotId
   if (item.houseDoorId != null) clone.houseDoorId = item.houseDoorId
-  if (item.charges != null) clone.charges = item.charges
   if (item.duration != null) clone.duration = item.duration
   if (item.items && item.items.length > 0) clone.items = item.items.map(deepCloneItem)
   return clone
@@ -233,7 +231,7 @@ function parseItemAttributes(node: BinaryNode, item: OtbmItem): void {
         item.houseDoorId = node.readU8()
         break
       case OTBM_ATTR_CHARGES:
-        item.charges = node.readU16()
+        item.count = node.readU16()
         break
       case OTBM_ATTR_DURATION:
         item.duration = node.readU32()
@@ -288,7 +286,7 @@ function parseAttributeMap(node: BinaryNode, item: OtbmItem): void {
         item.count = readAttrMapValue(node, valueType) as number
         break
       case 'charges':
-        item.charges = readAttrMapValue(node, valueType) as number
+        item.count = readAttrMapValue(node, valueType) as number
         break
       case 'duration':
         item.duration = readAttrMapValue(node, valueType) as number
