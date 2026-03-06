@@ -12,8 +12,10 @@ Browser-based Tibia map editor targeting Tibia 15.00+ (protobuf data format). Bu
 - **Build**: `npm run build` (runs `tsc -b && vite build`)
 - **Lint**: `npm run lint` (ESLint)
 - **Protobuf codegen**: `npm run proto` (requires Docker — generates `src/proto/appearances.ts`)
-
-No test framework is configured.
+- **Test**: `npm test` (Vitest, runs all `src/**/*.test.ts` files)
+- **Test watch**: `npm run test:watch` (Vitest in watch mode)
+- **Test single file**: `npx vitest run src/lib/Camera.test.ts`
+- **Test coverage**: `npm run test:coverage` (uses `@vitest/coverage-v8`)
 
 ## Architecture
 
