@@ -1,44 +1,55 @@
-import { describe, it, expect, beforeAll, vi } from 'vitest'
-import { findSheet, loadSpriteCatalog } from './sprites'
+import { describe, it, expect, vi, beforeAll } from 'vitest'
 
-// Mock fetchWithProgress to return fake catalog
+// Mock fetchWithProgress module
 vi.mock('./fetchWithProgress', () => ({
-  fetchTextWithProgress: vi.fn().mockResolvedValue(JSON.stringify([
-    { type: 'appearances', file: 'appearances.dat' },
-    { type: 'sprite', file: 'sheet1.png', spritetype: 0, firstspriteid: 1, lastspriteid: 100 },
-    { type: 'sprite', file: 'sheet2.png', spritetype: 0, firstspriteid: 101, lastspriteid: 200 },
-    { type: 'sprite', file: 'sheet3.png', spritetype: 1, firstspriteid: 201, lastspriteid: 300 },
-  ])),
+  fetchTextWithProgress: vi.fn(),
 }))
 
-describe('sprites', () => {
+import { loadSpriteCatalog, findSheet, getSpriteSheetCount } from './sprites'
+import { fetchTextWithProgress } from './fetchWithProgress'
+
+const mockFetch = vi.mocked(fetchTextWithProgress)
+
+const FAKE_CATALOG = JSON.stringify([
+  { type: 'appearances', file: 'appearances.dat' },
+  { type: 'sprite', file: 'sheet-a.png', spritetype: 0, firstspriteid: 1, lastspriteid: 100 },
+  { type: 'sprite', file: 'sheet-b.png', spritetype: 0, firstspriteid: 200, lastspriteid: 300 },
+  { type: 'sprite', file: 'sheet-c.png', spritetype: 1, firstspriteid: 500, lastspriteid: 600 },
+])
+
+describe('loadSpriteCatalog + findSheet', () => {
   beforeAll(async () => {
-    await loadSpriteCatalog('/fake-catalog.json')
+    mockFetch.mockResolvedValue(FAKE_CATALOG)
+    await loadSpriteCatalog('/test-catalog.json')
   })
 
-  describe('findSheet', () => {
-    it('finds sheet containing spriteId', () => {
-      const sheet = findSheet(50)
-      expect(sheet).not.toBeNull()
-      expect(sheet!.file).toBe('sheet1.png')
-      expect(sheet!.firstSpriteId).toBe(1)
-      expect(sheet!.lastSpriteId).toBe(100)
-    })
+  it('findSheet returns correct sheet for ID in range', () => {
+    const sheet = findSheet(50)
+    expect(sheet).not.toBeNull()
+    expect(sheet!.file).toBe('sheet-a.png')
+    expect(sheet!.firstSpriteId).toBe(1)
+    expect(sheet!.lastSpriteId).toBe(100)
+  })
 
-    it('finds sheet at boundary (first id)', () => {
-      expect(findSheet(101)!.file).toBe('sheet2.png')
-    })
+  it('findSheet returns null for ID below all sheets', () => {
+    expect(findSheet(0)).toBeNull()
+  })
 
-    it('finds sheet at boundary (last id)', () => {
-      expect(findSheet(200)!.file).toBe('sheet2.png')
-    })
+  it('findSheet returns null for ID above all sheets', () => {
+    expect(findSheet(1000)).toBeNull()
+  })
 
-    it('returns null for id below all ranges', () => {
-      expect(findSheet(0)).toBeNull()
-    })
+  it('findSheet returns null for ID in gap between sheets', () => {
+    expect(findSheet(150)).toBeNull() // between sheet-a (1-100) and sheet-b (200-300)
+  })
 
-    it('returns null for id above all ranges', () => {
-      expect(findSheet(999)).toBeNull()
-    })
+  it('loadSpriteCatalog extracts appearancesFile from catalog', async () => {
+    mockFetch.mockResolvedValue(FAKE_CATALOG)
+    const result = await loadSpriteCatalog('/test.json')
+    expect(result.appearancesFile).toBe('appearances.dat')
+  })
+
+  it('getSpriteSheetCount returns number of loaded sheets', () => {
+    expect(getSpriteSheetCount()).toBe(3) // 3 sprite entries (not appearances)
   })
 })

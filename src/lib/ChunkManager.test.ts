@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { chunkKeyStr, chunkKeyForTile, buildChunkIndex } from './ChunkManager'
+import { describe, it, expect, vi } from 'vitest'
+import { chunkKeyStr, chunkKeyForTile, buildChunkIndex, ChunkCache } from './ChunkManager'
 import { makeTile, makeAppearanceData } from '../test/fixtures'
 
 describe('chunkKeyStr', () => {
@@ -70,5 +70,107 @@ describe('buildChunkIndex', () => {
   it('returns empty index for empty tiles', () => {
     const { index } = buildChunkIndex(new Map(), makeAppearanceData([]))
     expect(index.size).toBe(0)
+  })
+})
+
+function mockContainer(): any {
+  return {
+    isCachedAsTexture: false,
+    cacheAsTexture: vi.fn(),
+    parent: null,
+    removeChildren: vi.fn(),
+    destroy: vi.fn(),
+    destroyed: false,
+  }
+}
+
+describe('ChunkCache', () => {
+  it('set and take round-trip', () => {
+    const cache = new ChunkCache(10)
+    const c = mockContainer()
+    cache.set('a', c)
+    expect(cache.take('a')).toBe(c)
+    expect(cache.has('a')).toBe(false) // removed after take
+  })
+
+  it('take returns undefined for missing key', () => {
+    const cache = new ChunkCache(10)
+    expect(cache.take('missing')).toBeUndefined()
+  })
+
+  it('has returns true for stored, false for missing', () => {
+    const cache = new ChunkCache(10)
+    cache.set('a', mockContainer())
+    expect(cache.has('a')).toBe(true)
+    expect(cache.has('b')).toBe(false)
+  })
+
+  it('LRU eviction when over maxSize', () => {
+    const cache = new ChunkCache(2)
+    const c1 = mockContainer()
+    const c2 = mockContainer()
+    const c3 = mockContainer()
+    cache.set('a', c1)
+    cache.set('b', c2)
+    cache.set('c', c3) // should evict 'a'
+    expect(cache.has('a')).toBe(false)
+    expect(cache.has('b')).toBe(true)
+    expect(cache.has('c')).toBe(true)
+  })
+
+  it('eviction destroys container', () => {
+    const cache = new ChunkCache(1)
+    const c1 = mockContainer()
+    const c2 = mockContainer()
+    cache.set('a', c1)
+    cache.set('b', c2) // evicts 'a'
+    expect(c1.removeChildren).toHaveBeenCalled()
+    expect(c1.destroy).toHaveBeenCalled()
+  })
+
+  it('onEvict callback fires on eviction', () => {
+    const cache = new ChunkCache(1)
+    const spy = vi.fn()
+    cache.onEvict = spy
+    cache.set('a', mockContainer())
+    cache.set('b', mockContainer()) // evicts 'a'
+    expect(spy).toHaveBeenCalledWith('a')
+  })
+
+  it('set replaces existing key and destroys old container', () => {
+    const cache = new ChunkCache(10)
+    const c1 = mockContainer()
+    const c2 = mockContainer()
+    cache.set('a', c1)
+    cache.set('a', c2) // replaces
+    expect(c1.destroy).toHaveBeenCalled()
+    expect(cache.take('a')).toBe(c2)
+  })
+
+  it('delete removes and destroys container', () => {
+    const cache = new ChunkCache(10)
+    const c = mockContainer()
+    cache.set('a', c)
+    cache.delete('a')
+    expect(c.destroy).toHaveBeenCalled()
+    expect(cache.has('a')).toBe(false)
+  })
+
+  it('delete is no-op for missing key', () => {
+    const cache = new ChunkCache(10)
+    cache.delete('missing') // should not throw
+  })
+
+  it('clear destroys all containers', () => {
+    const cache = new ChunkCache(10)
+    const c1 = mockContainer()
+    const c2 = mockContainer()
+    cache.set('a', c1)
+    cache.set('b', c2)
+    cache.clear()
+    expect(c1.destroy).toHaveBeenCalled()
+    expect(c2.destroy).toHaveBeenCalled()
+    expect(cache.has('a')).toBe(false)
+    expect(cache.has('b')).toBe(false)
   })
 })

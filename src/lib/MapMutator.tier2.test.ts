@@ -4,6 +4,9 @@ import { makeAppearanceData, makeMapData, makeTile, makeItem } from '../test/fix
 import type { AppearanceFlags } from '../proto/appearances'
 import { BrushRegistry } from './brushes/BrushRegistry'
 import { createGroundBrush, type GroundBrush } from './brushes/BrushTypes'
+import { makeWallBrushWithItems, makeCarpetBrushWithItems, makeTableBrushWithItems, makeDoodadBrush, makeMinimalRegistry } from '../test/brushFixtures'
+import { WALL_POLE, WALL_VERTICAL, WALL_HORIZONTAL } from './brushes/WallTypes'
+import { CARPET_CENTER, TABLE_ALONE } from './brushes/CarpetTypes'
 
 // Item IDs by layer
 const GROUND_ID = 100
@@ -11,6 +14,17 @@ const BOTTOM_ID = 200
 const COMMON_ID = 300
 const TOP_ID = 400
 const GROUND_ID_2 = 101
+const WALL_ITEM_POLE = 500
+const WALL_ITEM_VERT = 501
+const WALL_ITEM_HORIZ = 502
+const DOOR_CLOSED = 510
+const DOOR_OPEN = 511
+const CARPET_CENTER_ID = 600
+const CARPET_NORTH_ID = 601
+const TABLE_ALONE_ID = 700
+const DOODAD_SINGLE = 800
+const DOODAD_COMP_A = 801
+const DOODAD_COMP_B = 802
 
 function makeLayeredAppearances() {
   return makeAppearanceData([
@@ -19,6 +33,17 @@ function makeLayeredAppearances() {
     [BOTTOM_ID, { bottom: true }],
     [COMMON_ID, {}],
     [TOP_ID, { top: true }],
+    [WALL_ITEM_POLE, {}],
+    [WALL_ITEM_VERT, {}],
+    [WALL_ITEM_HORIZ, {}],
+    [DOOR_CLOSED, {}],
+    [DOOR_OPEN, {}],
+    [CARPET_CENTER_ID, {}],
+    [CARPET_NORTH_ID, {}],
+    [TABLE_ALONE_ID, {}],
+    [DOODAD_SINGLE, {}],
+    [DOODAD_COMP_A, {}],
+    [DOODAD_COMP_B, {}],
   ])
 }
 
@@ -395,6 +420,337 @@ describe('MapMutator — Tier 2', () => {
         undoCount++
       }
       expect(undoCount).toBe(200)
+    })
+  })
+
+  describe('paintWall', () => {
+    function makeWallSetup() {
+      const appearances = makeLayeredAppearances()
+      const wallBrush = makeWallBrushWithItems(1, 'stone', {
+        [WALL_POLE]: WALL_ITEM_POLE,
+        [WALL_VERTICAL]: WALL_ITEM_VERT,
+        [WALL_HORIZONTAL]: WALL_ITEM_HORIZ,
+      })
+      const registry = makeMinimalRegistry({ wallBrushes: [wallBrush] })
+      return { appearances, wallBrush, registry }
+    }
+
+    it('places wall item on tile', () => {
+      const { appearances, wallBrush, registry } = makeWallSetup()
+      const mapData = makeMapData([makeTile(10, 10, 7)])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.brushRegistry = registry
+
+      mutator.paintWall(10, 10, 7, wallBrush)
+      const tile = mapData.tiles.get('10,10,7')!
+      // At least one wall item should be placed
+      const wallItems = tile.items.filter(it =>
+        [WALL_ITEM_POLE, WALL_ITEM_VERT, WALL_ITEM_HORIZ].includes(it.id)
+      )
+      expect(wallItems.length).toBeGreaterThan(0)
+    })
+
+    it('replaces existing wall from same brush', () => {
+      const { appearances, wallBrush, registry } = makeWallSetup()
+      const mapData = makeMapData([makeTile(10, 10, 7, [makeItem({ id: WALL_ITEM_POLE })])])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.brushRegistry = registry
+
+      mutator.paintWall(10, 10, 7, wallBrush)
+      const tile = mapData.tiles.get('10,10,7')!
+      // Should have exactly one wall item (replaced, not duplicated)
+      const wallItems = tile.items.filter(it =>
+        [WALL_ITEM_POLE, WALL_ITEM_VERT, WALL_ITEM_HORIZ].includes(it.id)
+      )
+      expect(wallItems.length).toBe(1)
+    })
+
+    it('undo restores previous state', () => {
+      const { appearances, wallBrush, registry } = makeWallSetup()
+      const mapData = makeMapData([makeTile(10, 10, 7)])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.brushRegistry = registry
+
+      mutator.paintWall(10, 10, 7, wallBrush)
+      mutator.undo()
+      const tile = mapData.tiles.get('10,10,7')!
+      expect(tile.items.length).toBe(0)
+    })
+  })
+
+  describe('switchDoorItem', () => {
+    function makeDoorSetup() {
+      const appearances = makeLayeredAppearances()
+      const wallBrush = makeWallBrushWithItems(1, 'stone', {
+        [WALL_VERTICAL]: WALL_ITEM_VERT,
+      })
+      // Add door items to the brush
+      wallBrush.doorItems[9].push(
+        { id: DOOR_CLOSED, type: 2, open: false },
+        { id: DOOR_OPEN, type: 2, open: true },
+      )
+      const registry = makeMinimalRegistry({ wallBrushes: [wallBrush] })
+      return { appearances, wallBrush, registry }
+    }
+
+    it('toggles door open/closed', () => {
+      const { appearances, registry } = makeDoorSetup()
+      const mapData = makeMapData([makeTile(10, 10, 7, [makeItem({ id: DOOR_CLOSED })])])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.brushRegistry = registry
+
+      mutator.switchDoorItem(10, 10, 7, 0)
+      expect(mapData.tiles.get('10,10,7')!.items[0].id).toBe(DOOR_OPEN)
+    })
+
+    it('no-op for invalid index', () => {
+      const { appearances, registry } = makeDoorSetup()
+      const mapData = makeMapData([makeTile(10, 10, 7, [makeItem({ id: DOOR_CLOSED })])])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.brushRegistry = registry
+
+      mutator.switchDoorItem(10, 10, 7, 5) // invalid index
+      expect(mapData.tiles.get('10,10,7')!.items[0].id).toBe(DOOR_CLOSED)
+    })
+  })
+
+  describe('paintCarpet', () => {
+    function makeCarpetSetup() {
+      const appearances = makeLayeredAppearances()
+      const carpetBrush = makeCarpetBrushWithItems(1, 'red carpet', {
+        [CARPET_CENTER]: CARPET_CENTER_ID,
+      })
+      const registry = makeMinimalRegistry({ carpetBrushes: [carpetBrush] })
+      return { appearances, carpetBrush, registry }
+    }
+
+    it('places carpet item on tile', () => {
+      const { appearances, carpetBrush, registry } = makeCarpetSetup()
+      const mapData = makeMapData([makeTile(10, 10, 7)])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.brushRegistry = registry
+
+      mutator.paintCarpet(10, 10, 7, carpetBrush)
+      const tile = mapData.tiles.get('10,10,7')!
+      const carpetItems = tile.items.filter(it =>
+        [CARPET_CENTER_ID, CARPET_NORTH_ID].includes(it.id)
+      )
+      expect(carpetItems.length).toBeGreaterThan(0)
+    })
+
+    it('replaces existing carpet from same brush', () => {
+      const { appearances, carpetBrush, registry } = makeCarpetSetup()
+      const mapData = makeMapData([makeTile(10, 10, 7, [makeItem({ id: CARPET_CENTER_ID })])])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.brushRegistry = registry
+
+      mutator.paintCarpet(10, 10, 7, carpetBrush)
+      const tile = mapData.tiles.get('10,10,7')!
+      const carpetItems = tile.items.filter(it =>
+        [CARPET_CENTER_ID, CARPET_NORTH_ID].includes(it.id)
+      )
+      expect(carpetItems.length).toBe(1) // replaced, not duplicated
+    })
+  })
+
+  describe('paintTable', () => {
+    it('places table item on tile', () => {
+      const appearances = makeLayeredAppearances()
+      const tableBrush = makeTableBrushWithItems(1, 'wooden table', {
+        [TABLE_ALONE]: TABLE_ALONE_ID,
+      })
+      const registry = makeMinimalRegistry({ tableBrushes: [tableBrush] })
+      const mapData = makeMapData([makeTile(10, 10, 7)])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.brushRegistry = registry
+
+      mutator.paintTable(10, 10, 7, tableBrush)
+      const tile = mapData.tiles.get('10,10,7')!
+      expect(tile.items.some(it => it.id === TABLE_ALONE_ID)).toBe(true)
+    })
+  })
+
+  describe('paintDoodad', () => {
+    function makeDoodadSetup() {
+      const appearances = makeLayeredAppearances()
+      const singleBrush = makeDoodadBrush({
+        id: 1,
+        name: 'flower',
+        alternatives: [{
+          singles: [{ itemId: DOODAD_SINGLE, chance: 100 }],
+          composites: [],
+          totalChance: 100,
+        }],
+      })
+      const compositeBrush = makeDoodadBrush({
+        id: 2,
+        name: 'statue',
+        alternatives: [{
+          singles: [],
+          composites: [{
+            chance: 100,
+            tiles: [
+              { dx: 0, dy: 0, dz: 0, itemIds: [DOODAD_COMP_A] },
+              { dx: 1, dy: 0, dz: 0, itemIds: [DOODAD_COMP_B] },
+            ],
+          }],
+          totalChance: 100,
+        }],
+      })
+      const registry = makeMinimalRegistry({
+        doodadBrushes: [singleBrush, compositeBrush],
+      })
+      return { appearances, singleBrush, compositeBrush, registry }
+    }
+
+    it('places single doodad item', () => {
+      const { appearances, singleBrush, registry } = makeDoodadSetup()
+      const mapData = makeMapData([makeTile(10, 10, 7)])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.brushRegistry = registry
+
+      mutator.beginBatch('doodad')
+      mutator.paintDoodad(10, 10, 7, singleBrush)
+      mutator.commitBatch()
+      const tile = mapData.tiles.get('10,10,7')!
+      expect(tile.items.some(it => it.id === DOODAD_SINGLE)).toBe(true)
+    })
+
+    it('places composite doodad across multiple tiles', () => {
+      const { appearances, compositeBrush, registry } = makeDoodadSetup()
+      const mapData = makeMapData([makeTile(10, 10, 7), makeTile(11, 10, 7)])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.brushRegistry = registry
+
+      mutator.beginBatch('doodad')
+      mutator.paintDoodad(10, 10, 7, compositeBrush)
+      mutator.commitBatch()
+      expect(mapData.tiles.get('10,10,7')!.items.some(it => it.id === DOODAD_COMP_A)).toBe(true)
+      expect(mapData.tiles.get('11,10,7')!.items.some(it => it.id === DOODAD_COMP_B)).toBe(true)
+    })
+
+    it('cleans old doodad items before placing (no onDuplicate)', () => {
+      const { appearances, singleBrush, registry } = makeDoodadSetup()
+      const mapData = makeMapData([makeTile(10, 10, 7, [makeItem({ id: DOODAD_SINGLE })])])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.brushRegistry = registry
+
+      mutator.beginBatch('doodad')
+      mutator.paintDoodad(10, 10, 7, singleBrush)
+      mutator.commitBatch()
+      const tile = mapData.tiles.get('10,10,7')!
+      const doodadItems = tile.items.filter(it => it.id === DOODAD_SINGLE)
+      // Old one cleaned + new one placed = exactly 1
+      expect(doodadItems.length).toBe(1)
+    })
+  })
+
+  describe('removeDoodadItems', () => {
+    it('removes matching doodad items', () => {
+      const appearances = makeLayeredAppearances()
+      const brush = makeDoodadBrush({
+        id: 1, name: 'flower',
+        alternatives: [{ singles: [{ itemId: DOODAD_SINGLE, chance: 100 }], composites: [], totalChance: 100 }],
+      })
+      const registry = makeMinimalRegistry({ doodadBrushes: [brush] })
+      const mapData = makeMapData([makeTile(10, 10, 7, [makeItem({ id: DOODAD_SINGLE })])])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.brushRegistry = registry
+
+      mutator.removeDoodadItems(10, 10, 7, brush)
+      expect(mapData.tiles.get('10,10,7')!.items.length).toBe(0)
+    })
+
+    it('no-op when no matching items', () => {
+      const appearances = makeLayeredAppearances()
+      const brush = makeDoodadBrush({
+        id: 1, name: 'flower',
+        alternatives: [{ singles: [{ itemId: DOODAD_SINGLE, chance: 100 }], composites: [], totalChance: 100 }],
+      })
+      const registry = makeMinimalRegistry({ doodadBrushes: [brush] })
+      const mapData = makeMapData([makeTile(10, 10, 7, [makeItem({ id: COMMON_ID })])])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.brushRegistry = registry
+
+      mutator.removeDoodadItems(10, 10, 7, brush)
+      expect(mapData.tiles.get('10,10,7')!.items.length).toBe(1)
+    })
+  })
+
+  describe('randomizeSelection', () => {
+    function makeRandomizeSetup(opts: {
+      isRandomizable: boolean
+      items: { id: number; chance: number }[]
+      tileItems?: Parameters<typeof makeItem>[0][]
+    }) {
+      const appearances = makeLayeredAppearances()
+      const brush = createGroundBrush()
+      brush.id = 1
+      brush.name = 'grass'
+      brush.isRandomizable = opts.isRandomizable
+      brush.items = opts.items
+      brush.totalChance = opts.items.reduce((sum, it) => sum + it.chance, 0)
+      const registry = new BrushRegistry([brush], new Map())
+      const tiles = (opts.tileItems ?? [{ id: GROUND_ID }]).map(o => makeItem(o))
+      const mapData = makeMapData([makeTile(10, 10, 7, tiles)])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.brushRegistry = registry
+      return { mutator, mapData }
+    }
+
+    it('randomizes ground item variant', () => {
+      const { mutator, mapData } = makeRandomizeSetup({
+        isRandomizable: true,
+        items: [{ id: GROUND_ID, chance: 50 }, { id: GROUND_ID_2, chance: 50 }],
+      })
+
+      let changed = false
+      for (let i = 0; i < 20; i++) {
+        mutator.randomizeSelection([{ x: 10, y: 10, z: 7 }])
+        if (mapData.tiles.get('10,10,7')!.items[0].id !== GROUND_ID) {
+          changed = true
+          break
+        }
+        mutator.undo()
+      }
+      expect(changed).toBe(true)
+    })
+
+    it('preserves item attributes on randomize', () => {
+      const { mutator, mapData } = makeRandomizeSetup({
+        isRandomizable: true,
+        items: [{ id: GROUND_ID, chance: 0 }, { id: GROUND_ID_2, chance: 100 }],
+        tileItems: [{ id: GROUND_ID, actionId: 999 }],
+      })
+
+      mutator.randomizeSelection([{ x: 10, y: 10, z: 7 }])
+      const item = mapData.tiles.get('10,10,7')!.items[0]
+      expect(item.id).toBe(GROUND_ID_2)
+      expect(item.actionId).toBe(999)
+    })
+
+    it('skips non-randomizable ground', () => {
+      const { mutator, mapData } = makeRandomizeSetup({
+        isRandomizable: false,
+        items: [{ id: GROUND_ID, chance: 100 }],
+      })
+
+      mutator.randomizeSelection([{ x: 10, y: 10, z: 7 }])
+      expect(mapData.tiles.get('10,10,7')!.items[0].id).toBe(GROUND_ID)
+    })
+  })
+
+  describe('flushChunkUpdates', () => {
+    it('fires onChunksInvalidated during active batch', () => {
+      const { mutator } = makeMutator([makeTile(10, 10, 7)])
+      const spy = vi.fn()
+      mutator.onChunksInvalidated = spy
+
+      mutator.beginBatch('test')
+      mutator.addItem(10, 10, 7, makeItem({ id: COMMON_ID }))
+      mutator.flushChunkUpdates()
+      expect(spy).toHaveBeenCalledTimes(1)
+      mutator.commitBatch()
     })
   })
 })
