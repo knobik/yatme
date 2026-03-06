@@ -8,7 +8,7 @@ import type { CarpetBrush, TableBrush } from '../../lib/brushes/CarpetTypes'
 import type { DoodadBrush } from '../../lib/brushes/DoodadTypes'
 import type { SelectedItemInfo } from '../useSelection'
 
-export type EditorTool = 'select' | 'draw' | 'erase' | 'door'
+export type EditorTool = 'select' | 'draw' | 'erase' | 'door' | 'fill'
 export type BrushShape = 'square' | 'circle'
 
 // ── Brush selection (what the user picked in the palette) ───────────

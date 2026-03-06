@@ -16,13 +16,14 @@ export function createHoverHandler(ctx: ToolContext) {
 
     const tool = ctx.activeToolRef.current
     const size = (tool === 'draw' || tool === 'erase' || tool === 'door') ? ctx.brushSizeRef.current : 0
+    // Fill tool always uses single-tile cursor
     const shape = ctx.brushShapeRef.current
     const tiles = getTilesInBrush(pos.x, pos.y, size, shape)
       .map(t => ({ x: t.x, y: t.y, z: pos.z }))
     ctx.renderer.updateBrushCursor(tiles)
 
-    // Ghost sprite preview for draw tool
-    if (tool === 'draw') {
+    // Ghost sprite preview for draw/fill tool
+    if (tool === 'draw' || tool === 'fill') {
       const selection = ctx.selectedBrushRef.current
       if (selection) {
         const previewId = getSelectionPreviewId(selection, ctx.brushRegistryRef.current)

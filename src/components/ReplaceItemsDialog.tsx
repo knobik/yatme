@@ -10,6 +10,7 @@ import type { SelectedItemInfo } from '../hooks/useSelection'
 import { ItemPicker } from './ItemPicker'
 import { ItemSprite } from './ItemSprite'
 import { ScopeSelector } from './ScopeSelector'
+import { X, ArrowRight, Swap, Plus } from '@phosphor-icons/react'
 
 interface ReplaceRule {
   sourceId: number
@@ -118,9 +119,7 @@ export function ReplaceItemsDialog({
       <div className="flex items-center justify-between px-6 py-4">
         <span className="label text-lg tracking-wide">REPLACE ITEMS</span>
         <button className="btn btn-icon border-none bg-transparent" onClick={onClose} title="Close (Esc)">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M2 2L12 12M12 2L2 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
+          <X size={14} weight="bold" />
         </button>
       </div>
 
@@ -138,9 +137,7 @@ export function ReplaceItemsDialog({
             onClick={() => setExpandedPicker(expandedPicker === 'source' ? null : 'source')}
           />
           <div className="flex items-center px-1">
-            <svg width="24" height="14" viewBox="0 0 24 14" className="text-fg-faint">
-              <path d="M0 7H20M20 7L14 1M20 7L14 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <ArrowRight size={20} weight="bold" className="text-fg-faint" />
           </div>
           <ItemSelectorButton
             itemId={targetId}
@@ -204,9 +201,7 @@ export function ReplaceItemsDialog({
                     <ItemSprite itemId={rule.sourceId} appearances={appearances} size={24} />
                     <span className="value text-xs">{rule.sourceId}</span>
                   </div>
-                  <svg width="16" height="10" viewBox="0 0 16 10" className="text-fg-faint shrink-0">
-                    <path d="M0 5H12M12 5L8 1M12 5L8 9" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+                  <ArrowRight size={14} className="text-fg-faint shrink-0" />
                   <div className="find-replace-rule-item">
                     <ItemSprite itemId={rule.targetId} appearances={appearances} size={24} />
                     <span className="value text-xs">{rule.targetId}</span>
@@ -220,19 +215,14 @@ export function ReplaceItemsDialog({
                     onClick={() => handleRemoveRule(i)}
                     title="Remove rule"
                   >
-                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                      <path d="M1 1L7 7M7 1L1 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                    </svg>
+                    <X size={10} weight="bold" />
                   </button>
                 </div>
               ))}
             </div>
           ) : (
             <div className="find-empty-state">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-fg-disabled">
-                <path d="M7 7L17 17M17 7L7 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
+              <Swap size={24} className="text-fg-disabled" />
               <span>Select items and click + Add</span>
             </div>
           )}
@@ -298,9 +288,7 @@ function ItemSelectorButton({
           <ItemSprite itemId={itemId} appearances={appearances} size={36} />
         ) : (
           <div className="h-[36px] w-[36px] rounded-sm border border-dashed border-border-default flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 14 14" className="text-fg-faint">
-              <path d="M7 2V12M2 7H12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-            </svg>
+            <Plus size={14} className="text-fg-faint" />
           </div>
         )}
       </div>

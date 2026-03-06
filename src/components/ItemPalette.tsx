@@ -6,6 +6,7 @@ import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
 import { getItemDisplayName } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
 import { itemCategory } from '../proto/appearances'
+import { X, PencilSimple } from '@phosphor-icons/react'
 
 type SmartBrushType = 'ground' | 'wall' | 'carpet' | 'table' | 'doodad' | null
 
@@ -172,9 +173,7 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
         </span>
         <div className="flex-1" />
         <button className="btn btn-icon h-[22px] w-[22px] border-none bg-transparent" onClick={onClose} title="Close (Esc)">
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-            <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
+          <X size={10} weight="bold" />
         </button>
       </div>
 
@@ -247,9 +246,7 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
                   <ItemSprite itemId={item.id} appearances={appearances} size={36} />
                   {item.brush && (
                     <span className={`brush-badge brush-badge-${item.brush}`} title={`Smart brush: ${item.brush}`}>
-                      <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M15.2 0.8a2.7 2.7 0 0 0-3.8 0L4 8.2l-.2.6L2.4 13a.5.5 0 0 0 .6.6l4.2-1.4.6-.2L15.2 4.6a2.7 2.7 0 0 0 0-3.8zM5.4 9L11 3.4l1.6 1.6L7 11 5.4 9z"/>
-                      </svg>
+                      <PencilSimple size={8} weight="fill" />
                     </span>
                   )}
                 </div>

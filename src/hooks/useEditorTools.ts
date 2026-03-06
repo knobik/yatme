@@ -12,6 +12,7 @@ import { createDrawHandlers } from './tools/drawTool'
 import { createEraseHandlers } from './tools/eraseTool'
 import { createDoorHandlers } from './tools/doorTool'
 import { createSelectHandlers } from './tools/selectTool'
+import { createFillHandlers } from './tools/fillTool'
 import { createHoverHandler } from './tools/hoverHandler'
 
 // Re-export types for consumers
@@ -132,6 +133,7 @@ export function useEditorTools(
     const draw = createDrawHandlers(ctx)
     const erase = createEraseHandlers(ctx)
     const door = createDoorHandlers(ctx)
+    const fill = createFillHandlers(ctx)
     const select = createSelectHandlers(ctx)
     const hover = createHoverHandler(ctx)
 
@@ -146,6 +148,7 @@ export function useEditorTools(
         case 'draw': draw.onDown(pos); break
         case 'erase': erase.onDown(pos); break
         case 'door': door.onDown(pos); break
+        case 'fill': fill.onDown(pos); break
         case 'select': select.onDown(pos, event); break
       }
     }
@@ -207,11 +210,12 @@ export function useEditorTools(
       case 'draw': renderer.setCursorStyle('crosshair'); break
       case 'erase': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
       case 'door': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
+      case 'fill': renderer.setCursorStyle('crosshair'); break
     }
   }, [renderer, activeTool])
 
   useEffect(() => {
-    if (!renderer || activeTool !== 'draw') return
+    if (!renderer || (activeTool !== 'draw' && activeTool !== 'fill')) return
     renderer.clearGhostPreview()
   }, [renderer, selectedBrush, activeTool])
 

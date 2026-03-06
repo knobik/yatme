@@ -6,6 +6,7 @@ import { findItemsOnMap, type SearchResult } from '../lib/mapSearch'
 import type { SelectedItemInfo } from '../hooks/useSelection'
 import { ItemPicker } from './ItemPicker'
 import { ScopeSelector } from './ScopeSelector'
+import { X, MagnifyingGlass, MagnifyingGlassMinus } from '@phosphor-icons/react'
 
 interface FindItemDialogProps {
   mapData: OtbmMap
@@ -76,9 +77,7 @@ export function FindItemDialog({
       <div className="flex items-center justify-between px-6 py-4">
         <span className="label text-lg tracking-wide">FIND ITEM</span>
         <button className="btn btn-icon border-none bg-transparent" onClick={onClose} title="Close (Esc)">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M2 2L12 12M12 2L2 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
+          <X size={14} weight="bold" />
         </button>
       </div>
 
@@ -156,19 +155,12 @@ export function FindItemDialog({
             </div>
           ) : results !== null ? (
             <div className="find-empty-state">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-fg-disabled">
-                <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M16 16L20 20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                <path d="M8.5 11H13.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
+              <MagnifyingGlassMinus size={24} className="text-fg-disabled" />
               <span>No matches found</span>
             </div>
           ) : (
             <div className="find-empty-state">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-fg-disabled">
-                <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M16 16L20 20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
+              <MagnifyingGlass size={24} className="text-fg-disabled" />
               <span>Select an item and click Find All</span>
             </div>
           )}

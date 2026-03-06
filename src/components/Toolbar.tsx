@@ -12,6 +12,10 @@ import {
   DOOR_NORMAL, DOOR_LOCKED, DOOR_QUEST, DOOR_MAGIC,
   DOOR_WINDOW, DOOR_HATCH_WINDOW,
 } from '../lib/brushes/WallTypes'
+import {
+  Cursor, PencilSimple, Eraser, Door, PaintBucket,
+  ArrowCounterClockwise, ArrowClockwise, Square, Circle,
+} from '@phosphor-icons/react'
 
 interface ToolbarProps {
   activeTool: EditorTool
@@ -59,50 +63,15 @@ const BRUSH_SIZES = [
   { value: 6, label: '13' },
 ]
 
-const TOOLS: { id: EditorTool; label: string; shortcut: string; icon: React.ReactElement }[] = [
-  {
-    id: 'select',
-    label: 'Select',
-    shortcut: 'S',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
-        <path d="M2 1L2 11L5.5 7.5L8.5 13L10.5 12L7.5 6L12 5L2 1Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-      </svg>
-    ),
-  },
-  {
-    id: 'draw',
-    label: 'Draw',
-    shortcut: 'D',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
-        <path d="M8.5 2.5L11.5 5.5M2 12L2.5 9.5L10 2C10.8-0.8 13.2 1.2 11.5 2.5L4 10L2 12Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-      </svg>
-    ),
-  },
-  {
-    id: 'erase',
-    label: 'Erase',
-    shortcut: 'E',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
-        <path d="M5 12H12M3 9.5L7.5 2.5L11.5 5.5L7 12.5L3 9.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-        <path d="M7 12.5L3 9.5" stroke="currentColor" strokeWidth="1.2" />
-      </svg>
-    ),
-  },
-  {
-    id: 'door',
-    label: 'Door',
-    shortcut: 'R',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
-        <rect x="3" y="1.5" width="8" height="11" rx="0.5" stroke="currentColor" strokeWidth="1.2" />
-        <circle cx="9" cy="7" r="0.8" fill="currentColor" />
-        <line x1="7" y1="1.5" x2="7" y2="12.5" stroke="currentColor" strokeWidth="0.8" strokeDasharray="1.5 1" />
-      </svg>
-    ),
-  },
+const ICON_SIZE = 18
+const ICON_WEIGHT = 'bold' as const
+
+const TOOLS: { id: EditorTool; label: string; shortcut: string; icon: React.ReactNode }[] = [
+  { id: 'select', label: 'Select', shortcut: 'S', icon: <Cursor size={ICON_SIZE} weight={ICON_WEIGHT} /> },
+  { id: 'draw', label: 'Draw', shortcut: 'D', icon: <PencilSimple size={ICON_SIZE} weight={ICON_WEIGHT} /> },
+  { id: 'erase', label: 'Erase', shortcut: 'E', icon: <Eraser size={ICON_SIZE} weight={ICON_WEIGHT} /> },
+  { id: 'door', label: 'Door', shortcut: 'R', icon: <Door size={ICON_SIZE} weight={ICON_WEIGHT} /> },
+  { id: 'fill', label: 'Fill', shortcut: 'F', icon: <PaintBucket size={ICON_SIZE} weight={ICON_WEIGHT} /> },
 ]
 
 const DOOR_TYPES = [
@@ -224,10 +193,7 @@ export function Toolbar({
           title="Undo (Ctrl+Z)"
           style={{ opacity: canUndo ? 1 : 0.45 }}
         >
-          <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
-            <path d="M3 5H9C10.66 5 12 6.34 12 8C12 9.66 10.66 11 9 11H6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M5.5 2.5L3 5L5.5 7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <ArrowCounterClockwise size={ICON_SIZE} weight={ICON_WEIGHT} />
         </button>
         <button
           className="btn btn-icon border-none bg-transparent"
@@ -236,10 +202,7 @@ export function Toolbar({
           title="Redo (Ctrl+Y)"
           style={{ opacity: canRedo ? 1 : 0.45 }}
         >
-          <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
-            <path d="M11 5H5C3.34 5 2 6.34 2 8C2 9.66 3.34 11 5 11H8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M8.5 2.5L11 5L8.5 7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <ArrowClockwise size={ICON_SIZE} weight={ICON_WEIGHT} />
         </button>
       </div>
 
@@ -269,18 +232,14 @@ export function Toolbar({
               onClick={() => onBrushShapeChange('square')}
               title="Square brush"
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="2.5" y="2.5" width="11" height="11" stroke="currentColor" strokeWidth="1.4" />
-              </svg>
+              <Square size={16} weight="bold" />
             </button>
             <button
               className={clsx('btn btn-icon border-none bg-transparent', brushShape === 'circle' && 'tool-active')}
               onClick={() => onBrushShapeChange('circle')}
               title="Circle brush"
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.4" />
-              </svg>
+              <Circle size={16} weight="bold" />
             </button>
           </div>
         </>

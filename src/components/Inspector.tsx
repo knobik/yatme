@@ -8,6 +8,7 @@ import type { MapMutator } from '../lib/MapMutator'
 import { classifyItem } from '../lib/MapMutator'
 import { getItemDisplayName } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
+import { X, DotsSixVertical, Crosshair, Faders, Trash } from '@phosphor-icons/react'
 import { parsePositionString } from '../lib/position'
 import type { SelectedItemInfo } from '../hooks/useSelection'
 
@@ -241,9 +242,7 @@ export function Inspector({
           BROWSE TILE
         </span>
         <button className="btn btn-icon border-none bg-transparent" onClick={onClose} title="Close (Esc)">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M2 2L12 12M12 2L2 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
+          <X size={14} weight="bold" />
         </button>
       </div>
 
@@ -350,49 +349,19 @@ export function Inspector({
 // ── Icons (16x16) ─────────────────────────────────────────────────
 
 function GripIcon() {
-  return (
-    <svg width="10" height="16" viewBox="0 0 10 16" fill="none">
-      <circle cx="3" cy="3" r="1.4" fill="currentColor" />
-      <circle cx="7" cy="3" r="1.4" fill="currentColor" />
-      <circle cx="3" cy="8" r="1.4" fill="currentColor" />
-      <circle cx="7" cy="8" r="1.4" fill="currentColor" />
-      <circle cx="3" cy="13" r="1.4" fill="currentColor" />
-      <circle cx="7" cy="13" r="1.4" fill="currentColor" />
-    </svg>
-  )
+  return <DotsSixVertical size={16} weight="bold" />
 }
 
 function CrosshairIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <circle cx="8" cy="8" r="5" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="8" cy="8" r="1.5" fill="currentColor" />
-      <path d="M8 1.5V4M8 12V14.5M1.5 8H4M12 8H14.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  )
+  return <Crosshair size={16} weight="bold" />
 }
 
 function SlidersIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <path d="M2 4H6M10 4H14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-      <path d="M2 8H4M8 8H14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-      <path d="M2 12H9M13 12H14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-      <circle cx="8" cy="4" r="2" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="6" cy="8" r="2" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="11" cy="12" r="2" stroke="currentColor" strokeWidth="1.4" />
-    </svg>
-  )
+  return <Faders size={16} weight="bold" />
 }
 
 function TrashIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <path d="M3.5 5H12.5M5 5V13H11V5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M6 3H10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-      <path d="M7 7.5V10.5M9 7.5V10.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-    </svg>
-  )
+  return <Trash size={16} weight="bold" />
 }
 
 // ── ItemRow ────────────────────────────────────────────────────────

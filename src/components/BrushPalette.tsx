@@ -6,6 +6,7 @@ import type { BrushSelection } from '../hooks/tools/types'
 import { getItemDisplayName } from '../lib/items'
 import type { ItemRegistry } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
+import { X, CaretDown, PencilSimple } from '@phosphor-icons/react'
 
 interface BrushPaletteProps {
   tilesets: ResolvedTileset[]
@@ -239,9 +240,7 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
         </span>
         <div className="flex-1" />
         <button className="btn btn-icon h-[22px] w-[22px] border-none bg-transparent" onClick={onClose} title="Close (Esc)">
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-            <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
+          <X size={10} weight="bold" />
         </button>
       </div>
 
@@ -266,9 +265,7 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
             onClick={() => { setTilesetOpen(!tilesetOpen); setTilesetSearch('') }}
           >
             <span className="tileset-select-label">{selectedLabel}</span>
-            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="shrink-0">
-              <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <CaretDown size={10} weight="bold" className="shrink-0" />
           </button>
           {tilesetOpen && (
             <div className="tileset-dropdown">
@@ -367,9 +364,7 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
                     <ItemSprite itemId={spriteId} appearances={appearances} size={36} />
                     {isBrush && (
                       <span className={`brush-badge brush-badge-${entry.brushType}`} title={`Brush: ${entry.brushType}`}>
-                        <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
-                          <path d="M15.2 0.8a2.7 2.7 0 0 0-3.8 0L4 8.2l-.2.6L2.4 13a.5.5 0 0 0 .6.6l4.2-1.4.6-.2L15.2 4.6a2.7 2.7 0 0 0 0-3.8zM5.4 9L11 3.4l1.6 1.6L7 11 5.4 9z"/>
-                        </svg>
+                        <PencilSimple size={8} weight="fill" />
                       </span>
                     )}
                   </div>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useClickOutside } from '../hooks/useClickOutside'
+import { List } from '@phosphor-icons/react'
 
 export interface MenuAction {
   label: string
@@ -92,11 +93,7 @@ export function HamburgerMenu({ sections }: HamburgerMenuProps) {
         onClick={() => setOpen(prev => !prev)}
         title="Menu"
       >
-        <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
-          <path d="M2 3.5H12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-          <path d="M2 7H12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-          <path d="M2 10.5H12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-        </svg>
+        <List size={18} weight="bold" />
       </button>
       {dropdown}
     </>

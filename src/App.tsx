@@ -22,6 +22,7 @@ import { loadAssets } from './lib/initPipeline'
 import { setupEditor } from './lib/setupEditor'
 import { findEntryInTilesets } from './lib/tilesets/TilesetLoader'
 import type { BrushSelection } from './hooks/tools/types'
+import { CaretUp, CaretDown, Eye } from '@phosphor-icons/react'
 import type { CategoryType } from './lib/tilesets/TilesetTypes'
 
 /** Compute left offset for elements that need to dodge all left-side panels. */
@@ -132,7 +133,7 @@ function App() {
     }, primaryCategory)
 
     tools.setSelectedBrush(selection)
-    tools.setActiveTool('draw')
+    if (tools.activeTool === 'select') tools.setActiveTool('draw')
 
     if (location) {
       paletteRef.current?.navigateTo(location.category, location.tilesetName)
@@ -481,6 +482,9 @@ function App() {
       } else if (e.key === 'r' && !e.ctrlKey) {
         e.preventDefault()
         toolsRef.current.setActiveTool('door')
+      } else if (e.key === 'f' && !e.ctrlKey) {
+        e.preventDefault()
+        toolsRef.current.setActiveTool('fill')
       } else if (e.key === ']') {
         e.preventDefault()
         const cur = toolsRef.current.brushSize
@@ -856,7 +860,7 @@ function App() {
           selectedBrush={tools.selectedBrush}
           onBrushSelect={(sel) => {
             tools.setSelectedBrush(sel)
-            tools.setActiveTool('draw')
+            if (tools.activeTool === 'select') tools.setActiveTool('draw')
           }}
         />
       )}
@@ -906,9 +910,7 @@ function App() {
             onClick={() => handleFloorChange(-1)}
             title="Floor up (PageUp)"
           >
-            <svg width="16" height="10" viewBox="0 0 12 8" fill="none">
-              <path d="M1 6.5L6 1.5L11 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+            <CaretUp size={16} weight="bold" />
           </button>
 
           <span className="value text-accent-fg text-2xl font-medium leading-none py-1">
@@ -920,9 +922,7 @@ function App() {
             onClick={() => handleFloorChange(1)}
             title="Floor down (PageDown)"
           >
-            <svg width="16" height="10" viewBox="0 0 12 8" fill="none">
-              <path d="M1 1.5L6 6.5L11 1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+            <CaretDown size={16} weight="bold" />
           </button>
 
           <div className="mx-1 my-1 h-px w-full bg-border-subtle" />
@@ -973,10 +973,7 @@ function App() {
             title="Show transparent upper floor"
             style={{ color: camera.showTransparentUpper ? 'var(--color-accent)' : undefined }}
           >
-            <svg width="18" height="13" viewBox="0 0 14 10" fill="none">
-              <path d="M1 5C1 5 3.5 1 7 1C10.5 1 13 5 13 5C13 5 10.5 9 7 9C3.5 9 1 5 1 5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
-              <circle cx="7" cy="5" r="2" stroke="currentColor" strokeWidth="1.2"/>
-            </svg>
+            <Eye size={18} weight="bold" />
           </button>
         </div>
       )}
