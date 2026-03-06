@@ -133,4 +133,27 @@ describe('renderTileItems', () => {
     expect(sprites[0].x).toBe(-5)
     expect(sprites[0].y).toBe(-10)
   })
+
+  it('skips items with no matching appearance', () => {
+    const appearances = makeAppearanceData([[100, {}]])
+    // Item 999 has no appearance entry
+    const sprites = renderAndGetSprites(
+      [makeItem({ id: 999 }), makeItem({ id: 100 })],
+      appearances,
+    )
+    expect(sprites).toHaveLength(1) // only item 100 rendered
+  })
+
+  it('passes tile coordinates to getItemSpriteId for pattern selection', () => {
+    const tile = makeTile(10, 20, 7, [makeItem({ id: 100 })])
+    const appearances = makeAppearanceData([[100, {}]])
+    renderAndGetSprites([makeItem({ id: 100 })], appearances, tile)
+
+    expect(mockedGetItemSpriteId).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 100 }),
+      expect.objectContaining({ id: 100 }),
+      expect.objectContaining({ x: 10, y: 20, z: 7 }),
+      undefined,
+    )
+  })
 })

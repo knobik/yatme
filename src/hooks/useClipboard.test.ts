@@ -63,6 +63,9 @@ describe('useClipboard', () => {
     act(() => { result.current.copy() })
 
     expect(result.current.canPaste).toBe(true)
+    // Verify buffer actually captured the tile data
+    const buffer = result.current.copyBufferRef.current
+    expect(buffer.getTileCount()).toBe(1)
   })
 
   it('cut copies then removes selected items', () => {
@@ -72,7 +75,13 @@ describe('useClipboard', () => {
     act(() => { result.current.cut() })
 
     expect(result.current.canPaste).toBe(true)
-    expect(mutator.beginBatch).toHaveBeenCalled()
+    // Verify buffer captured tile data
+    const buffer = result.current.copyBufferRef.current
+    expect(buffer.getTileCount()).toBe(1)
+    // Verify mutation happened (cut removes from map)
+    expect(mutator.beginBatch).toHaveBeenCalledWith('Cut')
+    expect(mutator.commitBatch).toHaveBeenCalled()
+    // Verify selection was cleared
     expect(setSelectedItems).toHaveBeenCalledWith([])
     expect(renderer.clearItemHighlight).toHaveBeenCalled()
   })
@@ -120,6 +129,8 @@ describe('useClipboard', () => {
     act(() => { result.current.deleteSelection() })
 
     expect(mutator.beginBatch).toHaveBeenCalledWith('Delete selection')
+    // Verify actual tile mutation: setTileItems should be called to clear the tile
+    expect(mutator.setTileItems).toHaveBeenCalledWith(5, 5, 7, [])
     expect(mutator.commitBatch).toHaveBeenCalled()
     expect(setSelectedItems).toHaveBeenCalledWith([])
     expect(renderer.clearItemHighlight).toHaveBeenCalled()

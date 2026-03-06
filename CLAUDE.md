@@ -63,6 +63,10 @@ Editor tools: `selectTool`, `drawTool`, `eraseTool`, `fillTool`, `doorTool`. Eac
 - `vendor/remeres-map-editor` — C++ reference for editor UX, brush systems, OTBM I/O
 - `vendor/canary` — Server-side item handling, map data
 
+## Testing Notes
+- `src/proto/appearances.ts` is generated from a proto file — do not write tests for it
+- `src/lib/appearances.ts` is thin glue (fetch + decode + build maps) — does not need unit tests
+
 ## Tibia Z-Axis Convention
 **Lower Z = higher elevation**: Z=0 is sky, Z=7 is ground level, Z=8-15 is underground. "Upper floors" have lower Z numbers.
 

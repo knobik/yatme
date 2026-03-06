@@ -88,7 +88,10 @@ describe('setupMapInput', () => {
       setupMapInput(canvas as any, host, vi.fn(), vi.fn())
       canvas.fire('pointerdown', { button: 0, clientX: 100, clientY: 100, pointerId: 1 })
 
-      expect(onTilePointerDown).toHaveBeenCalled()
+      expect(onTilePointerDown).toHaveBeenCalledWith(
+        expect.objectContaining({ x: 3, y: 3, z: 7 }),
+        expect.anything(),
+      )
     })
 
     it('fires onTilePointerMove on subsequent pointermove', () => {
@@ -103,7 +106,10 @@ describe('setupMapInput', () => {
       canvas.fire('pointerdown', { button: 0, clientX: 100, clientY: 100, pointerId: 1 })
       canvas.fire('pointermove', { clientX: 101, clientY: 100, pointerId: 1 })
 
-      expect(onTilePointerMove).toHaveBeenCalled()
+      expect(onTilePointerMove).toHaveBeenCalledWith(
+        expect.objectContaining({ x: 3, y: 3, z: 7 }),
+        expect.anything(),
+      )
     })
 
     it('fires onTilePointerUp on pointerup', () => {
@@ -118,7 +124,10 @@ describe('setupMapInput', () => {
       canvas.fire('pointerdown', { button: 0, clientX: 100, clientY: 100, pointerId: 1 })
       canvas.fire('pointerup', { clientX: 100, clientY: 100, pointerId: 1 })
 
-      expect(onTilePointerUp).toHaveBeenCalled()
+      expect(onTilePointerUp).toHaveBeenCalledWith(
+        expect.objectContaining({ x: 3, y: 3, z: 7 }),
+        expect.anything(),
+      )
     })
   })
 
@@ -150,7 +159,12 @@ describe('setupMapInput', () => {
       canvas.fire('pointerdown', { button: 2, clientX: 100, clientY: 100, pointerId: 1 })
       canvas.fire('pointerup', { clientX: 100, clientY: 100, pointerId: 1 }) // no movement = click
 
-      expect(onTileContextMenu).toHaveBeenCalled()
+      expect(onTileContextMenu).toHaveBeenCalledWith(
+        expect.objectContaining({ x: 3, y: 3, z: 7 }),
+        expect.anything(),
+        100,
+        100,
+      )
     })
   })
 
@@ -212,9 +226,10 @@ describe('setupMapInput', () => {
         },
       })
 
-      expect(onItemDrop).toHaveBeenCalled()
-      const [, itemId] = onItemDrop.mock.calls[0]
-      expect(itemId).toBe(42)
+      expect(onItemDrop).toHaveBeenCalledWith(
+        expect.objectContaining({ x: 3, y: 3, z: 7 }),
+        42,
+      )
     })
   })
 })

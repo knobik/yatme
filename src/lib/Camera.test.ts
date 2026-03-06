@@ -263,12 +263,35 @@ describe('Camera', () => {
   })
 
   describe('computeRangeKey', () => {
-    it('returns deterministic string for dirty checking', () => {
+    it('returns deterministic string for same state', () => {
       const cam = makeCamera()
       const key1 = cam.computeRangeKey([7])
       const key2 = cam.computeRangeKey([7])
       expect(key1).toBe(key2)
-      expect(typeof key1).toBe('string')
+    })
+
+    it('changes when camera position changes', () => {
+      const cam = makeCamera()
+      const key1 = cam.computeRangeKey([7])
+      cam.x = 500
+      const key2 = cam.computeRangeKey([7])
+      expect(key1).not.toBe(key2)
+    })
+
+    it('changes when floor changes', () => {
+      const cam = makeCamera()
+      const key1 = cam.computeRangeKey([7])
+      cam.setFloor(5)
+      const key2 = cam.computeRangeKey([5])
+      expect(key1).not.toBe(key2)
+    })
+
+    it('changes when floor view mode changes', () => {
+      const cam = makeCamera()
+      const key1 = cam.computeRangeKey([7])
+      cam.setFloorViewMode('current-below')
+      const key2 = cam.computeRangeKey([7])
+      expect(key1).not.toBe(key2)
     })
   })
 })

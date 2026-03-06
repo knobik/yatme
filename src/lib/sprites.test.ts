@@ -43,13 +43,18 @@ describe('loadSpriteCatalog + findSheet', () => {
     expect(findSheet(150)).toBeNull() // between sheet-a (1-100) and sheet-b (200-300)
   })
 
-  it('loadSpriteCatalog extracts appearancesFile from catalog', async () => {
+  it('loadSpriteCatalog extracts appearancesFile and filters non-sprite entries', async () => {
     mockFetch.mockResolvedValue(FAKE_CATALOG)
     const result = await loadSpriteCatalog('/test.json')
     expect(result.appearancesFile).toBe('appearances.dat')
+    // 3 sprite entries loaded (appearances entry excluded)
+    expect(getSpriteSheetCount()).toBe(3)
   })
 
-  it('getSpriteSheetCount returns number of loaded sheets', () => {
-    expect(getSpriteSheetCount()).toBe(3) // 3 sprite entries (not appearances)
+  it('findSheet returns boundary IDs correctly (first and last)', () => {
+    expect(findSheet(1)!.file).toBe('sheet-a.png')   // first ID in range
+    expect(findSheet(100)!.file).toBe('sheet-a.png')  // last ID in range
+    expect(findSheet(200)!.file).toBe('sheet-b.png')  // first of next sheet
+    expect(findSheet(300)!.file).toBe('sheet-b.png')  // last of next sheet
   })
 })

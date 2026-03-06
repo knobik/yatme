@@ -201,24 +201,6 @@ describe('fillTool', () => {
     expect(mutator.paintGround).toHaveBeenCalledTimes(4096)
   })
 
-  it('respects MAX_FILL_TILES limit (4096)', () => {
-    const { sandBrush, registry } = setupBrushes()
-    mockResolveBrush.mockReturnValue({ type: 'ground', brush: sandBrush })
-
-    // Empty map → all tiles are "empty brush", BFS expands everywhere
-    const map = makeMapData([])
-    const { ctx, mutator } = makeFillContext({
-      mapData: map,
-      selectedBrush: { mode: 'brush', brushType: 'ground', brushName: 'sand' },
-      registry,
-    })
-
-    const { onDown } = createFillHandlers(ctx)
-    onDown({ x: 5, y: 5, z: 7 })
-
-    expect(mutator.paintGround).toHaveBeenCalledTimes(4096)
-  })
-
   it('respects MAX_FILL_RADIUS limit (64)', () => {
     const { sandBrush, registry } = setupBrushes()
     mockResolveBrush.mockReturnValue({ type: 'ground', brush: sandBrush })
