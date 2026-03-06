@@ -13,6 +13,8 @@ import type { ResolvedTileset } from './lib/tilesets/TilesetTypes'
 import { Toolbar } from './components/Toolbar'
 import { ContextMenu, type ContextMenuGroup, type ContextMenuAction } from './components/ContextMenu'
 import { GoToPositionDialog } from './components/GoToPositionDialog'
+import { FindItemDialog } from './components/FindItemDialog'
+import { ReplaceItemsDialog } from './components/ReplaceItemsDialog'
 import { SettingsModal } from './components/SettingsModal'
 import { loadSettings, saveSettings, type EditorSettings } from './lib/EditorSettings'
 import { getItemDisplayName } from './lib/items'
@@ -21,6 +23,16 @@ import { setupEditor } from './lib/setupEditor'
 import { findEntryInTilesets } from './lib/tilesets/TilesetLoader'
 import type { BrushSelection } from './hooks/tools/types'
 import type { CategoryType } from './lib/tilesets/TilesetTypes'
+
+/** Compute left offset for elements that need to dodge all left-side panels. */
+function computeLeftOffset(palette: boolean, inspector: boolean, findItem: boolean, replaceItems: boolean): string {
+  // Panel widths: palette=320, inspector=400, find/replace=340, gap=6px each
+  let px = 8 // base margin
+  if (palette) px += 320 + 6
+  if (inspector) px += 400 + 6
+  if (findItem || replaceItems) px += 340 + 6
+  return `${px}px`
+}
 
 interface CameraState {
   x: number
@@ -57,6 +69,8 @@ function App() {
   const [mutatorReady, setMutatorReady] = useState<MapMutator | null>(null)
 
   const [showGoToDialog, setShowGoToDialog] = useState(false)
+  const [showFindItem, setShowFindItem] = useState(false)
+  const [showReplaceItems, setShowReplaceItems] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(() => loadSettings())
   const [brushRegistryState, setBrushRegistryState] = useState<BrushRegistry | null>(null)
@@ -219,6 +233,7 @@ function App() {
     if (!rendererRef.current) return
     rendererRef.current.setFloor(z)
     rendererRef.current.centerOn(x, y)
+    rendererRef.current.pingTile(x, y, z)
   }, [])
 
   useEffect(() => {
@@ -380,6 +395,18 @@ function App() {
           setShowGoToDialog(true)
           return
         }
+        if (e.key === 'f') {
+          e.preventDefault()
+          setShowFindItem(true)
+          setShowReplaceItems(false)
+          return
+        }
+        if (e.key === 'h') {
+          e.preventDefault()
+          setShowReplaceItems(true)
+          setShowFindItem(false)
+          return
+        }
         if (e.key === '=' || e.key === '+') {
           e.preventDefault()
           rendererRef.current?.zoomIn()
@@ -413,6 +440,10 @@ function App() {
           toolsRef.current.cancelPaste()
         } else if (showGoToDialog) {
           setShowGoToDialog(false)
+        } else if (showFindItem) {
+          setShowFindItem(false)
+        } else if (showReplaceItems) {
+          setShowReplaceItems(false)
         } else if (contextMenu) {
           setContextMenu(null)
         } else if (showPalette) {
@@ -462,7 +493,7 @@ function App() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [handleFloorChange, showPalette, selectedTilePos, contextMenu, showGoToDialog])
+  }, [handleFloorChange, showPalette, selectedTilePos, contextMenu, showGoToDialog, showFindItem, showReplaceItems])
 
   function buildContextMenuGroups(): ContextMenuGroup[] {
     if (!contextMenu) return []
@@ -724,6 +755,8 @@ function App() {
           canPaste={!!tools.clipboard}
           hasSelection={tools.hasSelection}
           onGoToPosition={() => setShowGoToDialog(true)}
+          onFindItem={() => { setShowFindItem(true); setShowReplaceItems(false) }}
+          onReplaceItems={() => { setShowReplaceItems(true); setShowFindItem(false) }}
           onOpenSettings={() => setShowSettingsModal(true)}
           showPalette={showPalette}
           onTogglePalette={() => {
@@ -775,6 +808,34 @@ function App() {
         />
       )}
 
+      {/* Find Item dialog */}
+      {showFindItem && mapData && itemRegistry && appearancesData && (
+        <FindItemDialog
+          mapData={mapData}
+          registry={itemRegistry}
+          appearances={appearancesData}
+          hasSelection={tools.hasSelection}
+          selectedItems={tools.selectedItems}
+          onNavigate={handleGoToPosition}
+          onClose={() => setShowFindItem(false)}
+          left={computeLeftOffset(showPalette, !!selectedTilePos, false, false)}
+        />
+      )}
+
+      {/* Replace Items dialog */}
+      {showReplaceItems && mapData && mutatorReady && itemRegistry && appearancesData && (
+        <ReplaceItemsDialog
+          mapData={mapData}
+          mutator={mutatorReady}
+          registry={itemRegistry}
+          appearances={appearancesData}
+          hasSelection={tools.hasSelection}
+          selectedItems={tools.selectedItems}
+          onClose={() => setShowReplaceItems(false)}
+          left={computeLeftOffset(showPalette, !!selectedTilePos, false, false)}
+        />
+      )}
+
       {/* Settings modal */}
       {showSettingsModal && (
         <SettingsModal
@@ -823,15 +884,7 @@ function App() {
       {!loading && (
         <div
           className="panel absolute bottom-4 z-10 flex h-[48px] items-center gap-6 px-5 pointer-events-auto select-none transition-[left] duration-[180ms] ease-out"
-          style={{
-            left: showPalette && selectedTilePos
-              ? 'calc(8px + 320px + 6px + 400px + 6px)'
-              : showPalette
-                ? 'calc(8px + 320px + 6px)'
-                : selectedTilePos
-                  ? 'calc(8px + 400px + 6px)'
-                  : '8px',
-          }}
+          style={{ left: computeLeftOffset(showPalette, !!selectedTilePos, showFindItem, showReplaceItems) }}
         >
           <HudField label="POS" value={`${camera.x}, ${camera.y}`} />
           <div className="h-[16px] w-px shrink-0 bg-border-subtle" />

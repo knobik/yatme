@@ -31,6 +31,8 @@ interface ToolbarProps {
   canPaste: boolean
   hasSelection: boolean
   onGoToPosition: () => void
+  onFindItem: () => void
+  onReplaceItems: () => void
   showPalette: boolean
   onTogglePalette: () => void
   showLights: boolean
@@ -130,6 +132,8 @@ export function Toolbar({
   canPaste,
   hasSelection,
   onGoToPosition,
+  onFindItem,
+  onReplaceItems,
   onOpenSettings,
   showPalette,
   onTogglePalette,
@@ -169,6 +173,8 @@ export function Toolbar({
       title: 'Map',
       items: [
         { label: 'Go to Position...', shortcut: 'Ctrl+G', onClick: onGoToPosition },
+        { label: 'Find Item...', shortcut: 'Ctrl+F', onClick: onFindItem },
+        { label: 'Replace Items...', shortcut: 'Ctrl+H', onClick: onReplaceItems },
       ],
     },
     {

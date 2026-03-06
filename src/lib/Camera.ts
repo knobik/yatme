@@ -60,8 +60,9 @@ export class Camera {
   }
 
   centerOn(x: number, y: number): void {
-    this.x = x * TILE_SIZE - this.screen.width / (2 * this._zoom)
-    this.y = y * TILE_SIZE - this.screen.height / (2 * this._zoom)
+    const offset = this.getFloorOffset(this._floor)
+    this.x = x * TILE_SIZE - this.screen.width / (2 * this._zoom) - offset
+    this.y = y * TILE_SIZE - this.screen.height / (2 * this._zoom) - offset
   }
 
   /** Set zoom to a specific level, keeping the viewport center stable. */

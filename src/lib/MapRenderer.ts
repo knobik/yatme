@@ -145,6 +145,11 @@ export class MapRenderer implements InputHost {
     this.notifyCamera()
   }
 
+  /** Flash a tile with a brief highlight animation. */
+  pingTile(x: number, y: number, z: number): void {
+    this.selection.pingTile(x, y, z)
+  }
+
   zoomIn(): void {
     const cx = this.app.screen.width / 2
     const cy = this.app.screen.height / 2
@@ -368,6 +373,7 @@ export class MapRenderer implements InputHost {
     this.lightEngine.update(this.camera, this.chunkManager.index, this.appearances, visibleFloors)
 
     this.selection.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
+    this.selection.updatePing()
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────

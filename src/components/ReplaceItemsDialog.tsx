@@ -1,0 +1,287 @@
+import { useState, useRef } from 'react'
+import clsx from 'clsx'
+import type { OtbmMap } from '../lib/otbm'
+import type { MapMutator } from '../lib/MapMutator'
+import type { ItemRegistry } from '../lib/items'
+import type { AppearanceData } from '../lib/appearances'
+import { getItemDisplayName } from '../lib/items'
+import { replaceItemsOnMap } from '../lib/mapSearch'
+import type { SelectedItemInfo } from '../hooks/useSelection'
+import { ItemPicker } from './ItemPicker'
+import { ItemSprite } from './ItemSprite'
+import { ScopeSelector } from './ScopeSelector'
+
+interface ReplaceRule {
+  sourceId: number
+  targetId: number
+  replacedCount: number | null
+}
+
+interface ReplaceItemsDialogProps {
+  mapData: OtbmMap
+  mutator: MapMutator
+  registry: ItemRegistry
+  appearances: AppearanceData
+  hasSelection: boolean
+  selectedItems: SelectedItemInfo[]
+  onClose: () => void
+  left?: string
+}
+
+export function ReplaceItemsDialog({
+  mapData,
+  mutator,
+  registry,
+  appearances,
+  hasSelection,
+  selectedItems,
+  onClose,
+  left = '8px',
+}: ReplaceItemsDialogProps) {
+  const [sourceId, setSourceId] = useState<number | null>(null)
+  const [targetId, setTargetId] = useState<number | null>(null)
+  const [expandedPicker, setExpandedPicker] = useState<'source' | 'target' | null>(null)
+  const [rules, setRules] = useState<ReplaceRule[]>([])
+  const [scope, setScope] = useState<'map' | 'selection'>('map')
+  const [replacing, setReplacing] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const abortRef = useRef<AbortController | null>(null)
+
+  const canAddRule = sourceId !== null && targetId !== null
+    && sourceId !== targetId
+    && !rules.some(r => r.sourceId === sourceId)
+
+  function handleAddRule() {
+    if (!canAddRule || sourceId === null || targetId === null) return
+    setRules(prev => [...prev, { sourceId, targetId, replacedCount: null }])
+    setSourceId(null)
+    setTargetId(null)
+    setExpandedPicker(null)
+  }
+
+  function handleRemoveRule(index: number) {
+    setRules(prev => prev.filter((_, i) => i !== index))
+  }
+
+  async function handleExecute() {
+    if (rules.length === 0) return
+
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    const scopeKeys = scope === 'selection' && hasSelection
+      ? new Set(selectedItems.map(s => `${s.x},${s.y},${s.z}`))
+      : undefined
+
+    setReplacing(true)
+    setProgress(0)
+
+    mutator.beginBatch('Replace items')
+
+    const updatedRules = [...rules]
+    const totalRules = updatedRules.filter(r => r.replacedCount === null).length
+    let doneRules = 0
+
+    for (let i = 0; i < updatedRules.length; i++) {
+      if (controller.signal.aborted) break
+      if (updatedRules[i].replacedCount !== null) continue
+
+      const count = await replaceItemsOnMap(
+        mapData, mutator, updatedRules[i].sourceId, updatedRules[i].targetId, scopeKeys,
+        (processed, total) => {
+          const ruleProgress = processed / total
+          setProgress((doneRules + ruleProgress) / totalRules)
+        },
+        controller.signal,
+      )
+      updatedRules[i] = { ...updatedRules[i], replacedCount: count }
+      doneRules++
+    }
+
+    mutator.commitBatch()
+
+    if (!controller.signal.aborted) {
+      setRules(updatedRules)
+      setReplacing(false)
+    }
+  }
+
+  const hasUnexecuted = rules.some(r => r.replacedCount === null)
+
+  return (
+    <div
+      className="panel absolute top-4 bottom-4 z-10 flex w-[340px] flex-col pointer-events-auto transition-[left] duration-[180ms] ease-out"
+      style={{ left }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-5">
+        <span className="label text-lg tracking-wide">REPLACE ITEMS</span>
+        <button className="btn btn-icon border-none bg-transparent" onClick={onClose} title="Close (Esc)">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M2 2L12 12M12 2L2 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+
+      <div className="mx-6 h-px bg-border-subtle" />
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5">
+        <div className="flex flex-col gap-5">
+            {/* Source → Target selectors */}
+            <div className="flex items-stretch gap-3">
+              <ItemSelectorButton
+                itemId={sourceId}
+                appearances={appearances}
+                registry={registry}
+                label="FIND"
+                active={expandedPicker === 'source'}
+                onClick={() => setExpandedPicker(expandedPicker === 'source' ? null : 'source')}
+              />
+              <div className="flex items-center px-1">
+                <svg width="24" height="14" viewBox="0 0 24 14" className="text-fg-faint">
+                  <path d="M0 7H20M20 7L14 1M20 7L14 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <ItemSelectorButton
+                itemId={targetId}
+                appearances={appearances}
+                registry={registry}
+                label="REPLACE WITH"
+                active={expandedPicker === 'target'}
+                onClick={() => setExpandedPicker(expandedPicker === 'target' ? null : 'target')}
+              />
+              <div className="flex-1" />
+            </div>
+
+            {/* Inline picker */}
+            {expandedPicker && (
+              <div className="rounded-sm border border-border-subtle bg-surface p-4">
+                <ItemPicker
+                  registry={registry}
+                  appearances={appearances}
+                  selectedItemId={expandedPicker === 'source' ? sourceId : targetId}
+                  onSelect={(id) => {
+                    if (expandedPicker === 'source') setSourceId(id)
+                    else setTargetId(id)
+                    setExpandedPicker(null)
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Add rule */}
+            <button
+              className="btn self-start"
+              disabled={!canAddRule}
+              onClick={handleAddRule}
+            >
+              + Add Rule
+            </button>
+
+            {/* Rules list */}
+            {rules.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <span className="label">Rules ({rules.length})</span>
+                <div className="find-replace-results">
+                  {rules.map((rule, i) => (
+                    <div key={i} className="find-replace-rule-row">
+                      <div className="find-replace-rule-item">
+                        <ItemSprite itemId={rule.sourceId} appearances={appearances} size={24} />
+                        <span className="value text-xs">{rule.sourceId}</span>
+                      </div>
+                      <svg width="16" height="10" viewBox="0 0 16 10" className="text-fg-faint shrink-0">
+                        <path d="M0 5H12M12 5L8 1M12 5L8 9" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <div className="find-replace-rule-item">
+                        <ItemSprite itemId={rule.targetId} appearances={appearances} size={24} />
+                        <span className="value text-xs">{rule.targetId}</span>
+                      </div>
+                      <div className="flex-1" />
+                      {rule.replacedCount !== null && (
+                        <span className="value text-xs text-success">{rule.replacedCount} replaced</span>
+                      )}
+                      <button
+                        className="item-action-btn danger !w-[22px] !h-[22px]"
+                        onClick={() => handleRemoveRule(i)}
+                        title="Remove rule"
+                      >
+                        <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                          <path d="M1 1L7 7M7 1L1 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <ScopeSelector scope={scope} onScopeChange={setScope} hasSelection={hasSelection} />
+
+            {/* Execute */}
+            <div className="flex flex-col gap-3">
+              <button
+                className="btn border-accent bg-accent text-fg-inverse hover:border-accent-hover hover:bg-accent-hover self-start"
+                disabled={rules.length === 0 || !hasUnexecuted || replacing}
+                onClick={handleExecute}
+              >
+                {replacing ? 'Replacing…' : 'Replace'}
+              </button>
+              {replacing && (
+                <div className="h-[3px] w-full overflow-hidden rounded-[2px] bg-elevated">
+                  <div
+                    className="h-full rounded-[2px] bg-accent transition-[width] duration-200 ease-out"
+                    style={{ width: `${Math.round(progress * 100)}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+  )
+}
+
+// ── Item Selector Button ─────────────────────────────────────────────
+
+function ItemSelectorButton({
+  itemId,
+  appearances,
+  registry,
+  label,
+  active,
+  onClick,
+}: {
+  itemId: number | null
+  appearances: AppearanceData
+  registry: ItemRegistry
+  label: string
+  active: boolean
+  onClick: () => void
+}) {
+  const name = itemId !== null ? getItemDisplayName(itemId, registry, appearances) : null
+
+  return (
+    <button
+      className={clsx('find-replace-item-slot', active && 'active')}
+      onClick={onClick}
+    >
+      <span className="label text-[10px] leading-none">{label}</span>
+      <div className="flex items-center justify-center h-[40px] w-[40px]">
+        {itemId !== null ? (
+          <ItemSprite itemId={itemId} appearances={appearances} size={36} />
+        ) : (
+          <div className="h-[36px] w-[36px] rounded-sm border border-dashed border-border-default flex items-center justify-center">
+            <svg width="14" height="14" viewBox="0 0 14 14" className="text-fg-faint">
+              <path d="M7 2V12M2 7H12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+            </svg>
+          </div>
+        )}
+      </div>
+      {name && (
+        <span className="value text-[10px] text-fg-faint max-w-[80px] truncate leading-tight">{name}</span>
+      )}
+    </button>
+  )
+}

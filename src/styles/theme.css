@@ -225,6 +225,11 @@
   transform: translateY(1px);
 }
 
+.btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 .btn-icon {
   width: 34px;
   height: 34px;
@@ -674,6 +679,181 @@
 .settings-toggle input:checked + .settings-toggle-track::after {
   transform: translateX(16px);
   background: var(--color-accent);
+}
+
+/* ── Find & Replace dialog ──────────────────────────────────────── */
+
+.find-replace-item-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  min-width: 96px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-base);
+  cursor: pointer;
+  transition: all 100ms var(--ease-out);
+}
+
+.find-replace-item-slot:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-elevated);
+}
+
+.find-replace-item-slot.active {
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle);
+  box-shadow: 0 0 0 1px var(--color-accent-subtle);
+}
+
+/* ── Find/Replace — results container ──────────────────────────── */
+
+.find-replace-results {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  min-height: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.find-replace-result-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 10px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 80ms var(--ease-out);
+}
+
+.find-replace-result-row:hover {
+  background: var(--color-panel-hover);
+}
+
+.find-replace-result-row + .find-replace-result-row {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+/* ── Find panel — refined result rows ─────────────────────────── */
+
+.find-results-section {
+  border-top: 1px solid var(--color-border-default);
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.find-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0 4px;
+}
+
+.find-result-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 5px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 80ms var(--ease-out);
+}
+
+.find-result-row:hover {
+  background: var(--color-panel-hover);
+}
+
+.find-result-row:active {
+  background: var(--color-panel-active);
+}
+
+.find-result-coords {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg);
+  letter-spacing: 0;
+}
+
+.find-result-count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-faint);
+  letter-spacing: 0;
+}
+
+.find-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-fg-disabled);
+  text-align: center;
+  user-select: none;
+}
+
+.find-replace-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+}
+
+.find-replace-rule-row + .find-replace-rule-row {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.find-replace-rule-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.find-replace-radio {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  cursor: pointer;
+}
+
+.find-replace-radio.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.find-replace-radio input[type="radio"] {
+  accent-color: var(--color-accent);
+  margin: 0;
+}
+
+.item-picker-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  cursor: pointer;
+}
+
+.item-picker-checkbox input[type="checkbox"] {
+  accent-color: var(--color-accent);
+  margin: 0;
 }
 
 } /* end @layer components */

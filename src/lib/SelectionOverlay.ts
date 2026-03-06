@@ -32,6 +32,14 @@ export class SelectionOverlay {
   private _ghostSprites: Sprite[] = []
   private _ghostCursorKey: string = ''
 
+  // Tile ping animation (RME-style pulsating rectangle)
+  private _pingGraphics: Graphics
+  private _pingStartTime = 0
+  private _pingDuration = 5000 // ms
+  private _pingActive = false
+  private _pingX = 0
+  private _pingY = 0
+
   // Dirty tracking
   private _lastHighlightOffset = NaN
 
@@ -43,9 +51,12 @@ export class SelectionOverlay {
     this._brushCursorGraphics.visible = false
     this._ghostContainer = new Container()
     this._ghostContainer.visible = false
+    this._pingGraphics = new Graphics()
+    this._pingGraphics.visible = false
     this.container.addChild(this._selectionBorderGraphics)
     this.container.addChild(this._brushCursorGraphics)
     this.container.addChild(this._ghostContainer)
+    this.container.addChild(this._pingGraphics)
   }
 
   // ── Selection state ───────────────────────────────────────────
@@ -298,12 +309,53 @@ export class SelectionOverlay {
     this._ghostContainer.removeChildren()
   }
 
+  // ── Tile ping animation ─────────────────────────────────────
+
+  pingTile(x: number, y: number, _floor: number): void {
+    this._pingActive = true
+    this._pingStartTime = performance.now()
+    this._pingX = x * TILE_SIZE
+    this._pingY = y * TILE_SIZE
+    this._pingGraphics.visible = true
+  }
+
+  /** Called each frame from the update loop — redraws the pulsating rectangle (RME-style). */
+  updatePing(): void {
+    if (!this._pingActive) return
+
+    const elapsed = performance.now() - this._pingStartTime
+    if (elapsed >= this._pingDuration) {
+      this._pingActive = false
+      this._pingGraphics.visible = false
+      this._pingGraphics.clear()
+      return
+    }
+
+    // RME formula: size oscillates between 30% and 80% of tile size every 1000ms
+    const size = TILE_SIZE * (0.3 + Math.abs(500 - (elapsed % 1000)) / 1000)
+    const offset = (TILE_SIZE - size) / 2
+
+    const g = this._pingGraphics
+    g.clear()
+
+    const px = this._pingX + offset
+    const py = this._pingY + offset
+
+    // Outer black border for contrast
+    g.rect(px, py, size, size)
+    g.stroke({ color: 0x000000, width: 2, alpha: 1 })
+    // Inner white border
+    g.rect(px + 1, py + 1, size - 2, size - 2)
+    g.stroke({ color: 0xffffff, width: 2, alpha: 1 })
+  }
+
   // ── Cleanup ───────────────────────────────────────────────────
 
   destroy(): void {
     this._clearGhostSprites()
     this._ghostContainer.destroy()
     this._brushCursorGraphics.destroy()
+    this._pingGraphics.destroy()
     this._selectionBorderGraphics.destroy()
     this._dragPreviewContainer?.destroy()
     this.container.destroy()
