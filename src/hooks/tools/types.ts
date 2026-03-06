@@ -7,6 +7,7 @@ import type { WallBrush } from '../../lib/brushes/WallTypes'
 import type { CarpetBrush, TableBrush } from '../../lib/brushes/CarpetTypes'
 import type { DoodadBrush } from '../../lib/brushes/DoodadTypes'
 import type { SelectedItemInfo } from '../useSelection'
+import type { CopyBuffer } from '../../lib/CopyBuffer'
 
 export type EditorTool = 'select' | 'draw' | 'erase' | 'door' | 'fill'
 export type BrushShape = 'square' | 'circle'
@@ -58,7 +59,7 @@ export interface ToolContext {
   clickToInspectRef: React.MutableRefObject<boolean>
   // Paste state
   isPastingRef: React.MutableRefObject<boolean>
-  clipboardRef: React.MutableRefObject<ClipboardData | null>
+  copyBufferRef: React.MutableRefObject<CopyBuffer>
   executePasteAt: (targetX: number, targetY: number, targetZ: number) => void
   cancelPaste: () => void
   // Active tool
@@ -183,13 +184,13 @@ export function getTilesInBrush(cx: number, cy: number, size: number, shape: Bru
   return tiles
 }
 
-export interface ClipboardData {
-  originX: number
-  originY: number
-  z: number
-  tiles: { dx: number; dy: number; items: import('../../lib/otbm').OtbmItem[] }[]
-}
-
-export function getClipboardFootprint(cb: ClipboardData, targetX: number, targetY: number, targetZ: number): TilePos[] {
-  return cb.tiles.map(t => ({ x: targetX + t.dx, y: targetY + t.dy, z: targetZ }))
+export function getCopyBufferFootprint(buffer: CopyBuffer, targetX: number, targetY: number, targetZ: number): TilePos[] {
+  const result: TilePos[] = []
+  for (const t of buffer.getTiles()) {
+    const z = targetZ + t.dz
+    if (z === targetZ) {
+      result.push({ x: targetX + t.dx, y: targetY + t.dy, z })
+    }
+  }
+  return result
 }

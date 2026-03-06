@@ -103,6 +103,16 @@ export function SettingsModal({ settings, onChange, onClose }: SettingsModalProp
             <span className="font-ui text-sm font-normal text-fg-muted">Click to Inspect</span>
             <Toggle checked={settings.clickToInspect} onChange={v => update({ clickToInspect: v })} />
           </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-ui text-sm font-normal text-fg-muted">Auto Magic</span>
+            <Toggle checked={settings.autoMagic} onChange={v => update({ autoMagic: v })} />
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-ui text-sm font-normal text-fg-muted">Merge Paste</span>
+            <Toggle checked={settings.mergePaste} onChange={v => update({ mergePaste: v })} />
+          </div>
         </div>
 
         <div className="h-px w-full bg-border-subtle" />

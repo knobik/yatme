@@ -7,7 +7,8 @@ import { DOOR_NORMAL } from '../lib/brushes/WallTypes'
 import type { SelectedItemInfo } from './useSelection'
 import { useSelection } from './useSelection'
 import { useClipboard } from './useClipboard'
-import type { EditorTool, BrushShape, BrushSelection, ToolContext, ClipboardData, TilePos } from './tools/types'
+import type { EditorSettings } from '../lib/EditorSettings'
+import type { EditorTool, BrushShape, BrushSelection, ToolContext, TilePos } from './tools/types'
 import { createDrawHandlers } from './tools/drawTool'
 import { createEraseHandlers } from './tools/eraseTool'
 import { createDoorHandlers } from './tools/doorTool'
@@ -16,7 +17,7 @@ import { createFillHandlers } from './tools/fillTool'
 import { createHoverHandler } from './tools/hoverHandler'
 
 // Re-export types for consumers
-export type { EditorTool, BrushShape, BrushSelection, ClipboardData, TilePos }
+export type { EditorTool, BrushShape, BrushSelection, TilePos }
 export type { SelectedItemInfo }
 export { deriveHighlights } from './useSelection'
 
@@ -28,7 +29,7 @@ export interface EditorToolsState {
   selectedItems: SelectedItemInfo[]
   setSelectedItems: (items: SelectedItemInfo[]) => void
   hasSelection: boolean
-  clipboard: ClipboardData | null
+  canPaste: boolean
   canUndo: boolean
   canRedo: boolean
   undo: () => void
@@ -52,9 +53,10 @@ export function useEditorTools(
   renderer: MapRenderer | null,
   mutator: MapMutator | null,
   mapData: OtbmMap | null,
-  brushRegistry: BrushRegistry | null = null,
-  onRequestEditItem?: (x: number, y: number, z: number, itemIndex: number) => void,
-  clickToInspect: boolean = true,
+  brushRegistry: BrushRegistry | null,
+  onRequestEditItem: ((x: number, y: number, z: number, itemIndex: number) => void) | undefined,
+  clickToInspect: boolean,
+  settingsRef: React.MutableRefObject<EditorSettings>,
 ): EditorToolsState {
   // ── Tool & brush config state ────────────────────────────────────
   const [activeTool, setActiveTool] = useState<EditorTool>('select')
@@ -100,7 +102,7 @@ export function useEditorTools(
   const clipboard = useClipboard(
     renderer, mutator, mapData,
     selection.selectedItemsRef, selection.setSelectedItems, selection.applyHighlights,
-    hoverPosRef,
+    hoverPosRef, settingsRef,
   )
 
   // ── Wire mutator undo/redo ───────────────────────────────────────
@@ -124,7 +126,7 @@ export function useEditorTools(
       isDragMovingRef, dragMoveOriginRef, dragMoveLastPosRef, hoverPosRef,
       onRequestEditItemRef, clickToInspectRef,
       isPastingRef: clipboard.isPastingRef,
-      clipboardRef: clipboard.clipboardRef,
+      copyBufferRef: clipboard.copyBufferRef,
       executePasteAt: clipboard.executePasteAt,
       cancelPaste: clipboard.cancelPaste,
       activeToolRef,
@@ -138,7 +140,7 @@ export function useEditorTools(
     const hover = createHoverHandler(ctx)
 
     renderer.onTilePointerDown = (pos, event) => {
-      if (ctx.isPastingRef.current && ctx.clipboardRef.current) {
+      if (ctx.isPastingRef.current && ctx.copyBufferRef.current.canPaste()) {
         ctx.executePasteAt(pos.x, pos.y, renderer.floor)
         ctx.cancelPaste()
         return
@@ -242,7 +244,7 @@ export function useEditorTools(
     selectedItems: selection.selectedItems,
     setSelectedItems: selection.setSelectedItems,
     hasSelection: selection.hasSelection,
-    clipboard: clipboard.clipboard,
+    canPaste: clipboard.canPaste,
     canUndo,
     canRedo,
     undo,

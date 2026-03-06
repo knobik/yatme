@@ -84,6 +84,8 @@ function App() {
   } | null>(null)
 
   const paletteRef = useRef<BrushPaletteHandle>(null)
+  const editorSettingsRef = useRef(editorSettings)
+  editorSettingsRef.current = editorSettings
 
   const [editItemIndex, setEditItemIndex] = useState<number | null>(null)
 
@@ -91,7 +93,7 @@ function App() {
     setEditItemIndex(itemIndex)
   }, [])
 
-  const tools = useEditorTools(rendererReady, mutatorReady, mapData, brushRegistryState, handleRequestEditItem, editorSettings.clickToInspect)
+  const tools = useEditorTools(rendererReady, mutatorReady, mapData, brushRegistryState, handleRequestEditItem, editorSettings.clickToInspect, editorSettingsRef)
   const toolsRef = useRef(tools)
   toolsRef.current = tools
 
@@ -564,7 +566,7 @@ function App() {
         {
           label: 'Paste',
           shortcut: 'Ctrl+V',
-          disabled: !currentTools.clipboard,
+          disabled: !currentTools.canPaste,
           onClick: () => {
             currentTools.selectTiles([tilePos])
             currentTools.paste()
@@ -788,7 +790,7 @@ function App() {
           onCopy={tools.copy}
           onPaste={tools.paste}
           onDelete={tools.deleteSelection}
-          canPaste={!!tools.clipboard}
+          canPaste={tools.canPaste}
           hasSelection={tools.hasSelection}
           onGoToPosition={() => setShowGoToDialog(true)}
           onFindItem={() => { setShowFindItem(true); setShowReplaceItems(false) }}

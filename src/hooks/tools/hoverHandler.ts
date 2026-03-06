@@ -1,15 +1,15 @@
 import type { ToolContext, TilePos } from './types'
-import { getSelectionPreviewId, getTilesInBrush, getClipboardFootprint } from './types'
+import { getSelectionPreviewId, getTilesInBrush, getCopyBufferFootprint } from './types'
 
 export function createHoverHandler(ctx: ToolContext) {
   function onHover(pos: TilePos) {
     ctx.hoverPosRef.current = pos
 
     // Paste preview mode: show clipboard ghost at hover position
-    if (ctx.isPastingRef.current && ctx.clipboardRef.current) {
-      const cb = ctx.clipboardRef.current
-      ctx.renderer.updatePastePreview(cb, pos.x, pos.y, ctx.renderer.floor)
-      ctx.renderer.updateBrushCursor(getClipboardFootprint(cb, pos.x, pos.y, ctx.renderer.floor))
+    if (ctx.isPastingRef.current && ctx.copyBufferRef.current.canPaste()) {
+      const buffer = ctx.copyBufferRef.current
+      ctx.renderer.updatePastePreview(buffer, pos.x, pos.y, ctx.renderer.floor)
+      ctx.renderer.updateBrushCursor(getCopyBufferFootprint(buffer, pos.x, pos.y, ctx.renderer.floor))
       ctx.renderer.clearGhostPreview()
       return
     }

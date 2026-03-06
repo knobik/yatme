@@ -11,7 +11,7 @@ import { getTextureSync, getTexture } from './TextureManager'
 import type { FloorViewMode } from './constants'
 import type { AppearanceData } from './appearances'
 import type { OtbmMap, OtbmTile, OtbmItem } from './otbm'
-import type { ClipboardData } from '../hooks/useEditorTools'
+import type { CopyBuffer } from './CopyBuffer'
 
 export { type FloorViewMode } from './constants'
 
@@ -269,20 +269,23 @@ export class MapRenderer implements InputHost {
   }
 
   /** Show a ghost preview of clipboard tiles at a target position. */
-  updatePastePreview(clipboard: ClipboardData, targetX: number, targetY: number, targetZ: number): void {
-    // Build a temporary tileMap with clipboard data at their original positions
+  updatePastePreview(buffer: CopyBuffer, targetX: number, targetY: number, targetZ: number): void {
+    const origin = buffer.getOrigin()
     const tempMap = new Map<string, OtbmTile>()
     const tileEntries: { pos: { x: number; y: number; z: number }; indices: number[] }[] = []
-    for (const t of clipboard.tiles) {
-      const x = clipboard.originX + t.dx
-      const y = clipboard.originY + t.dy
-      const key = `${x},${y},${targetZ}`
-      tempMap.set(key, { x, y, z: targetZ, flags: 0, items: t.items })
-      tileEntries.push({ pos: { x, y, z: targetZ }, indices: t.items.map((_, i) => i) })
+    for (const t of buffer.getTiles()) {
+      const x = origin.x + t.dx
+      const y = origin.y + t.dy
+      const z = origin.z + t.dz
+      // Only preview tiles on the currently viewed floor
+      const actualZ = targetZ + t.dz
+      if (actualZ !== this.camera.floor) continue
+      const key = `${x},${y},${z}`
+      tempMap.set(key, { x, y, z, flags: 0, items: t.items })
+      tileEntries.push({ pos: { x, y, z }, indices: t.items.map((_: OtbmItem, i: number) => i) })
     }
-    // Compute offset from original positions to target
-    const dx = targetX - clipboard.originX
-    const dy = targetY - clipboard.originY
+    const dx = targetX - origin.x
+    const dy = targetY - origin.y
     this.selection.updateDragPreview(tileEntries, dx, dy, this.camera.floor, tempMap, this.appearances)
   }
 
