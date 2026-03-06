@@ -1,4 +1,71 @@
-# Tibia Map Editor — Claude Instructions
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Browser-based Tibia map editor targeting Tibia 15.00+ (protobuf data format). Built with React 19, PixiJS 8, TypeScript, Vite, and Tailwind CSS 4. Renders and edits OTBM map files using sprite data from the Tibia client.
+
+## Commands
+
+- **Dev server**: `npm run dev` (Vite dev server, serves `data/` and `tibia-versions/15.00/` as public)
+- **Build**: `npm run build` (runs `tsc -b && vite build`)
+- **Lint**: `npm run lint` (ESLint)
+- **Protobuf codegen**: `npm run proto` (requires Docker — generates `src/proto/appearances.ts`)
+
+No test framework is configured.
+
+## Architecture
+
+### Data Pipeline
+```
+OTBM map file -> appearances.dat (protobuf) -> catalog-content.json -> sprite sheets (.bmp.lzma) -> items.xml
+```
+Key: Server ID = Client ID in v15.00+ (no `items.otb` mapping needed).
+
+### Init Flow (`src/lib/initPipeline.ts` -> `src/lib/setupEditor.ts`)
+`loadAssets()` orchestrates startup: PixiJS app init -> sprite catalog -> appearances -> items.xml -> brush/material XML -> tilesets -> OTBM map parse. Returns `InitResult` consumed by `setupEditor()` which creates the `MapRenderer` and `MapMutator`.
+
+### Core Classes (`src/lib/`)
+- **MapRenderer** — PixiJS rendering engine. Manages Camera, ChunkManager, FloorManager, TileRenderer, SelectionOverlay, LightEngine. Handles multi-floor rendering with diagonal offset (RME-style).
+- **MapMutator** — All map mutations (place/remove items, undo/redo, copy/paste, fill, border/randomize). Classifies items into draw layers: ground, bottom, common, top.
+- **Camera** — Viewport position, zoom, floor navigation.
+- **ChunkManager** — Spatial index for tiles grouped into chunks for efficient rendering.
+- **TileRenderer** — Renders individual tiles using sprite data from TextureManager/SpriteResolver.
+- **FloorManager** — Multi-floor visibility and transparency.
+- **otbm.ts** — Binary OTBM parser/serializer.
+- **appearances.ts** — Protobuf appearance data loader.
+- **items.ts** — Item registry from items.xml.
+
+### Brush System (`src/lib/brushes/`)
+XML-based brush definitions loaded from `data/materials/`. Types: ground brushes (with borders), wall brushes, carpet/table brushes, doodad brushes. `BrushRegistry` is the central lookup. Border/wall/carpet systems handle auto-tiling.
+
+### Tools (`src/hooks/tools/`)
+Editor tools: `selectTool`, `drawTool`, `eraseTool`, `fillTool`, `doorTool`. Each implements pointer event handlers. Managed by `useEditorTools` hook.
+
+### UI (`src/components/`)
+- **App.tsx** — Root component, manages all state and panel visibility.
+- **Toolbar.tsx** — Top toolbar with tool buttons and hamburger menu.
+- **HamburgerMenu.tsx** — Main menu with all operations and keyboard shortcuts.
+- **Inspector** — Tile item inspector panel.
+- **BrushPalette / ItemPalette** — Brush and raw item selection panels.
+- **FindItemDialog / ReplaceItemsDialog** — Search and replace across map.
+
+### Data Files
+- `tibia-versions/15.00/` — Client assets (appearances.dat, catalog-content.json, sprite sheets). Served as Vite publicDir.
+- `data/materials/` — Brush/tileset XML definitions (borders, brushes, tilesets).
+- `data/items.xml` — Item names and properties.
+
+### Vendor References
+- `vendor/otclient` — C++ reference for protobuf/sprite/OTBM parsing
+- `vendor/remeres-map-editor` — C++ reference for editor UX, brush systems, OTBM I/O
+- `vendor/canary` — Server-side item handling, map data
+
+## Tibia Z-Axis Convention
+**Lower Z = higher elevation**: Z=0 is sky, Z=7 is ground level, Z=8-15 is underground. "Upper floors" have lower Z numbers.
+
+## Item Rendering Order
+Uses RME convention: items render in forward array order (last item drawn on top). This differs from OTClient which reverses common items. OTBM export will need order translation.
 
 ## UI Design Principles — "Dark Forge"
 
@@ -37,4 +104,4 @@ All CSS variables and base classes: `src/styles/theme.css`
 
 ## UI Conventions
 
-- All tools, views, and map operations must have entries in the **hamburger menu** (`src/components/Toolbar.tsx` → `menuSections`) — not just keyboard shortcuts or context menu items.
+- All tools, views, and map operations must have entries in the **hamburger menu** (`src/components/Toolbar.tsx` -> `menuSections`) — not just keyboard shortcuts or context menu items.
