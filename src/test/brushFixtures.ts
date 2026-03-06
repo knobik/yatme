@@ -4,6 +4,7 @@
 import { createGroundBrush, type AutoBorder, type BorderBlock, type GroundBrush, type SpecificCaseBlock } from '../lib/brushes/BrushTypes'
 import { createWallBrush, type WallBrush } from '../lib/brushes/WallTypes'
 import { createCarpetBrush, createTableBrush, type CarpetBrush, type TableBrush } from '../lib/brushes/CarpetTypes'
+import type { DoodadBrush } from '../lib/brushes/DoodadTypes'
 import { BrushRegistry } from '../lib/brushes/BrushRegistry'
 import { makeMapData, makeTile, makeItem } from './fixtures'
 import type { OtbmMap } from '../lib/otbm'
@@ -101,6 +102,23 @@ export function makeTableBrushWithItems(
   return brush
 }
 
+// ── Doodad brush helpers ─────────────────────────────────────────────
+
+export function makeDoodadBrush(overrides: Partial<DoodadBrush> = {}): DoodadBrush {
+  return {
+    id: 0,
+    name: '',
+    lookId: 0,
+    draggable: false,
+    onBlocking: false,
+    onDuplicate: false,
+    thickness: 0,
+    thicknessCeiling: 100,
+    alternatives: [],
+    ...overrides,
+  }
+}
+
 // ── Registry helper ──────────────────────────────────────────────────
 
 export interface MinimalRegistryOptions {
@@ -109,6 +127,7 @@ export interface MinimalRegistryOptions {
   wallBrushes?: WallBrush[]
   carpetBrushes?: CarpetBrush[]
   tableBrushes?: TableBrush[]
+  doodadBrushes?: DoodadBrush[]
 }
 
 export function makeMinimalRegistry(options: MinimalRegistryOptions = {}): BrushRegistry {
@@ -118,6 +137,7 @@ export function makeMinimalRegistry(options: MinimalRegistryOptions = {}): Brush
     options.wallBrushes ?? [],
     options.carpetBrushes ?? [],
     options.tableBrushes ?? [],
+    options.doodadBrushes ?? [],
   )
 }
 
