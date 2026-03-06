@@ -114,6 +114,15 @@ export function parseGroundBrushesXml(
     }
     brush.totalChance = totalChance
 
+    // Parse randomize attribute (default true, false if totalChance is 0)
+    const randomizeAttr = brushEl.getAttribute('randomize')
+    if (randomizeAttr !== null) {
+      brush.isRandomizable = randomizeAttr !== 'false' && randomizeAttr !== '0'
+    }
+    if (totalChance === 0) {
+      brush.isRandomizable = false
+    }
+
     // Parse borders
     for (const borderEl of brushEl.children) {
       if (borderEl.tagName.toLowerCase() !== 'border') continue

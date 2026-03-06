@@ -371,6 +371,17 @@ function App() {
     mutatorRef.current.borderizeSelection([...uniqueTiles.values()])
   }
 
+  function randomizeCurrentSelection() {
+    const sel = toolsRef.current.selectedItems
+    if (sel.length === 0 || !mutatorRef.current) return
+    const uniqueTiles = new Map<string, { x: number; y: number; z: number }>()
+    for (const item of sel) {
+      const key = `${item.x},${item.y},${item.z}`
+      if (!uniqueTiles.has(key)) uniqueTiles.set(key, { x: item.x, y: item.y, z: item.z })
+    }
+    mutatorRef.current.randomizeSelection([...uniqueTiles.values()])
+  }
+
   // Keyboard shortcuts
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -422,6 +433,11 @@ function App() {
         if (e.key === 'b') {
           e.preventDefault()
           borderizeCurrentSelection()
+          return
+        }
+        if (e.key === 'R' && e.shiftKey) {
+          e.preventDefault()
+          randomizeCurrentSelection()
           return
         }
         if (e.key === '=' || e.key === '+') {
@@ -799,6 +815,7 @@ function App() {
           onZoomOut={handleZoomOut}
           onResetZoom={handleResetZoom}
           onBorderizeSelection={borderizeCurrentSelection}
+          onRandomizeSelection={randomizeCurrentSelection}
           brushSize={tools.brushSize}
           onBrushSizeChange={tools.setBrushSize}
           brushShape={tools.brushShape}

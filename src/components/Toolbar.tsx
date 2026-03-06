@@ -46,6 +46,7 @@ interface ToolbarProps {
   onZoomOut: () => void
   onResetZoom: () => void
   onBorderizeSelection: () => void
+  onRandomizeSelection: () => void
   brushSize: number
   onBrushSizeChange: (size: number) => void
   brushShape: BrushShape
@@ -111,6 +112,7 @@ export function Toolbar({
   onZoomOut,
   onResetZoom,
   onBorderizeSelection,
+  onRandomizeSelection,
   brushSize,
   onBrushSizeChange,
   brushShape,
@@ -148,6 +150,7 @@ export function Toolbar({
         { label: 'Replace Items...', shortcut: 'Ctrl+H', onClick: onReplaceItems },
         'separator',
         { label: 'Borderize Selection', shortcut: 'Ctrl+B', disabled: !hasSelection, onClick: onBorderizeSelection },
+        { label: 'Randomize Selection', shortcut: 'Ctrl+Shift+R', disabled: !hasSelection, onClick: onRandomizeSelection },
       ],
     },
     {

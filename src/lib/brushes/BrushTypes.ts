@@ -37,6 +37,7 @@ export interface GroundBrush {
   hateFriends: boolean     // if true, friends list is actually enemies (inverted logic)
   optionalBorder: AutoBorder | null
   useSoloOptionalBorder: boolean  // if true, suppress regular border under mountain
+  isRandomizable: boolean          // if true, ground can be re-randomized (default true)
   // Derived flags (set during loading)
   hasOuterBorder: boolean
   hasInnerBorder: boolean
@@ -58,6 +59,7 @@ export function createGroundBrush(): GroundBrush {
     hateFriends: false,
     optionalBorder: null,
     useSoloOptionalBorder: false,
+    isRandomizable: true,
     hasOuterBorder: false,
     hasInnerBorder: false,
     hasOuterZilchBorder: false,

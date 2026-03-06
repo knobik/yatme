@@ -784,6 +784,46 @@ export class MapMutator {
     })
   }
 
+  /** Randomize ground tile variations within the given positions. */
+  randomizeSelection(positions: { x: number; y: number; z: number }[]): void {
+    const registry = this._brushRegistry
+    if (!registry || positions.length === 0) return
+
+    this.autoBatch('Randomize selection', () => {
+      for (const pos of positions) {
+        const tile = this.mapData.tiles.get(tileKey(pos.x, pos.y, pos.z))
+        if (!tile) continue
+
+        // Find ground item
+        const groundIdx = tile.items.findIndex(
+          it => classifyItem(it.id, this.appearances) === 'ground'
+        )
+        if (groundIdx < 0) continue
+
+        const groundItem = tile.items[groundIdx]
+        const brush = registry.getBrushForItem(groundItem.id)
+        if (!brush || !brush.isRandomizable) continue
+
+        // Pick new random ground item
+        const newGroundId = registry.pickRandomItem(brush)
+        if (!newGroundId || newGroundId === groundItem.id) continue
+
+        const oldItems = deepCloneItems(tile.items)
+
+        // Preserve attributes (actionId, uniqueId, etc.) from the old ground item
+        tile.items[groundIdx] = { ...groundItem, id: newGroundId }
+
+        this.recordAction({
+          type: 'setTileItems',
+          x: pos.x, y: pos.y, z: pos.z,
+          oldItems,
+          newItems: deepCloneItems(tile.items),
+        })
+        this.onTileChanged?.(pos.x, pos.y, pos.z)
+      }
+    })
+  }
+
   removeDoodadItems(x: number, y: number, z: number, brush: DoodadBrush): void {
     const registry = this._brushRegistry!
     this.autoBatch('Remove doodad', () => {
