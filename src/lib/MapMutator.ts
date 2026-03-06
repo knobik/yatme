@@ -738,6 +738,52 @@ export class MapMutator {
     }
   }
 
+  /** Recompute auto-borders for all tiles at the given positions (and their neighbors). */
+  borderizeSelection(positions: { x: number; y: number; z: number }[]): void {
+    const registry = this._brushRegistry
+    if (!registry || positions.length === 0) return
+
+    this.autoBatch('Borderize selection', () => {
+      // Collect unique tile keys for the selection AND their 8-neighbors
+      const tilesToUpdate = new Map<string, { x: number; y: number; z: number }>()
+      for (const pos of positions) {
+        const key = tileKey(pos.x, pos.y, pos.z)
+        if (!tilesToUpdate.has(key)) tilesToUpdate.set(key, pos)
+        for (const [dx, dy] of OFFSETS_8) {
+          const nx = pos.x + dx
+          const ny = pos.y + dy
+          if (nx < 0 || ny < 0) continue
+          const nk = tileKey(nx, ny, pos.z)
+          if (!tilesToUpdate.has(nk)) tilesToUpdate.set(nk, { x: nx, y: ny, z: pos.z })
+        }
+      }
+
+      for (const pos of tilesToUpdate.values()) {
+        const tile = this.mapData.tiles.get(tileKey(pos.x, pos.y, pos.z))
+        if (!tile) continue
+
+        // Only borderize tiles that have a ground item
+        const hasGround = tile.items.some(it => classifyItem(it.id, this.appearances) === 'ground')
+        if (!hasGround) continue
+
+        const oldItems = deepCloneItems(tile.items)
+        this.removeBorderItems(tile, registry)
+        const newBorders = computeBorders(pos.x, pos.y, pos.z, this.mapData, registry)
+        this.insertBorderItems(tile, newBorders)
+
+        if (!this.itemsEqual(oldItems, tile.items)) {
+          this.recordAction({
+            type: 'setTileItems',
+            x: pos.x, y: pos.y, z: pos.z,
+            oldItems,
+            newItems: deepCloneItems(tile.items),
+          })
+          this.onTileChanged?.(pos.x, pos.y, pos.z)
+        }
+      }
+    })
+  }
+
   removeDoodadItems(x: number, y: number, z: number, brush: DoodadBrush): void {
     const registry = this._brushRegistry!
     this.autoBatch('Remove doodad', () => {
