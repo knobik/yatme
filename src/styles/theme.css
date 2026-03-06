@@ -692,14 +692,13 @@
   min-width: 96px;
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
-  background: var(--color-bg-base);
+  background: transparent;
   cursor: pointer;
   transition: all 100ms var(--ease-out);
 }
 
 .find-replace-item-slot:hover {
   border-color: var(--color-border-strong);
-  background: var(--color-elevated);
 }
 
 .find-replace-item-slot.active {
@@ -743,8 +742,6 @@
 
 .find-results-section {
   border-top: 1px solid var(--color-border-default);
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
 
 .find-action-bar {
@@ -808,7 +805,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 8px 10px;
 }
 
 .find-replace-rule-row + .find-replace-rule-row {
