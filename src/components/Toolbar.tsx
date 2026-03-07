@@ -53,8 +53,8 @@ interface ToolbarProps {
   onBrushShapeChange: (shape: BrushShape) => void
   activeDoorType: number
   onDoorTypeChange: (type: number) => void
-  onSave?: () => void
-  canSave?: boolean
+  onSave: () => void
+  canSave: boolean
 }
 
 const BRUSH_SIZES = [
@@ -137,7 +137,7 @@ export function Toolbar({
     {
       title: 'File',
       items: [
-        { label: 'Save Map', shortcut: 'Ctrl+S', disabled: !canSave, onClick: () => onSave?.() },
+        { label: 'Save Map', shortcut: 'Ctrl+S', disabled: !canSave, onClick: onSave },
       ],
     },
     {

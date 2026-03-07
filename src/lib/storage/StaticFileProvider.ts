@@ -1,5 +1,6 @@
 import type { MapBundle, MapStorageProvider } from './MapStorageProvider'
 import { fetchWithProgress } from '../fetchWithProgress'
+import { triggerDownload } from '../triggerDownload'
 
 export class StaticFileProvider implements MapStorageProvider {
   readonly canSave = true
@@ -20,15 +21,6 @@ export class StaticFileProvider implements MapStorageProvider {
   }
 
   async saveMap(bundle: MapBundle): Promise<void> {
-    const buf = bundle.otbm.buffer.slice(bundle.otbm.byteOffset, bundle.otbm.byteOffset + bundle.otbm.byteLength) as ArrayBuffer
-    const blob = new Blob([buf], { type: 'application/octet-stream' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = bundle.filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    triggerDownload(bundle.otbm, bundle.filename)
   }
 }

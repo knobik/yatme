@@ -238,13 +238,13 @@ function App() {
     setShowLights(next.showLights)
   }, [])
 
-  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
 
   const handleSave = useCallback(async () => {
     const md = mapData
     const provider = storageRef.current
-    if (!md || !provider || !provider.canSave || saving) return
-    setSaving(true)
+    if (!md || !provider || !provider.canSave || savingRef.current) return
+    savingRef.current = true
     try {
       const otbm = serializeOtbm(md)
       await provider.saveMap({ otbm, sidecars: new Map(), filename: mapFilename })
@@ -252,9 +252,9 @@ function App() {
       console.error('[Save] Failed to save map:', e)
       alert(`Failed to save map: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
-      setSaving(false)
+      savingRef.current = false
     }
-  }, [mapData, mapFilename, saving])
+  }, [mapData, mapFilename])
 
   const handleGoToPosition = useCallback((x: number, y: number, z: number) => {
     if (!rendererRef.current) return
@@ -906,7 +906,7 @@ function App() {
           activeDoorType={tools.activeDoorType}
           onDoorTypeChange={tools.setActiveDoorType}
           onSave={handleSave}
-          canSave={!!storageRef.current?.canSave}
+          canSave={!!mapData}
         />
       )}
 

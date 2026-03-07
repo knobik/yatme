@@ -1,4 +1,5 @@
 import type { FloorViewMode } from './constants'
+import { triggerDownload } from './triggerDownload'
 
 // ── Editor Settings ──────────────────────────────────────────────────
 
@@ -49,14 +50,7 @@ export function saveSettings(settings: EditorSettings): void {
 }
 
 export function exportSettings(settings: EditorSettings): void {
-  const json = JSON.stringify(settings, null, 2)
-  const blob = new Blob([json], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'editor-settings.json'
-  a.click()
-  URL.revokeObjectURL(url)
+  triggerDownload(JSON.stringify(settings, null, 2), 'editor-settings.json', 'application/json')
 }
 
 export function importSettings(json: string): EditorSettings | null {

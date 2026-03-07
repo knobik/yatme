@@ -1,4 +1,5 @@
 import type { MapBundle, MapStorageProvider } from './MapStorageProvider'
+import { toArrayBuffer } from '../triggerDownload'
 
 export class ServerStorageProvider implements MapStorageProvider {
   readonly canSave = true
@@ -53,12 +54,12 @@ export class ServerStorageProvider implements MapStorageProvider {
     const sidecarHeader = response.headers.get('X-Map-Sidecars')
     if (sidecarHeader) {
       const names = sidecarHeader.split(',').map(s => s.trim()).filter(Boolean)
-      for (const name of names) {
+      await Promise.all(names.map(async (name) => {
         const res = await fetch(`${this.baseUrl}/map/sidecars/${encodeURIComponent(name)}`)
         if (res.ok) {
           sidecars.set(name, new Uint8Array(await res.arrayBuffer()))
         }
-      }
+      }))
     }
 
     return { otbm, sidecars, filename }
@@ -71,7 +72,7 @@ export class ServerStorageProvider implements MapStorageProvider {
         'Content-Type': 'application/octet-stream',
         'X-Map-Filename': bundle.filename,
       },
-      body: bundle.otbm.buffer.slice(bundle.otbm.byteOffset, bundle.otbm.byteOffset + bundle.otbm.byteLength) as ArrayBuffer,
+      body: toArrayBuffer(bundle.otbm),
     })
     if (!response.ok) {
       throw new Error(`Failed to save map: ${response.status} ${response.statusText}`)
