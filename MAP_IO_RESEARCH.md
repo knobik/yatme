@@ -50,23 +50,13 @@ Step weights: `[2, 15, 3, 12, 8, 3, 50, 5]` — OTBM is 50% of total work.
 | `OTBM_ATTR_HOUSE_FILE` | `map.houseFile` | Parsed, not loaded |
 | `OTBM_ATTR_EXT_ZONE_FILE` (24) | Not implemented | See ZONES_RESEARCH.md |
 
-## Two-Mode Architecture
+## Target Architecture
 
-Mode is determined at **runtime** — one build artifact serves both modes. When a server URL is configured, the editor operates in server mode; otherwise it defaults to browser mode. Only the **map data source** changes between modes — editor assets (appearances, sprites, brushes, tilesets) remain identical.
+Docker image bundling the static frontend + a lightweight Node server. OTS creators provide client assets and map files via volume mounts. A single build artifact — mode detection is not needed in the initial implementation.
 
-### Configuration
+### Storage Interface
 
-The server injects its config when serving the frontend (e.g. via a `<script>` tag or `/api/config` endpoint):
-
-```ts
-// Injected by server, absent in static browser deployments
-window.__MAP_EDITOR_CONFIG__ = {
-  mode: 'server',
-  serverUrl: '/api',
-};
-```
-
-When `window.__MAP_EDITOR_CONFIG__` is absent → browser mode. This gives one build that works for both deployment targets.
+Even though we start with server-only, defining an interface keeps the door open for a future browser mode without refactoring.
 
 ```mermaid
 classDiagram
@@ -82,42 +72,16 @@ classDiagram
         +filename: string
     }
 
-    class BrowserZipProvider {
-        +loadMap() MapBundle
-        +saveMap(MapBundle) void
-    }
-
     class ServerStorageProvider {
         +loadMap() MapBundle
         +saveMap(MapBundle) void
     }
 
-    MapStorageProvider <|.. BrowserZipProvider
     MapStorageProvider <|.. ServerStorageProvider
     MapStorageProvider --> MapBundle
 ```
 
-### Mode 1: Browser (Zip Upload)
-
-- **Fully static** — compiles to HTML/JS/CSS, deployable on GitHub Pages with no server
-- Landing screen with "Open Map" button (file picker for `.zip`)
-- Zip contains `.otbm` + sidecar XMLs (zones, houses, spawns)
-- Parse zip in-browser (e.g. `fflate`)
-- Pass raw `Uint8Array` to existing `parseOtbm()`
-- On save: serialize to zip, trigger browser download via `URL.createObjectURL()`
-
-### Asset Sourcing
-
-Client assets (appearances.dat, sprite sheets) cannot be bundled in the repo (CipSoft copyright). The existing `convert-sprites.ts` script already converts sprite sheets to PNG.
-
-- **Browser mode**: a GitHub Action pulls client assets from [dudantas/tibia-client](https://github.com/dudantas/tibia-client) (tagged by client version), runs `convert-sprites.ts`, and includes the resulting PNGs in the static build.
-- **Server mode**: OTS creators mount a volume with their client files (appearances.dat, `.bmp.lzma` sprite sheets). The Docker entrypoint runs `convert-sprites.ts` on first start to produce PNGs, which are then served alongside the frontend.
-
-### Mode 2: Server
-
-- **Docker image** bundling the static frontend + a lightweight Node server (Express/Fastify)
-- OTS creators provide client assets (appearances.dat, catalog-content.json, sprite sheets) and map files via volume mounts
-- Entrypoint runs `convert-sprites.ts` to convert `.bmp.lzma` → PNG on container startup
+### Deployment
 
 ```yaml
 services:
@@ -130,7 +94,8 @@ services:
       - "8080:8080"
 ```
 
-- Server injects its config into the frontend, disabling browser upload UI
+- Entrypoint runs `convert-sprites.ts` to convert `.bmp.lzma` → PNG on container startup
+- Server serves converted PNGs + frontend static files
 - `GET /api/map` — returns OTBM binary + sidecars from mounted volume
 - `POST /api/map` — saves changes back to volume
 
@@ -138,33 +103,35 @@ services:
 
 ```mermaid
 flowchart TD
-    A[App starts] --> B{Server config present?}
-    B -->|No - browser mode| C[Show landing screen]
-    C --> D[User uploads .zip]
-    D --> E[BrowserZipProvider.loadMap]
-    B -->|Yes - server mode| F[ServerStorageProvider.loadMap]
-    E --> G[MapBundle]
-    F --> G
-    G --> H[loadAssets - editor assets only]
-    H --> I["parseOtbm(bundle.otbm)"]
-    I --> J[Parse sidecars - zones, houses, spawns]
-    J --> K[setupEditor]
-    K --> L[MapRenderer + MapMutator]
+    A[App starts] --> B[ServerStorageProvider.loadMap]
+    B --> C[MapBundle]
+    C --> D[loadAssets - editor assets]
+    D --> E["parseOtbm(bundle.otbm)"]
+    E --> F[Parse sidecars - zones, houses, spawns]
+    F --> G[setupEditor]
+    G --> H[MapRenderer + MapMutator]
 
-    L --> M{User saves}
-    M --> N[serializeOtbm + sidecars]
-    N --> O{Mode?}
-    O -->|browser| P[Download .zip]
-    O -->|server| Q[POST /api/map]
+    H --> I{User saves}
+    I --> J[serializeOtbm + sidecars]
+    J --> K[POST /api/map]
 ```
 
 ## Implementation Order
 
-1. **`MapStorageProvider` interface** — abstract load/save behind common API
-2. **OTBM serializer** — `serializeOtbm()` (inverse of parser, doesn't exist yet)
-3. **`BrowserZipProvider`** — zip upload/download with `fflate` or similar
-4. **`ServerStorageProvider`** — Node server with Express/Fastify, Docker image
-5. **Landing/mode selection UI** — landing screen for browser mode, auto-load for server mode
-6. **Refactor `initPipeline.ts`** — split editor asset loading from map loading
-7. **Sidecar file parsing** — actually load zones/houses/spawns XMLs
-8. **GitHub Action for assets** — pull client data, run `convert-sprites.ts`, include PNGs in build
+1. **OTBM serializer** — `serializeOtbm()` (inverse of parser, doesn't exist yet)
+2. **`MapStorageProvider` interface + `ServerStorageProvider`** — load/save via HTTP
+3. **Node server** — Express/Fastify with `GET /api/map` and `POST /api/map`
+4. **Refactor `initPipeline.ts`** — split editor asset loading from map loading, consume `MapBundle`
+5. **Sidecar file parsing** — load zones/houses/spawns XMLs from bundle
+6. **Dockerfile** — static frontend + server, entrypoint runs `convert-sprites.ts`
+
+## Future: Browser Mode
+
+A fully static deployment (GitHub Pages) using zip upload/download. Not planned for initial implementation but the `MapStorageProvider` interface supports it.
+
+- Landing screen with "Open Map" button (file picker for `.zip`)
+- Zip contains `.otbm` + sidecar XMLs; parse in-browser with `fflate`
+- On save: serialize to zip, trigger browser download
+- Asset sourcing: GitHub Action pulls from [dudantas/tibia-client](https://github.com/dudantas/tibia-client), runs `convert-sprites.ts`, includes PNGs in static build
+- Would require a `BrowserZipProvider` implementing `MapStorageProvider`
+- Mode detection via `window.__MAP_EDITOR_CONFIG__` (present = server, absent = browser)
