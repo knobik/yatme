@@ -514,6 +514,88 @@ describe('MapMutator — Tier 2', () => {
     })
   })
 
+  describe('rotateItem', () => {
+    const ROTATE_A = 900
+    const ROTATE_B = 901
+    const ROTATE_C = 902
+    const NON_ROTATABLE = 950
+
+    function makeRotateRegistry(): Map<number, { id: number; name: string; rotateTo?: number }> {
+      const registry = new Map()
+      registry.set(ROTATE_A, { id: ROTATE_A, name: 'Statue A', rotateTo: ROTATE_B })
+      registry.set(ROTATE_B, { id: ROTATE_B, name: 'Statue B', rotateTo: ROTATE_C })
+      registry.set(ROTATE_C, { id: ROTATE_C, name: 'Statue C', rotateTo: ROTATE_A })
+      registry.set(NON_ROTATABLE, { id: NON_ROTATABLE, name: 'Rock' })
+      return registry
+    }
+
+    it('rotates item to next ID in chain', () => {
+      const appearances = makeLayeredAppearances()
+      const mapData = makeMapData([makeTile(10, 10, 7, [makeItem({ id: ROTATE_A })])])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.itemRegistry = makeRotateRegistry()
+
+      mutator.rotateItem(10, 10, 7, 0)
+      expect(mapData.tiles.get('10,10,7')!.items[0].id).toBe(ROTATE_B)
+    })
+
+    it('completes full rotation cycle', () => {
+      const appearances = makeLayeredAppearances()
+      const mapData = makeMapData([makeTile(10, 10, 7, [makeItem({ id: ROTATE_A })])])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.itemRegistry = makeRotateRegistry()
+
+      mutator.rotateItem(10, 10, 7, 0)
+      expect(mapData.tiles.get('10,10,7')!.items[0].id).toBe(ROTATE_B)
+      mutator.rotateItem(10, 10, 7, 0)
+      expect(mapData.tiles.get('10,10,7')!.items[0].id).toBe(ROTATE_C)
+      mutator.rotateItem(10, 10, 7, 0)
+      expect(mapData.tiles.get('10,10,7')!.items[0].id).toBe(ROTATE_A)
+    })
+
+    it('no-op for non-rotatable item', () => {
+      const appearances = makeLayeredAppearances()
+      const mapData = makeMapData([makeTile(10, 10, 7, [makeItem({ id: NON_ROTATABLE })])])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.itemRegistry = makeRotateRegistry()
+
+      mutator.rotateItem(10, 10, 7, 0)
+      expect(mapData.tiles.get('10,10,7')!.items[0].id).toBe(NON_ROTATABLE)
+    })
+
+    it('no-op for invalid item index', () => {
+      const appearances = makeLayeredAppearances()
+      const mapData = makeMapData([makeTile(10, 10, 7, [makeItem({ id: ROTATE_A })])])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.itemRegistry = makeRotateRegistry()
+
+      mutator.rotateItem(10, 10, 7, 5)
+      expect(mapData.tiles.get('10,10,7')!.items[0].id).toBe(ROTATE_A)
+    })
+
+    it('no-op when itemRegistry is not set', () => {
+      const appearances = makeLayeredAppearances()
+      const mapData = makeMapData([makeTile(10, 10, 7, [makeItem({ id: ROTATE_A })])])
+      const mutator = new MapMutator(mapData, appearances)
+
+      mutator.rotateItem(10, 10, 7, 0)
+      expect(mapData.tiles.get('10,10,7')!.items[0].id).toBe(ROTATE_A)
+    })
+
+    it('undo restores original item ID', () => {
+      const appearances = makeLayeredAppearances()
+      const mapData = makeMapData([makeTile(10, 10, 7, [makeItem({ id: ROTATE_A })])])
+      const mutator = new MapMutator(mapData, appearances)
+      mutator.itemRegistry = makeRotateRegistry()
+
+      mutator.rotateItem(10, 10, 7, 0)
+      expect(mapData.tiles.get('10,10,7')!.items[0].id).toBe(ROTATE_B)
+
+      mutator.undo()
+      expect(mapData.tiles.get('10,10,7')!.items[0].id).toBe(ROTATE_A)
+    })
+  })
+
   describe('paintCarpet', () => {
     function makeCarpetSetup() {
       const appearances = makeLayeredAppearances()

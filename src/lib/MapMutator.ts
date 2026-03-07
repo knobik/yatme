@@ -7,6 +7,7 @@ import type { CarpetBrush, TableBrush } from './brushes/CarpetTypes'
 import type { DoodadBrush, DoodadAlternative, DoodadComposite } from './brushes/DoodadTypes'
 import { CARPET_CENTER, TABLE_ALONE } from './brushes/CarpetTypes'
 import type { BrushRegistry } from './brushes/BrushRegistry'
+import type { ItemRegistry } from './items'
 import { computeBorders } from './brushes/BorderSystem'
 import { doWalls, getWallAlignment } from './brushes/WallSystem'
 import { findDoorForAlignment, switchDoor } from './brushes/DoorSystem'
@@ -64,6 +65,7 @@ export class MapMutator {
   private undoStack: MutationBatch[] = []
   private redoStack: MutationBatch[] = []
   private _brushRegistry: BrushRegistry | null = null
+  private _itemRegistry: ItemRegistry | null = null
 
   // Current batch being built (between beginBatch/commitBatch)
   private currentBatch: MutationBatch | null = null
@@ -84,6 +86,14 @@ export class MapMutator {
 
   get brushRegistry(): BrushRegistry | null {
     return this._brushRegistry
+  }
+
+  set itemRegistry(registry: ItemRegistry | null) {
+    this._itemRegistry = registry
+  }
+
+  get itemRegistry(): ItemRegistry | null {
+    return this._itemRegistry
   }
 
   // --- Batch management ---
@@ -496,18 +506,21 @@ export class MapMutator {
     })
   }
 
-  switchDoorItem(x: number, y: number, z: number, itemIndex: number): void {
-    const registry = this._brushRegistry!
-    this.autoBatch('Switch door', () => {
+  private replaceItemId(
+    label: string, x: number, y: number, z: number, itemIndex: number,
+    resolveNewId: (itemId: number) => number | undefined,
+  ): void {
+    this.autoBatch(label, () => {
       const tile = this.mapData.tiles.get(tileKey(x, y, z))
-      if (!tile || itemIndex < 0 || itemIndex >= tile.items.length) return
+      if (!tile || tile.items.length === 0) return
+      const idx = itemIndex < 0 ? tile.items.length - 1 : itemIndex
+      if (idx >= tile.items.length) return
 
-      const item = tile.items[itemIndex]
-      const newId = switchDoor(item.id, registry)
-      if (!newId || newId === item.id) return
+      const newId = resolveNewId(tile.items[idx].id)
+      if (!newId || newId === tile.items[idx].id) return
 
       const oldItems = deepCloneItems(tile.items)
-      tile.items[itemIndex] = { ...tile.items[itemIndex], id: newId }
+      tile.items[idx] = { ...tile.items[idx], id: newId }
 
       this.recordAction({
         type: 'setTileItems', x, y, z,
@@ -516,6 +529,16 @@ export class MapMutator {
       })
       this.onTileChanged?.(x, y, z)
     })
+  }
+
+  switchDoorItem(x: number, y: number, z: number, itemIndex: number): void {
+    const registry = this._brushRegistry!
+    this.replaceItemId('Switch door', x, y, z, itemIndex, (id) => switchDoor(id, registry))
+  }
+
+  rotateItem(x: number, y: number, z: number, itemIndex: number): void {
+    if (!this._itemRegistry) return
+    this.replaceItemId('Rotate item', x, y, z, itemIndex, (id) => this._itemRegistry!.get(id)?.rotateTo)
   }
 
   // --- Carpet brush painting ---

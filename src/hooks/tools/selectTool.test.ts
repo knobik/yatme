@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { createSelectHandlers } from './selectTool'
 import { makeToolContext, makeMockRenderer, makePointerEvent } from '../../test/toolFixtures'
 import { makeMapData, makeTile, makeItem } from '../../test/fixtures'

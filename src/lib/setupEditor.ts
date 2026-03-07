@@ -2,6 +2,7 @@ import type { Application } from 'pixi.js'
 import type { AppearanceData } from './appearances'
 import type { OtbmMap } from './otbm'
 import type { BrushRegistry } from './brushes/BrushRegistry'
+import type { ItemRegistry } from './items'
 import { MapRenderer } from './MapRenderer'
 import { MapMutator } from './MapMutator'
 
@@ -18,10 +19,12 @@ export function setupEditor(
   appearances: AppearanceData,
   mapData: OtbmMap,
   brushRegistry: BrushRegistry | null,
+  itemRegistry: ItemRegistry | null,
 ): EditorInstances {
   const renderer = new MapRenderer(app, appearances, mapData)
   const mutator = new MapMutator(mapData, appearances)
   mutator.brushRegistry = brushRegistry
+  mutator.itemRegistry = itemRegistry
 
   mutator.onChunksInvalidated = (keys) => {
     renderer.invalidateChunks(keys)

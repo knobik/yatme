@@ -58,6 +58,8 @@ function App() {
   const [mapInfo, setMapInfo] = useState<{ tiles: number; towns: string[] } | null>(null)
 
   // Phase 6 state
+  // Inspector panel tile position — set via "Browse Tile" or click-to-inspect.
+  // NOT the map selection (use toolsRef.current.selectedItems for that).
   const [selectedTilePos, setSelectedTilePos] = useState<{ x: number; y: number; z: number } | null>(null)
   const [tileVersion, setTileVersion] = useState(0)
   const [itemRegistry, setItemRegistry] = useState<ItemRegistry | null>(null)
@@ -269,7 +271,7 @@ function App() {
       setTilesets(tilesets)
 
       // Build renderer + mutator
-      const { renderer, mutator } = setupEditor(app, appearances, mapData, brushRegistry)
+      const { renderer, mutator } = setupEditor(app, appearances, mapData, brushRegistry, registry)
       rendererRef.current = renderer
       mutatorRef.current = mutator
 
@@ -462,6 +464,15 @@ function App() {
         if (e.key === 'b') {
           e.preventDefault()
           borderizeCurrentSelection()
+          return
+        }
+        if (e.key === 'r' && !e.shiftKey) {
+          e.preventDefault()
+          const sel = toolsRef.current.selectedItems
+          if (sel.length > 0 && mutatorRef.current) {
+            const last = sel[sel.length - 1]
+            mutatorRef.current.rotateItem(last.x, last.y, last.z, -1)
+          }
           return
         }
         if (e.key === 'R' && e.shiftKey) {
@@ -676,6 +687,19 @@ function App() {
         : [],
     }
 
+    const rotateGroup: ContextMenuGroup = {
+      items: topItem && itemRegistry?.get(topItem.id)?.rotateTo
+        ? [{
+            label: 'Rotate Item',
+            shortcut: 'Ctrl+R',
+            onClick: () => {
+              if (!mutatorReady || !tile) return
+              mutatorReady.rotateItem(tilePos.x, tilePos.y, tilePos.z, -1)
+            },
+          }]
+        : [],
+    }
+
     // Brush selection group — scan tile items for all applicable brush types
     const brushSelectItems: ContextMenuAction[] = []
     if (topItem) {
@@ -777,7 +801,7 @@ function App() {
         : [],
     }
 
-    return [clipboardGroup, positionGroup, itemInfoGroup, brushSelectGroup, doorGroup, teleportGroup]
+    return [clipboardGroup, positionGroup, itemInfoGroup, brushSelectGroup, doorGroup, rotateGroup, teleportGroup]
   }
 
   if (error) {
