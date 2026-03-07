@@ -4,7 +4,7 @@
 
 - OTBM path is **hardcoded** to `/canary.otbm` in `src/lib/otbm.ts` (line 442), served from `tibia-versions/15.00/`
 - Sidecar file names (houses, spawns) are **parsed from OTBM header** (`OTBM_ATTR_SPAWN_FILE`, `OTBM_ATTR_HOUSE_FILE`) but never loaded
-- **No save/serialize** — editor is read-only (`serializeOtbm()` does not exist)
+- **Serialize implemented** — `serializeOtbm()` produces binary OTBM that round-trips through `parseOtbm()`
 - Editor assets (appearances, sprites, brushes, tilesets) are **not map-specific** — same regardless of mode
 
 ### Current Init Pipeline
@@ -31,14 +31,15 @@ Step weights: `[2, 15, 3, 12, 8, 3, 50, 5]` — OTBM is 50% of total work.
 |------|------|
 | `src/lib/initPipeline.ts` | Orchestrates all asset loading |
 | `src/lib/setupEditor.ts` | Creates MapRenderer + MapMutator |
-| `src/lib/otbm.ts` | OTBM binary parser (no serializer) |
+| `src/lib/otbm.ts` | OTBM binary parser + serializer |
 | `src/App.tsx` | Root component, triggers init |
 | `vite.config.ts` | Serves `tibia-versions/15.00/` as publicDir |
 
-### OTBM Parser Exports (parse only)
+### OTBM Exports
 
 - `loadOtbm(url?, onProgress?, onStatus?)` — async fetch + parse with progress
 - `parseOtbm(raw: Uint8Array)` — synchronous parse (used in tests)
+- `serializeOtbm(map: OtbmMap): Uint8Array` — serialize map to OTBM binary
 - `deepCloneItem(item)` — utility
 - Data interfaces: `OtbmMap`, `OtbmTile`, `OtbmItem`, `OtbmTown`, `OtbmWaypoint`
 
@@ -48,7 +49,8 @@ Step weights: `[2, 15, 3, 12, 8, 3, 50, 5]` — OTBM is 50% of total work.
 |-----------|-------|--------|
 | `OTBM_ATTR_SPAWN_FILE` | `map.spawnFile` | Parsed, not loaded |
 | `OTBM_ATTR_HOUSE_FILE` | `map.houseFile` | Parsed, not loaded |
-| `OTBM_ATTR_EXT_ZONE_FILE` (24) | Not implemented | See ZONES_RESEARCH.md |
+| `OTBM_ATTR_EXT_SPAWN_NPC_FILE` (23) | `map.npcFile` | Parsed, not loaded |
+| `OTBM_ATTR_EXT_ZONE_FILE` (24) | `map.zoneFile` | Parsed, not loaded |
 
 ## Target Architecture
 
@@ -118,7 +120,7 @@ flowchart TD
 
 ## Implementation Order
 
-1. **OTBM serializer** — `serializeOtbm()` (inverse of parser, doesn't exist yet)
+1. ~~**OTBM serializer**~~ — `serializeOtbm()` ✅ implemented, byte-identical round-trip verified with canary.otbm and habitats.otbm
 2. **`MapStorageProvider` interface + `ServerStorageProvider`** — load/save via HTTP
 3. **Node server** — Express/Fastify with `GET /api/map` and `POST /api/map`
 4. **Refactor `initPipeline.ts`** — split editor asset loading from map loading, consume `MapBundle`

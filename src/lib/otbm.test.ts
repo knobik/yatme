@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { deepCloneItem, parseOtbm, type OtbmItem } from './otbm'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { deepCloneItem, parseOtbm, serializeOtbm, type OtbmItem, type OtbmMap } from './otbm'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 describe('deepCloneItem', () => {
   it('clones a minimal item', () => {
@@ -365,4 +370,338 @@ describe('parseOtbm', () => {
     const raw = new Uint8Array([0, 0, 0, 0, 0x00]) // byte 4 is not 0xFE
     expect(() => parseOtbm(raw)).toThrow('Expected NODE_START at byte 4')
   })
+})
+
+// ── Serializer tests ──────────────────────────────────────────────
+
+function makeEmptyMap(overrides: Partial<OtbmMap> = {}): OtbmMap {
+  return {
+    version: 2,
+    width: 256,
+    height: 256,
+    majorItems: 0,
+    minorItems: 0,
+    description: '',
+    rawDescriptions: [],
+    spawnFile: '',
+    npcFile: '',
+    houseFile: '',
+    zoneFile: '',
+    tiles: new Map(),
+    towns: [],
+    waypoints: [],
+    ...overrides,
+  }
+}
+
+describe('serializeOtbm', () => {
+  it('round-trips a minimal empty map', () => {
+    const map = makeEmptyMap({ version: 2, width: 512, height: 1024 })
+    const result = parseOtbm(serializeOtbm(map))
+    expect(result.version).toBe(2)
+    expect(result.width).toBe(512)
+    expect(result.height).toBe(1024)
+    expect(result.tiles.size).toBe(0)
+    expect(result.towns).toEqual([])
+    expect(result.waypoints).toEqual([])
+  })
+
+  it('round-trips map description, spawnFile, houseFile', () => {
+    const map = makeEmptyMap({
+      description: 'My test map',
+      rawDescriptions: ['My test map'],
+      spawnFile: 'spawn.xml',
+      houseFile: 'house.xml',
+    })
+    const result = parseOtbm(serializeOtbm(map))
+    expect(result.description).toBe('My test map')
+    expect(result.spawnFile).toBe('spawn.xml')
+    expect(result.houseFile).toBe('house.xml')
+  })
+
+  it('round-trips a single tile with flags', () => {
+    const map = makeEmptyMap()
+    map.tiles.set('100,200,7', { x: 100, y: 200, z: 7, flags: 0x0F, items: [] })
+    const result = parseOtbm(serializeOtbm(map))
+    expect(result.tiles.size).toBe(1)
+    const tile = result.tiles.get('100,200,7')!
+    expect(tile.x).toBe(100)
+    expect(tile.y).toBe(200)
+    expect(tile.z).toBe(7)
+    expect(tile.flags).toBe(0x0F)
+  })
+
+  it('round-trips a simple item (id only)', () => {
+    const map = makeEmptyMap()
+    map.tiles.set('0,0,7', { x: 0, y: 0, z: 7, flags: 0, items: [{ id: 4526 }] })
+    const result = parseOtbm(serializeOtbm(map))
+    const tile = result.tiles.get('0,0,7')!
+    expect(tile.items).toHaveLength(1)
+    expect(tile.items[0].id).toBe(4526)
+  })
+
+  it('round-trips a complex item with all OTBM-supported attributes', () => {
+    const map = makeEmptyMap()
+    const item: OtbmItem = {
+      id: 999,
+      count: 5,
+      actionId: 1234,
+      uniqueId: 5678,
+      text: 'hello',
+      description: 'a desc',
+      teleportDestination: { x: 10, y: 20, z: 7 },
+      depotId: 42,
+      houseDoorId: 3,
+    }
+    map.tiles.set('0,0,7', { x: 0, y: 0, z: 7, flags: 0, items: [item] })
+    const result = parseOtbm(serializeOtbm(map))
+    const parsed = result.tiles.get('0,0,7')!.items[0]
+    expect(parsed.id).toBe(999)
+    expect(parsed.count).toBe(5)
+    expect(parsed.actionId).toBe(1234)
+    expect(parsed.uniqueId).toBe(5678)
+    expect(parsed.text).toBe('hello')
+    expect(parsed.description).toBe('a desc')
+    expect(parsed.teleportDestination).toEqual({ x: 10, y: 20, z: 7 })
+    expect(parsed.depotId).toBe(42)
+    expect(parsed.houseDoorId).toBe(3)
+  })
+
+  it('parses runtime attributes but does not write them to OTBM', () => {
+    // Runtime attributes (decayingState, writtenDate, writtenBy, sleeperGuid,
+    // sleepStart, duration) are from Canary's iomapserialize, not supported
+    // by BasicItem::readAttr in Canary's OTBM loader. Writing them would
+    // cause Canary to stop reading attributes mid-stream.
+    const map = makeEmptyMap()
+    const item: OtbmItem = {
+      id: 500,
+      actionId: 42,
+      decayingState: 1,
+      writtenDate: 1700000000,
+      writtenBy: 'Player Name',
+      sleeperGuid: 12345,
+      sleepStart: 1699999000,
+      duration: 60000,
+    }
+    map.tiles.set('0,0,7', { x: 0, y: 0, z: 7, flags: 0, items: [item] })
+    const result = parseOtbm(serializeOtbm(map))
+    const parsed = result.tiles.get('0,0,7')!.items[0]
+    // Supported attributes survive round-trip
+    expect(parsed.id).toBe(500)
+    expect(parsed.actionId).toBe(42)
+    // Runtime attributes are NOT written, so they don't survive round-trip
+    expect(parsed.decayingState).toBeUndefined()
+    expect(parsed.writtenDate).toBeUndefined()
+    expect(parsed.writtenBy).toBeUndefined()
+    expect(parsed.sleeperGuid).toBeUndefined()
+    expect(parsed.sleepStart).toBeUndefined()
+    expect(parsed.duration).toBeUndefined()
+  })
+
+  it('parses runtime attributes from binary without corrupting stream', () => {
+    // Verify the parser reads the correct number of bytes for each
+    // runtime attribute so subsequent data is not corrupted
+    const itemNode = encodeNode([
+      6, // OTBM_ITEM
+      ...encodeU16LE(500),
+      4, ...encodeU16LE(42), // ATTR_ACTION_ID (supported, written first)
+      17, 1, // ATTR_DECAYING_STATE = u8
+      18, ...encodeU32LE(1700000000), ...encodeU32LE(0), // ATTR_WRITTENDATE = u64
+      19, ...encodeString('Author'), // ATTR_WRITTENBY = string
+      20, ...encodeU32LE(12345), // ATTR_SLEEPERGUID = u32
+      21, ...encodeU32LE(99999), // ATTR_SLEEPSTART = u32
+      16, ...encodeU32LE(60000), // ATTR_DURATION = u32
+      5, ...encodeU16LE(9999), // ATTR_UNIQUE_ID (supported, after runtime attrs)
+    ])
+    const tileNode = encodeNode([5, 0, 0], [itemNode])
+    const tileAreaNode = encodeNode([
+      4, ...encodeU16LE(0), ...encodeU16LE(0), 7,
+    ], [tileNode])
+    const raw = buildOtbmBuffer({ mapDataChildren: [tileAreaNode] })
+    const map = parseOtbm(raw)
+    const parsed = map.tiles.get('0,0,7')!.items[0]
+    expect(parsed.actionId).toBe(42)
+    expect(parsed.decayingState).toBe(1)
+    expect(parsed.writtenDate).toBe(1700000000)
+    expect(parsed.writtenBy).toBe('Author')
+    expect(parsed.sleeperGuid).toBe(12345)
+    expect(parsed.sleepStart).toBe(99999)
+    expect(parsed.duration).toBe(60000)
+    expect(parsed.uniqueId).toBe(9999)
+  })
+
+  it('round-trips item with charges using CHARGES attribute', () => {
+    const map = makeEmptyMap()
+    map.tiles.set('0,0,7', {
+      x: 0, y: 0, z: 7, flags: 0,
+      items: [{ id: 100, charges: 500 }],
+    })
+    const result = parseOtbm(serializeOtbm(map))
+    expect(result.tiles.get('0,0,7')!.items[0].charges).toBe(500)
+  })
+
+  it('round-trips container with nested children', () => {
+    const map = makeEmptyMap()
+    const container: OtbmItem = {
+      id: 100,
+      items: [
+        { id: 50 },
+        { id: 60, count: 3 },
+      ],
+    }
+    map.tiles.set('0,0,7', { x: 0, y: 0, z: 7, flags: 0, items: [container] })
+    const result = parseOtbm(serializeOtbm(map))
+    const parsed = result.tiles.get('0,0,7')!.items[0]
+    expect(parsed.id).toBe(100)
+    expect(parsed.items).toHaveLength(2)
+    expect(parsed.items![0].id).toBe(50)
+    expect(parsed.items![1].id).toBe(60)
+    expect(parsed.items![1].count).toBe(3)
+  })
+
+  it('round-trips house tile with houseId', () => {
+    const map = makeEmptyMap()
+    map.tiles.set('3,4,7', {
+      x: 3, y: 4, z: 7, flags: 0, houseId: 12345,
+      items: [{ id: 100 }],
+    })
+    const result = parseOtbm(serializeOtbm(map))
+    const tile = result.tiles.get('3,4,7')!
+    expect(tile.houseId).toBe(12345)
+  })
+
+  it('round-trips towns', () => {
+    const map = makeEmptyMap({
+      towns: [
+        { id: 1, name: 'Thais', templeX: 500, templeY: 600, templeZ: 7 },
+        { id: 2, name: 'Carlin', templeX: 300, templeY: 400, templeZ: 7 },
+      ],
+    })
+    const result = parseOtbm(serializeOtbm(map))
+    expect(result.towns).toHaveLength(2)
+    expect(result.towns[0]).toEqual({ id: 1, name: 'Thais', templeX: 500, templeY: 600, templeZ: 7 })
+    expect(result.towns[1]).toEqual({ id: 2, name: 'Carlin', templeX: 300, templeY: 400, templeZ: 7 })
+  })
+
+  it('round-trips waypoints', () => {
+    const map = makeEmptyMap({
+      waypoints: [
+        { name: 'depot', x: 100, y: 200, z: 5 },
+        { name: 'spawn', x: 50, y: 75, z: 7 },
+      ],
+    })
+    const result = parseOtbm(serializeOtbm(map))
+    expect(result.waypoints).toHaveLength(2)
+    expect(result.waypoints[0]).toEqual({ name: 'depot', x: 100, y: 200, z: 5 })
+    expect(result.waypoints[1]).toEqual({ name: 'spawn', x: 50, y: 75, z: 7 })
+  })
+
+  it('handles escape bytes in item IDs', () => {
+    const map = makeEmptyMap()
+    // ID 253 = 0xFD, 254 = 0xFE, 255 = 0xFF — all need escaping
+    map.tiles.set('0,0,7', {
+      x: 0, y: 0, z: 7, flags: 0,
+      items: [{ id: 253 }, { id: 254 }, { id: 255 }],
+    })
+    const result = parseOtbm(serializeOtbm(map))
+    const items = result.tiles.get('0,0,7')!.items
+    expect(items).toHaveLength(3)
+    expect(items[0].id).toBe(253)
+    expect(items[1].id).toBe(254)
+    expect(items[2].id).toBe(255)
+  })
+
+  it('handles escape bytes in coordinates', () => {
+    // Position where x & 0xFF = 0xFD (253)
+    const map = makeEmptyMap()
+    map.tiles.set('253,255,7', {
+      x: 253, y: 255, z: 7, flags: 0, items: [{ id: 100 }],
+    })
+    const result = parseOtbm(serializeOtbm(map))
+    const tile = result.tiles.get('253,255,7')!
+    expect(tile.x).toBe(253)
+    expect(tile.y).toBe(255)
+  })
+
+  it('preserves item order through round-trip', () => {
+    const map = makeEmptyMap()
+    map.tiles.set('0,0,7', {
+      x: 0, y: 0, z: 7, flags: 0,
+      items: [
+        { id: 100 },         // simple inline
+        { id: 200, count: 3 }, // full node
+        { id: 300 },         // simple inline
+        { id: 400, actionId: 10 }, // full node
+      ],
+    })
+    const result = parseOtbm(serializeOtbm(map))
+    const items = result.tiles.get('0,0,7')!.items
+    expect(items).toHaveLength(4)
+    expect(items[0].id).toBe(100)
+    expect(items[1].id).toBe(200)
+    expect(items[2].id).toBe(300)
+    expect(items[3].id).toBe(400)
+  })
+
+  it('produces byte-identical output for habitats.otbm', () => {
+    const filePath = resolve(__dirname, '../../vendor/canary/data-otservbr-global/world/quest/ferumbras_ascendant/habitats.otbm')
+    const original = new Uint8Array(readFileSync(filePath))
+    const map = parseOtbm(original)
+    const serialized = serializeOtbm(map)
+
+    if (serialized.length !== original.length || !serialized.every((b, i) => b === original[i])) {
+      // Write to /tmp for manual inspection on failure
+      writeFileSync('/tmp/habitats-original.otbm', original)
+      writeFileSync('/tmp/habitats-serialized.otbm', serialized)
+
+      // Find and report first difference
+      const minLen = Math.min(original.length, serialized.length)
+      for (let i = 0; i < minLen; i++) {
+        if (original[i] !== serialized[i]) {
+          const ctx = 16
+          const start = Math.max(0, i - ctx)
+          const origSlice = Array.from(original.slice(start, i + ctx)).map(b => b.toString(16).padStart(2, '0')).join(' ')
+          const serSlice = Array.from(serialized.slice(start, i + ctx)).map(b => b.toString(16).padStart(2, '0')).join(' ')
+          expect.unreachable(
+            `First byte diff at offset ${i} (0x${i.toString(16)})\n` +
+            `  Original (${original.length} bytes):   ${origSlice}\n` +
+            `  Serialized (${serialized.length} bytes): ${serSlice}`
+          )
+        }
+      }
+      expect.unreachable(
+        `Size mismatch: original ${original.length} bytes, serialized ${serialized.length} bytes`
+      )
+    }
+  })
+
+  it('produces byte-identical output for canary.otbm', () => {
+    const filePath = resolve(__dirname, '../../vendor/canary/data-canary/world/canary.otbm')
+    const original = new Uint8Array(readFileSync(filePath))
+    const map = parseOtbm(original)
+    const serialized = serializeOtbm(map)
+
+    if (serialized.length !== original.length || !serialized.every((b, i) => b === original[i])) {
+      writeFileSync('/tmp/canary-original.otbm', original)
+      writeFileSync('/tmp/canary-serialized.otbm', serialized)
+
+      const minLen = Math.min(original.length, serialized.length)
+      for (let i = 0; i < minLen; i++) {
+        if (original[i] !== serialized[i]) {
+          const ctx = 16
+          const start = Math.max(0, i - ctx)
+          const origSlice = Array.from(original.slice(start, i + ctx)).map(b => b.toString(16).padStart(2, '0')).join(' ')
+          const serSlice = Array.from(serialized.slice(start, i + ctx)).map(b => b.toString(16).padStart(2, '0')).join(' ')
+          expect.unreachable(
+            `First byte diff at offset ${i} (0x${i.toString(16)})\n` +
+            `  Original (${original.length} bytes):   ${origSlice}\n` +
+            `  Serialized (${serialized.length} bytes): ${serSlice}`
+          )
+        }
+      }
+      expect.unreachable(
+        `Size mismatch: original ${original.length} bytes, serialized ${serialized.length} bytes`
+      )
+    }
+  }, 60000)
 })
