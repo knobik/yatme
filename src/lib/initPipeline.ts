@@ -1,7 +1,8 @@
 import { Application } from 'pixi.js'
 import { loadAppearances, type AppearanceData } from './appearances'
 import { loadSpriteCatalog } from './sprites'
-import { loadOtbm, type OtbmMap } from './otbm'
+import { parseOtbm, type OtbmMap } from './otbm'
+import type { MapStorageProvider } from './storage'
 import { loadItems, type ItemRegistry } from './items'
 import { loadBrushData } from './brushes/BrushLoader'
 import { parseWallBrushesXml } from './brushes/WallLoader'
@@ -25,6 +26,7 @@ export interface InitResult {
   registry: ItemRegistry
   brushRegistry: BrushRegistry | null
   tilesets: ResolvedTileset[]
+  mapFilename: string
 }
 
 /**
@@ -35,6 +37,7 @@ export async function loadAssets(
   container: HTMLElement,
   progress: InitProgress,
   signal: { destroyed: boolean },
+  provider: MapStorageProvider,
 ): Promise<InitResult | null> {
   // Weights: pixi, catalog, appearances, items, brushes, tilesets, map data, editor setup
   const stepWeights = [2, 15, 3, 12, 8, 3, 50, 5]
@@ -153,7 +156,11 @@ export async function loadAssets(
 
   // Step 7: Map data (heaviest step)
   progress.setStatus('Loading map data...')
-  const mapData = await loadOtbm(undefined, stepProgress, progress.setStatus)
+  const bundle = await provider.loadMap((f) => stepProgress(f * 0.5))
+  stepProgress(0.5)
+  progress.setStatus('Processing map data...')
+  await new Promise(r => setTimeout(r, 0))
+  const mapData = parseOtbm(bundle.otbm)
   if (signal.destroyed) return null
   nextStep()
 
@@ -162,5 +169,5 @@ export async function loadAssets(
   // Yield so the UI can paint the status update before setupEditor blocks
   await new Promise(r => setTimeout(r, 0))
 
-  return { app, appearances, mapData, registry, brushRegistry, tilesets }
+  return { app, appearances, mapData, registry, brushRegistry, tilesets, mapFilename: bundle.filename }
 }

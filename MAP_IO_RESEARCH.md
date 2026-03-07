@@ -37,8 +37,7 @@ Step weights: `[2, 15, 3, 12, 8, 3, 50, 5]` — OTBM is 50% of total work.
 
 ### OTBM Exports
 
-- `loadOtbm(url?, onProgress?, onStatus?)` — async fetch + parse with progress
-- `parseOtbm(raw: Uint8Array)` — synchronous parse (used in tests)
+- `parseOtbm(raw: Uint8Array)` — synchronous parse
 - `serializeOtbm(map: OtbmMap): Uint8Array` — serialize map to OTBM binary
 - `deepCloneItem(item)` — utility
 - Data interfaces: `OtbmMap`, `OtbmTile`, `OtbmItem`, `OtbmTown`, `OtbmWaypoint`
@@ -64,13 +63,14 @@ Even though we start with server-only, defining an interface keeps the door open
 classDiagram
     class MapStorageProvider {
         <<interface>>
-        +loadMap() MapBundle
+        +loadMap(onProgress?) MapBundle
         +saveMap(MapBundle) void
+        +canSave: boolean
     }
 
     class MapBundle {
         +otbm: Uint8Array
-        +sidecars: Map~string, string~
+        +sidecars: Map~string, Uint8Array~
         +filename: string
     }
 

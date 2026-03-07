@@ -53,6 +53,8 @@ interface ToolbarProps {
   onBrushShapeChange: (shape: BrushShape) => void
   activeDoorType: number
   onDoorTypeChange: (type: number) => void
+  onSave?: () => void
+  canSave?: boolean
 }
 
 const BRUSH_SIZES = [
@@ -121,6 +123,8 @@ export function Toolbar({
   onDoorTypeChange,
   showLights,
   onToggleLights,
+  onSave,
+  canSave,
 }: ToolbarProps) {
   const previewId = selectedBrush ? getSelectionPreviewId(selectedBrush, brushRegistry) : 0
   const brushLabel = selectedBrush
@@ -130,6 +134,12 @@ export function Toolbar({
     : null
 
   const menuSections: MenuSection[] = [
+    {
+      title: 'File',
+      items: [
+        { label: 'Save Map', shortcut: 'Ctrl+S', disabled: !canSave, onClick: () => onSave?.() },
+      ],
+    },
     {
       title: 'Edit',
       items: [

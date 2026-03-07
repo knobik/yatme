@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { Application } from 'pixi.js'
 import type { AppearanceData } from './lib/appearances'
 import type { OtbmMap, OtbmTile } from './lib/otbm'
-import { deepCloneItem } from './lib/otbm'
+import { deepCloneItem, serializeOtbm } from './lib/otbm'
+import { StaticFileProvider, type MapStorageProvider } from './lib/storage'
 import { MapRenderer, type FloorViewMode } from './lib/MapRenderer'
 import { MapMutator } from './lib/MapMutator'
 import type { ItemRegistry } from './lib/items'
@@ -50,6 +51,7 @@ function App() {
   const rendererRef = useRef<MapRenderer | null>(null)
   const mutatorRef = useRef<MapMutator | null>(null)
   const appRef = useRef<Application | null>(null)
+  const storageRef = useRef<MapStorageProvider | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingStatus, setLoadingStatus] = useState('Initializing...')
   const [loadingProgress, setLoadingProgress] = useState(0)
@@ -79,6 +81,7 @@ function App() {
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(() => loadSettings())
   const [brushRegistryState, setBrushRegistryState] = useState<BrushRegistry | null>(null)
   const [tilesets, setTilesets] = useState<ResolvedTileset[]>([])
+  const [mapFilename, setMapFilename] = useState('map.otbm')
 
   const [contextMenu, setContextMenu] = useState<{
     x: number; y: number
@@ -235,6 +238,24 @@ function App() {
     setShowLights(next.showLights)
   }, [])
 
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = useCallback(async () => {
+    const md = mapData
+    const provider = storageRef.current
+    if (!md || !provider || !provider.canSave || saving) return
+    setSaving(true)
+    try {
+      const otbm = serializeOtbm(md)
+      await provider.saveMap({ otbm, sidecars: new Map(), filename: mapFilename })
+    } catch (e) {
+      console.error('[Save] Failed to save map:', e)
+      alert(`Failed to save map: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setSaving(false)
+    }
+  }, [mapData, mapFilename, saving])
+
   const handleGoToPosition = useCallback((x: number, y: number, z: number) => {
     if (!rendererRef.current) return
     rendererRef.current.setFloor(z)
@@ -250,13 +271,17 @@ function App() {
     let appInstance: Application | null = null
 
     async function init() {
+      const provider = new StaticFileProvider()
+      storageRef.current = provider
+
       const result = await loadAssets(container!, {
         setStatus: setLoadingStatus,
         setProgress: setLoadingProgress,
-      }, signal)
+      }, signal, provider)
       if (!result) return
 
-      const { app, appearances, mapData, registry, brushRegistry, tilesets } = result
+      const { app, appearances, mapData, registry, brushRegistry, tilesets, mapFilename: filename } = result
+      setMapFilename(filename)
       appInstance = app
       appRef.current = app
 
@@ -419,6 +444,11 @@ function App() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
 
       if (e.ctrlKey || e.metaKey) {
+        if (e.key === 's') {
+          e.preventDefault()
+          handleSave()
+          return
+        }
         if (e.key === 'z' && !e.shiftKey) {
           e.preventDefault()
           toolsRef.current.undo()
@@ -569,7 +599,7 @@ function App() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [handleFloorChange, showPalette, selectedTilePos, contextMenu, showGoToDialog, showFindItem, showReplaceItems])
+  }, [handleFloorChange, handleSave, showPalette, selectedTilePos, contextMenu, showGoToDialog, showFindItem, showReplaceItems])
 
   function buildContextMenuGroups(): ContextMenuGroup[] {
     if (!contextMenu) return []
@@ -875,6 +905,8 @@ function App() {
           onBrushShapeChange={tools.setBrushShape}
           activeDoorType={tools.activeDoorType}
           onDoorTypeChange={tools.setActiveDoorType}
+          onSave={handleSave}
+          canSave={!!storageRef.current?.canSave}
         />
       )}
 
