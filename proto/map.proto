@@ -1,0 +1,231 @@
+// Tibia Map Format — Protobuf definition
+// Structured, versioned schema for Tibia map data. Convertible to/from OTBM
+// via the conversion script (scripts/otbm-proto-convert.ts).
+
+syntax = "proto3";
+
+package tibia.map;
+
+// ============================================================================
+// Top-level Map
+// ============================================================================
+
+message Map {
+  // Format version of this proto schema.
+  // Increment when adding breaking changes to the proto itself.
+  uint32 format_version = 1;
+
+  // Map dimensions in tiles.
+  uint32 width = 2;
+  uint32 height = 3;
+
+  // Map description lines (multiple entries supported).
+  repeated string descriptions = 4;
+
+  // All tiles in the map.
+  repeated Tile tiles = 5;
+
+  // Map entities
+  repeated Town towns = 6;
+  repeated Waypoint waypoints = 7;
+
+  // Optionally embed house definitions directly for self-contained maps.
+  repeated House houses = 8;
+
+  // Optionally embed spawn definitions for self-contained maps.
+  repeated SpawnArea monster_spawns = 9;
+  repeated SpawnArea npc_spawns = 10;
+
+  // Zone name registry. Maps zone IDs (used in Tile.zone_ids) to names.
+  repeated Zone zones = 11;
+}
+
+// ============================================================================
+// Position
+// ============================================================================
+
+message Position {
+  uint32 x = 1;
+  uint32 y = 2;
+  uint32 z = 3;  // 0=sky, 7=ground, 8-15=underground
+}
+
+// ============================================================================
+// Tile
+// ============================================================================
+
+message Tile {
+  // Absolute position
+  Position position = 1;
+
+  // Tile zone flags
+  bool protection_zone = 2;
+  bool no_pvp = 3;
+  bool no_logout = 4;
+  bool pvp_zone = 5;
+  bool refresh = 6;
+
+  // If non-zero, this tile belongs to a house.
+  uint32 house_id = 7;
+
+  // Items on this tile, in render order (forward/RME convention:
+  // first = drawn first/behind, last = drawn last/on top).
+  repeated Item items = 8;
+
+  // Zone membership. References Zone.id values.
+  repeated uint32 zone_ids = 9 [packed = true];
+}
+
+// ============================================================================
+// Item
+// ============================================================================
+
+message Item {
+  // Server item ID (= client ID in v15.00+)
+  uint32 id = 1;
+
+  // --- Stack / charge properties ---
+
+  // Stack count or fluid type.
+  optional uint32 count = 2;
+
+  // Charges remaining.
+  optional uint32 charges = 3;
+
+  // --- Scripting IDs ---
+
+  // Action ID — triggers server-side scripts.
+  optional uint32 action_id = 4;
+
+  // Unique ID — identifies specific item instances for quests.
+  optional uint32 unique_id = 5;
+
+  // --- Text content ---
+
+  // Readable text content: books, signs, letters.
+  optional string text = 6;
+
+  // Item description override.
+  optional string description = 7;
+
+  // --- Teleport ---
+
+  // Teleport destination.
+  optional Position teleport_destination = 8;
+
+  // --- Special item properties ---
+
+  // Depot locker ID.
+  optional uint32 depot_id = 9;
+
+  // House door ID within a house.
+  optional uint32 house_door_id = 10;
+
+  // --- Container contents ---
+
+  // Child items (for containers). Recursive structure.
+  repeated Item items = 11;
+
+  // --- Server runtime attributes ---
+  // These come from Canary server state saves. They represent transient
+  // game state and should NOT normally be present in editor-created maps.
+
+  // Item decay duration in ms.
+  optional uint32 duration = 20;
+
+  // Decay state: 0=fresh, 1=decaying.
+  optional uint32 decaying_state = 21;
+
+  // Written date timestamp.
+  optional uint64 written_date = 22;
+
+  // Author name.
+  optional string written_by = 23;
+
+  // Bed sleeper GUID.
+  optional uint32 sleeper_guid = 24;
+
+  // Bed sleep start timestamp.
+  optional uint32 sleep_start = 25;
+
+  // --- Extended attribute map ---
+  // Catch-all for custom attributes not covered by the fields above.
+  map<string, AttributeValue> extended_attributes = 30;
+}
+
+// Typed value for extended attributes.
+message AttributeValue {
+  oneof value {
+    string string_value = 1;
+    int32 int_value = 2;
+    float float_value = 3;
+    bool bool_value = 4;
+    double double_value = 5;
+  }
+}
+
+// ============================================================================
+// Town
+// ============================================================================
+
+message Town {
+  uint32 id = 1;
+  string name = 2;
+  Position temple_position = 3;
+}
+
+// ============================================================================
+// Waypoint
+// ============================================================================
+
+message Waypoint {
+  string name = 1;
+  Position position = 2;
+}
+
+// ============================================================================
+// House — embedded house definitions (optional, normally in external XML)
+// ============================================================================
+
+message House {
+  uint32 id = 1;
+  string name = 2;
+  Position entrance = 3;
+  uint32 rent = 4;
+  uint32 town_id = 5;
+  bool guildhall = 6;
+  uint32 beds = 7;
+  uint32 size = 8;  // tile count
+}
+
+// ============================================================================
+// Spawn — embedded spawn definitions (optional, normally in external XML)
+// ============================================================================
+
+message SpawnArea {
+  Position center = 1;
+  uint32 radius = 2;
+  repeated Spawn spawns = 3;
+}
+
+message Spawn {
+  string name = 1;
+
+  // Offset from spawn area center
+  int32 offset_x = 2;
+  int32 offset_y = 3;
+  int32 offset_z = 4;
+
+  uint32 spawn_time = 5;    // seconds
+  uint32 direction = 6;     // 0=N, 1=E, 2=S, 3=W
+  uint32 weight = 7;        // spawn weight/chance (for random selection)
+}
+
+// ============================================================================
+// Zone — zone name registry
+// ============================================================================
+
+message Zone {
+  uint32 id = 1;
+  string name = 2;
+}

@@ -811,11 +811,10 @@ function serializeTile(writer: BinaryWriter, tile: OtbmTile): void {
     writer.writeU32(tile.flags)
   }
 
-  // Write inline items (ATTR_ITEM) — preserves original format.
-  // If inlineItemCount is set, use it; otherwise default to RME behavior
-  // (inline first item if it has no attributes).
-  const inlineCount = tile.inlineItemCount ??
-    (tile.items.length > 0 && !itemHasSerializableAttributes(tile.items[0]) ? 1 : 0)
+  // Write leading attribute-less items as inline OTBM_ATTR_ITEM.
+  // If inlineItemCount is set (from parsing), use it exactly.
+  // Otherwise, compute: inline consecutive leading items that have no attributes.
+  const inlineCount = tile.inlineItemCount ?? computeInlineCount(tile.items)
   for (let i = 0; i < inlineCount && i < tile.items.length; i++) {
     writer.writeU8(OTBM_ATTR_ITEM)
     writer.writeU16(tile.items[i].id)
@@ -836,8 +835,16 @@ function serializeTile(writer: BinaryWriter, tile: OtbmTile): void {
   writer.endNode()
 }
 
-function itemHasSerializableAttributes(item: OtbmItem): boolean {
-  return (
+
+/**
+ * Determine if the first item can be inlined as OTBM_ATTR_ITEM.
+ * RME convention: at most 1 leading attribute-less item gets inlined.
+ * Returns 0 or 1.
+ */
+function computeInlineCount(items: OtbmItem[]): number {
+  if (items.length === 0) return 0
+  const item = items[0]
+  if (
     item.count != null ||
     item.charges != null ||
     item.actionId != null ||
@@ -848,30 +855,47 @@ function itemHasSerializableAttributes(item: OtbmItem): boolean {
     item.depotId != null ||
     item.houseDoorId != null ||
     (item.items != null && item.items.length > 0)
-  )
-}
-
-interface TileAreaGroup {
-  baseX: number
-  baseY: number
-  baseZ: number
-  tiles: OtbmTile[]
-}
-
-function groupTilesIntoAreas(tiles: Map<string, OtbmTile>): Map<string, TileAreaGroup> {
-  const areas = new Map<string, TileAreaGroup>()
-  for (const tile of tiles.values()) {
-    const baseX = Math.floor(tile.x / 256) * 256
-    const baseY = Math.floor(tile.y / 256) * 256
-    const key = `${baseX},${baseY},${tile.z}`
-    let area = areas.get(key)
-    if (!area) {
-      area = { baseX, baseY, baseZ: tile.z, tiles: [] }
-      areas.set(key, area)
-    }
-    area.tiles.push(tile)
+  ) {
+    return 0
   }
-  return areas
+  return 1
+}
+
+/**
+ * Stream tiles into tile area nodes, starting a new area whenever the
+ * 256x256 area key changes. This mirrors RME's serialization behaviour:
+ * it writes a new OTBM_TILE_AREA each time it crosses an area boundary
+ * while iterating tiles, rather than pre-grouping all tiles into one
+ * node per unique area key. Preserving this pattern is essential for
+ * byte-identical round-trips on files produced by RME.
+ */
+function writeTileAreas(writer: BinaryWriter, tiles: Map<string, OtbmTile>): void {
+  let curBaseX = -1
+  let curBaseY = -1
+  let curBaseZ = -1
+  let areaOpen = false
+
+  for (const tile of tiles.values()) {
+    const baseX = tile.x & 0xFF00
+    const baseY = tile.y & 0xFF00
+    const baseZ = tile.z
+
+    if (baseX !== curBaseX || baseY !== curBaseY || baseZ !== curBaseZ) {
+      if (areaOpen) writer.endNode()
+      writer.startNode(OTBM_TILE_AREA)
+      writer.writeU16(baseX)
+      writer.writeU16(baseY)
+      writer.writeU8(baseZ)
+      curBaseX = baseX
+      curBaseY = baseY
+      curBaseZ = baseZ
+      areaOpen = true
+    }
+
+    serializeTile(writer, tile)
+  }
+
+  if (areaOpen) writer.endNode()
 }
 
 export function serializeOtbm(map: OtbmMap): Uint8Array {
@@ -931,19 +955,7 @@ export function serializeOtbm(map: OtbmMap): Uint8Array {
       writer.endNode()
     }
   } else {
-    const areas = groupTilesIntoAreas(map.tiles)
-    for (const area of areas.values()) {
-      writer.startNode(OTBM_TILE_AREA)
-      writer.writeU16(area.baseX)
-      writer.writeU16(area.baseY)
-      writer.writeU8(area.baseZ)
-
-      for (const tile of area.tiles) {
-        serializeTile(writer, tile)
-      }
-
-      writer.endNode()
-    }
+    writeTileAreas(writer, map.tiles)
   }
 
   // Towns

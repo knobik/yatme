@@ -11,7 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "proto": "docker run --rm -v $(pwd):/defs namely/protoc-all -f appearances.proto -l typescript -o src/proto --ts_opt enumsAsLiterals=true"
+    "proto": "docker run --rm -v $(pwd):/defs namely/protoc-all -f appearances.proto -l typescript -o src/proto --ts_opt enumsAsLiterals=true",
+    "otbm:compare-build": "g++ -std=c++20 -O2 -o tools/otbm-compare tools/otbm-compare.cpp",
+    "otbm:verify": "npx tsx scripts/otbm-proto-convert.ts otbm2proto vendor/canary/data-canary/world/canary.otbm /tmp/canary.pb && npx tsx scripts/otbm-proto-convert.ts proto2otbm /tmp/canary.pb /tmp/canary-roundtrip.otbm && tools/otbm-compare vendor/canary/data-canary/world/canary.otbm /tmp/canary-roundtrip.otbm"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
