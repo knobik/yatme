@@ -48,7 +48,13 @@ export class MapRenderer implements InputHost {
   onTilePointerUp?: (pos: { x: number; y: number; z: number }, event: PointerEvent) => void
   onTileContextMenu?: (pos: { x: number; y: number; z: number }, tile: OtbmTile | null, screenX: number, screenY: number) => void
   onItemDrop?: (pos: { x: number; y: number; z: number }, itemId: number) => void
+  onInspectorItemDrop?: (pos: { x: number; y: number; z: number }, itemId: number, source: { x: number; y: number; z: number; index: number }) => void
+  onDragHover?: (pos: { x: number; y: number; z: number }) => void
+  onDragLeave?: () => void
   onTileHover?: (pos: { x: number; y: number; z: number }) => void
+
+  /** Set by drag sources (Inspector/Palette) so dragover can show a ghost preview. */
+  dragPreviewItemId: number | null = null
 
   constructor(app: Application, appearances: AppearanceData, mapData: OtbmMap) {
     this.app = app

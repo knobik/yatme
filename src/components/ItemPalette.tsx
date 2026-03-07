@@ -5,6 +5,7 @@ import type { AppearanceData } from '../lib/appearances'
 import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
 import { getItemDisplayName } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
+import { MIME_TIBIA_ITEM, setCanvasDragImage } from '../lib/dragUtils'
 import { itemCategory } from '../proto/appearances'
 import { X, PencilSimple } from '@phosphor-icons/react'
 
@@ -226,19 +227,10 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
                 onClick={() => onItemSelect?.(item.id)}
                 draggable
                 onDragStart={(e) => {
-                  e.dataTransfer.setData('application/x-tibia-item', String(item.id))
+                  e.dataTransfer.setData(MIME_TIBIA_ITEM, String(item.id))
                   e.dataTransfer.effectAllowed = 'copy'
                   const canvas = e.currentTarget.querySelector('canvas')
-                  if (canvas) {
-                    const ghost = canvas.cloneNode(true) as HTMLCanvasElement
-                    const ctx = ghost.getContext('2d')
-                    if (ctx) ctx.drawImage(canvas, 0, 0)
-                    ghost.style.position = 'fixed'
-                    ghost.style.left = '-9999px'
-                    document.body.appendChild(ghost)
-                    e.dataTransfer.setDragImage(ghost, 18, 18)
-                    requestAnimationFrame(() => document.body.removeChild(ghost))
-                  }
+                  if (canvas) setCanvasDragImage(e.dataTransfer, canvas, 18, 18)
                 }}
                 title={`${item.name} (ID: ${item.id})`}
               >

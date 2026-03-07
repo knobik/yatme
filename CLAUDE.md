@@ -64,6 +64,9 @@ Editor tools: `selectTool`, `drawTool`, `eraseTool`, `fillTool`, `doorTool`. Eac
 - `vendor/canary` — Server-side item handling, map data
 
 ## Testing Notes
+- Always write tests for new features and changes
+- Write tests that test behaviors, not implementation details
+- Use AAA (Arrange, Act, Assert) pattern for writing tests
 - `src/proto/appearances.ts` is generated from a proto file — do not write tests for it
 - `src/lib/appearances.ts` is thin glue (fetch + decode + build maps) — does not need unit tests
 

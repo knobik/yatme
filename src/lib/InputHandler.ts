@@ -1,5 +1,6 @@
 import type { Camera } from './Camera'
 import type { OtbmMap, OtbmTile } from './otbm'
+import { MIME_TIBIA_ITEM, MIME_TIBIA_INSPECTOR } from './dragUtils'
 
 type TilePos = { x: number; y: number; z: number }
 
@@ -19,6 +20,9 @@ export interface InputHost {
   onTileDoubleClick?: (pos: TilePos, event: MouseEvent) => void
   onTileContextMenu?: (pos: TilePos, tile: OtbmTile | null, screenX: number, screenY: number) => void
   onItemDrop?: (pos: TilePos, itemId: number) => void
+  onInspectorItemDrop?: (pos: TilePos, itemId: number, source: { x: number; y: number; z: number; index: number }) => void
+  onDragHover?: (pos: TilePos) => void
+  onDragLeave?: () => void
   onTileHover?: (pos: TilePos) => void
 }
 
@@ -174,20 +178,43 @@ export function setupMapInput(
   }
 
   function onDragOver(e: DragEvent) {
-    if (e.dataTransfer?.types.includes('application/x-tibia-item')) {
+    if (e.dataTransfer?.types.includes(MIME_TIBIA_ITEM)) {
       e.preventDefault()
-      e.dataTransfer.dropEffect = 'copy'
+      e.dataTransfer.dropEffect = e.dataTransfer.types.includes(MIME_TIBIA_INSPECTOR) ? 'move' : 'copy'
+      if (host.onDragHover) {
+        const rect = canvas.getBoundingClientRect()
+        const pos = camera.getTileAt(e.clientX - rect.left, e.clientY - rect.top)
+        host.onDragHover(pos)
+      }
     }
+  }
+
+  function onDragLeave(e: DragEvent) {
+    // Only fire when leaving the canvas itself, not entering a child element
+    if (e.relatedTarget && canvas.contains(e.relatedTarget as Node)) return
+    host.onDragLeave?.()
   }
 
   function onDrop(e: DragEvent) {
     e.preventDefault()
-    const itemIdStr = e.dataTransfer?.getData('application/x-tibia-item')
+    host.onDragLeave?.()
+
+    const itemIdStr = e.dataTransfer?.getData(MIME_TIBIA_ITEM)
     if (!itemIdStr) return
     const itemId = parseInt(itemIdStr, 10)
     if (isNaN(itemId)) return
     const rect = canvas.getBoundingClientRect()
     const pos = camera.getTileAt(e.clientX - rect.left, e.clientY - rect.top)
+
+    const inspectorData = e.dataTransfer?.getData(MIME_TIBIA_INSPECTOR)
+    if (inspectorData && host.onInspectorItemDrop) {
+      try {
+        const source = JSON.parse(inspectorData)
+        host.onInspectorItemDrop(pos, itemId, source)
+      } catch { /* ignore malformed data */ }
+      return
+    }
+
     host.onItemDrop?.(pos, itemId)
   }
 
@@ -198,6 +225,7 @@ export function setupMapInput(
   canvas.addEventListener('dblclick', onDblClick)
   canvas.addEventListener('wheel', onWheel, { passive: false })
   canvas.addEventListener('dragover', onDragOver)
+  canvas.addEventListener('dragleave', onDragLeave)
   canvas.addEventListener('drop', onDrop)
 
   return () => {
@@ -208,6 +236,7 @@ export function setupMapInput(
     canvas.removeEventListener('dblclick', onDblClick)
     canvas.removeEventListener('wheel', onWheel)
     canvas.removeEventListener('dragover', onDragOver)
+    canvas.removeEventListener('dragleave', onDragLeave)
     canvas.removeEventListener('drop', onDrop)
   }
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { setupMapInput, type InputHost } from './InputHandler'
 import { makeMapData, makeTile, makeItem } from '../test/fixtures'
+import { MIME_TIBIA_ITEM, MIME_TIBIA_INSPECTOR } from './dragUtils'
 
 function makeMockCanvas() {
   const listeners = new Map<string, Function[]>()
@@ -222,7 +223,7 @@ describe('setupMapInput', () => {
         clientX: 100,
         clientY: 100,
         dataTransfer: {
-          getData: (type: string) => type === 'application/x-tibia-item' ? '42' : '',
+          getData: (type: string) => type === MIME_TIBIA_ITEM ? '42' : '',
         },
       })
 
@@ -230,6 +231,157 @@ describe('setupMapInput', () => {
         expect.objectContaining({ x: 3, y: 3, z: 7 }),
         42,
       )
+    })
+
+    it('fires onInspectorItemDrop when inspector MIME type is present', () => {
+      const canvas = makeMockCanvas()
+      const onInspectorItemDrop = vi.fn()
+      const onItemDrop = vi.fn()
+      const { host } = makeMockHost()
+      host.onInspectorItemDrop = onInspectorItemDrop
+      host.onItemDrop = onItemDrop
+
+      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      const source = { x: 10, y: 20, z: 7, index: 2 }
+      canvas.fire('drop', {
+        clientX: 100,
+        clientY: 100,
+        dataTransfer: {
+          getData: (type: string) => {
+            if (type === MIME_TIBIA_ITEM) return '42'
+            if (type === MIME_TIBIA_INSPECTOR) return JSON.stringify(source)
+            return ''
+          },
+        },
+      })
+
+      expect(onInspectorItemDrop).toHaveBeenCalledWith(
+        expect.objectContaining({ x: 3, y: 3, z: 7 }),
+        42,
+        source,
+      )
+      expect(onItemDrop).not.toHaveBeenCalled()
+    })
+
+    it('falls back to onItemDrop when inspector data is absent', () => {
+      const canvas = makeMockCanvas()
+      const onInspectorItemDrop = vi.fn()
+      const onItemDrop = vi.fn()
+      const { host } = makeMockHost()
+      host.onInspectorItemDrop = onInspectorItemDrop
+      host.onItemDrop = onItemDrop
+
+      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      canvas.fire('drop', {
+        clientX: 100,
+        clientY: 100,
+        dataTransfer: {
+          getData: (type: string) => type === MIME_TIBIA_ITEM ? '42' : '',
+        },
+      })
+
+      expect(onItemDrop).toHaveBeenCalledWith(
+        expect.objectContaining({ x: 3, y: 3, z: 7 }),
+        42,
+      )
+      expect(onInspectorItemDrop).not.toHaveBeenCalled()
+    })
+
+    it('sets dropEffect to move for inspector drags', () => {
+      const canvas = makeMockCanvas()
+      const { host } = makeMockHost()
+
+      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      const evt = canvas.fire('dragover', {
+        clientX: 100,
+        clientY: 100,
+        dataTransfer: {
+          types: [MIME_TIBIA_ITEM, MIME_TIBIA_INSPECTOR],
+          dropEffect: 'none',
+        },
+      })
+
+      expect((evt as any).dataTransfer.dropEffect).toBe('move')
+    })
+
+    it('sets dropEffect to copy for palette drags', () => {
+      const canvas = makeMockCanvas()
+      const { host } = makeMockHost()
+
+      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      const evt = canvas.fire('dragover', {
+        clientX: 100,
+        clientY: 100,
+        dataTransfer: {
+          types: [MIME_TIBIA_ITEM],
+          dropEffect: 'none',
+        },
+      })
+
+      expect((evt as any).dataTransfer.dropEffect).toBe('copy')
+    })
+
+    it('fires onDragHover with tile position during dragover', () => {
+      // Arrange
+      const canvas = makeMockCanvas()
+      const onDragHover = vi.fn()
+      const { host } = makeMockHost()
+      host.onDragHover = onDragHover
+
+      // Act
+      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      canvas.fire('dragover', {
+        clientX: 64,
+        clientY: 96,
+        dataTransfer: {
+          types: [MIME_TIBIA_ITEM],
+          dropEffect: 'none',
+        },
+      })
+
+      // Assert
+      expect(onDragHover).toHaveBeenCalledWith(
+        expect.objectContaining({ x: 2, y: 3, z: 7 }),
+      )
+    })
+
+    it('fires onDragLeave when drag leaves the canvas', () => {
+      // Arrange
+      const canvas = makeMockCanvas()
+      const onDragLeave = vi.fn()
+      const { host } = makeMockHost()
+      host.onDragLeave = onDragLeave
+
+      // Act
+      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      canvas.fire('dragleave', { relatedTarget: null })
+
+      // Assert
+      expect(onDragLeave).toHaveBeenCalled()
+    })
+
+    it('clears ghost preview on drop by firing onDragLeave', () => {
+      // Arrange
+      const canvas = makeMockCanvas()
+      const onDragLeave = vi.fn()
+      const onItemDrop = vi.fn()
+      const { host } = makeMockHost()
+      host.onDragLeave = onDragLeave
+      host.onItemDrop = onItemDrop
+
+      // Act
+      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      canvas.fire('drop', {
+        clientX: 100,
+        clientY: 100,
+        dataTransfer: {
+          getData: (type: string) => type === MIME_TIBIA_ITEM ? '42' : '',
+        },
+      })
+
+      // Assert
+      expect(onDragLeave).toHaveBeenCalled()
+      expect(onItemDrop).toHaveBeenCalled()
     })
   })
 })

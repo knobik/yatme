@@ -6,6 +6,7 @@ import type { BrushSelection } from '../hooks/tools/types'
 import { getItemDisplayName } from '../lib/items'
 import type { ItemRegistry } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
+import { MIME_TIBIA_ITEM, setCanvasDragImage } from '../lib/dragUtils'
 import { X, CaretDown, PencilSimple } from '@phosphor-icons/react'
 
 interface BrushPaletteProps {
@@ -344,19 +345,10 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
                   draggable
                   onDragStart={(e) => {
                     const itemId = isBrush ? entry.lookId : entry.itemId
-                    e.dataTransfer.setData('application/x-tibia-item', String(itemId))
+                    e.dataTransfer.setData(MIME_TIBIA_ITEM, String(itemId))
                     e.dataTransfer.effectAllowed = 'copy'
                     const canvas = e.currentTarget.querySelector('canvas')
-                    if (canvas) {
-                      const ghost = canvas.cloneNode(true) as HTMLCanvasElement
-                      const ctx = ghost.getContext('2d')
-                      if (ctx) ctx.drawImage(canvas, 0, 0)
-                      ghost.style.position = 'fixed'
-                      ghost.style.left = '-9999px'
-                      document.body.appendChild(ghost)
-                      e.dataTransfer.setDragImage(ghost, 18, 18)
-                      requestAnimationFrame(() => document.body.removeChild(ghost))
-                    }
+                    if (canvas) setCanvasDragImage(e.dataTransfer, canvas, 18, 18)
                   }}
                   title={title}
                 >

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { Application } from 'pixi.js'
 import type { AppearanceData } from './lib/appearances'
 import type { OtbmMap, OtbmTile } from './lib/otbm'
+import { deepCloneItem } from './lib/otbm'
 import { MapRenderer, type FloorViewMode } from './lib/MapRenderer'
 import { MapMutator } from './lib/MapMutator'
 import type { ItemRegistry } from './lib/items'
@@ -314,6 +315,32 @@ function App() {
           renderer.setHighlights([{ pos: { x: pos.x, y: pos.y, z: pos.z }, indices: [topIdx] }])
         }
         setContextMenu({ x: screenX, y: screenY, tilePos: pos, tile })
+      }
+
+      renderer.onInspectorItemDrop = (pos, _itemId, source) => {
+        // No-op if dropping on the same tile
+        if (pos.x === source.x && pos.y === source.y && pos.z === source.z) return
+
+        const srcKey = `${source.x},${source.y},${source.z}`
+        const srcTile = mapData.tiles.get(srcKey)
+        if (!srcTile || !srcTile.items[source.index]) return
+
+        const movedItem = deepCloneItem(srcTile.items[source.index])
+        mutator.beginBatch('Move item')
+        mutator.removeItem(source.x, source.y, source.z, source.index)
+        mutator.addItem(pos.x, pos.y, pos.z, movedItem)
+        mutator.commitBatch()
+      }
+
+      renderer.onDragHover = (pos) => {
+        if (renderer.dragPreviewItemId != null) {
+          renderer.updateGhostPreview(renderer.dragPreviewItemId, [pos])
+        }
+      }
+
+      renderer.onDragLeave = () => {
+        renderer.clearGhostPreview()
+        renderer.dragPreviewItemId = null
       }
 
       renderer.onItemDrop = (pos, itemId) => {
@@ -917,6 +944,8 @@ function App() {
           offset={showPalette}
           initialEditIndex={editItemIndex}
           onEditIndexConsumed={() => setEditItemIndex(null)}
+          onDragToMap={(itemId) => { if (rendererRef.current) rendererRef.current.dragPreviewItemId = itemId }}
+          onDragToMapEnd={() => { if (rendererRef.current) { rendererRef.current.dragPreviewItemId = null; rendererRef.current.clearGhostPreview() } }}
         />
       )}
 

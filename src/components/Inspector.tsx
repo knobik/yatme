@@ -10,6 +10,7 @@ import { getItemDisplayName } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
 import { X, DotsSixVertical, Crosshair, Faders, Trash } from '@phosphor-icons/react'
 import { parsePositionString } from '../lib/position'
+import { MIME_TIBIA_ITEM, MIME_TIBIA_INSPECTOR } from '../lib/dragUtils'
 import type { SelectedItemInfo } from '../hooks/useSelection'
 
 interface InspectorProps {
@@ -26,6 +27,8 @@ interface InspectorProps {
   offset?: boolean
   initialEditIndex?: number | null
   onEditIndexConsumed?: () => void
+  onDragToMap?: (itemId: number) => void
+  onDragToMapEnd?: () => void
 }
 
 export function Inspector({
@@ -42,6 +45,8 @@ export function Inspector({
   offset,
   initialEditIndex,
   onEditIndexConsumed,
+  onDragToMap,
+  onDragToMapEnd,
 }: InspectorProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -151,12 +156,30 @@ export function Inspector({
   deleteRef.current = handleDelete
 
   const handleDragStart = (index: number, e: React.DragEvent) => {
+    if (!tile) return
     setDragIndex(index)
-    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.effectAllowed = 'copyMove'
+
+    // Set item ID for palette-compatible drops
+    const item = tile.items[index]
+    if (item) {
+      e.dataTransfer.setData(MIME_TIBIA_ITEM, String(item.id))
+      e.dataTransfer.setData(MIME_TIBIA_INSPECTOR, JSON.stringify({
+        x: tilePos.x, y: tilePos.y, z: tilePos.z, index,
+      }))
+      onDragToMap?.(item.id)
+    }
+
+    // Hide the native drag image — the map canvas shows a PixiJS ghost preview instead
     const ghost = document.createElement('canvas')
     ghost.width = 1
     ghost.height = 1
     e.dataTransfer.setDragImage(ghost, 0, 0)
+  }
+
+  const handleDragEnd = () => {
+    clearDrag()
+    onDragToMapEnd?.()
   }
 
   const handleDragOver = (index: number, e: React.DragEvent) => {
@@ -171,6 +194,13 @@ export function Inspector({
   const handleDrop = (targetIndex: number) => {
     if (dragIndex === null || !tile) return
     if (dragIndex === targetIndex) {
+      clearDrag()
+      return
+    }
+
+    // Ground items cannot be reordered within the inspector
+    const draggedIsGround = classifyItem(tile.items[dragIndex].id, appearances) === 'ground'
+    if (draggedIsGround) {
       clearDrag()
       return
     }
@@ -307,7 +337,7 @@ export function Inspector({
                   onDragStart={(e) => handleDragStart(i, e)}
                   onDragOver={(e) => handleDragOver(i, e)}
                   onDrop={() => handleDrop(i)}
-                  onDragEnd={clearDrag}
+                  onDragEnd={handleDragEnd}
                   onHoverChange={(hovered) => { hoveredIndexRef.current = hovered ? i : null }}
                 />
                 {editingIndex === i && (
@@ -411,7 +441,7 @@ function ItemRow({
   const attrs = getItemAttributes(item, registry)
   const isTopLevel = depth === 0
   const hasActions = isTopLevel && !isGround && onDelete
-  const canDrag = isTopLevel && !isGround && onDragStart
+  const canDrag = isTopLevel && onDragStart
 
   return (
     <div
