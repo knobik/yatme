@@ -12,8 +12,7 @@ COPY tsconfig.json tsconfig.app.json tsconfig.node.json tsconfig.test.json tscon
 COPY src/ src/
 COPY server/ server/
 COPY index.html vite.config.ts ./
-# Vite needs publicDir to exist for build, but we don't bake assets into the image
-RUN mkdir -p tibia-versions/15.00/sprites
+ENV VITE_STORAGE=server
 RUN npm run build
 
 # Production image

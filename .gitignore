@@ -11,6 +11,9 @@ dist
 # OS
 .DS_Store
 
+# Development
+.env
+
 # Tibia data (large binaries)
 vendor/
 coverage/

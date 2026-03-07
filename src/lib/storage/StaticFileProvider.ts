@@ -6,7 +6,7 @@ export class StaticFileProvider implements MapStorageProvider {
   readonly canSave = true
   private url: string
 
-  constructor(url = '/canary.otbm') {
+  constructor(url = '/maps/canary.otbm') {
     this.url = url
   }
 

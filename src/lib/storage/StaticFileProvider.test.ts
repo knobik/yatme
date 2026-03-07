@@ -45,7 +45,7 @@ describe('StaticFileProvider', () => {
       const provider = new StaticFileProvider()
       await provider.loadMap(onProgress)
 
-      expect(mockFetch).toHaveBeenCalledWith('/canary.otbm', onProgress)
+      expect(mockFetch).toHaveBeenCalledWith('/maps/canary.otbm', onProgress)
     })
   })
 

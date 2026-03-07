@@ -271,17 +271,9 @@ function App() {
     let appInstance: Application | null = null
 
     async function init() {
-      let provider: MapStorageProvider
-      try {
-        const probe = await fetch('/api/map', { method: 'HEAD' })
-        if (probe.ok) {
-          provider = new ServerStorageProvider()
-        } else {
-          provider = new StaticFileProvider()
-        }
-      } catch {
-        provider = new StaticFileProvider()
-      }
+      const provider: MapStorageProvider = import.meta.env.VITE_STORAGE === 'static'
+        ? new StaticFileProvider()
+        : new ServerStorageProvider()
       storageRef.current = provider
 
       const result = await loadAssets(container!, {
