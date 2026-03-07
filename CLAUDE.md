@@ -114,3 +114,7 @@ All CSS variables and base classes: `src/styles/theme.css`
 ## UI Conventions
 
 - All tools, views, and map operations must have entries in the **hamburger menu** (`src/components/Toolbar.tsx` -> `menuSections`) — not just keyboard shortcuts or context menu items.
+
+## Documentation Conventions
+
+- When writing diagrams in Markdown files, always use Mermaid syntax (```mermaid code blocks).
