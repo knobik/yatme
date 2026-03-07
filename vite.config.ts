@@ -26,5 +26,10 @@ function serveDataDir() {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [tailwindcss(), react(), serveDataDir()],
-  publicDir: path.resolve(__dirname, 'tibia-versions/15.00'),
+  publicDir: path.resolve(__dirname, 'tibia-versions/15.00/sprites'),
+  server: {
+    proxy: {
+      '/api': 'http://localhost:8080',
+    },
+  },
 })

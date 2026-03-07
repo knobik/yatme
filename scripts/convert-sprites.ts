@@ -10,8 +10,8 @@ const BYTES_IN_SHEET = SHEET_SIZE * SHEET_SIZE * BYTES_PER_PIXEL; // 589,824
 const SHEET_WIDTH_BYTES = SHEET_SIZE * BYTES_PER_PIXEL; // 1,536
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const INPUT_DIR = path.resolve(__dirname, '../tibia-versions/15.00/sprites');
-const OUTPUT_DIR = path.resolve(__dirname, '../tibia-versions/15.00/sprites-png');
+const INPUT_DIR = process.env['SPRITES_INPUT_DIR'] ?? path.resolve(__dirname, '../tibia-versions/15.00/sprites');
+const OUTPUT_DIR = process.env['SPRITES_OUTPUT_DIR'] ?? path.resolve(__dirname, '../tibia-versions/15.00/sprites-png');
 
 interface CatalogEntry {
   type: string;
@@ -152,14 +152,22 @@ async function main() {
     );
   }
 
-  // Generate new catalog-content.json with .png filenames
-  const outputCatalog = spriteEntries.map((entry) => ({
-    type: entry.type,
-    file: entry.file.replace('.bmp.lzma', '.png'),
-    spritetype: entry.spritetype,
-    firstspriteid: entry.firstspriteid,
-    lastspriteid: entry.lastspriteid,
-  }));
+  // Generate new catalog-content.json: convert sprite filenames, keep other entries as-is
+  const outputCatalog = catalog.map((entry) => {
+    if (entry.type === 'sprite') {
+      return {
+        ...entry,
+        file: entry.file.replace('.bmp.lzma', '.png'),
+      }
+    }
+    // Copy non-sprite files (e.g. appearances.dat) to output dir
+    const src = path.join(INPUT_DIR, entry.file)
+    const dst = path.join(OUTPUT_DIR, entry.file)
+    if (fs.existsSync(src) && !fs.existsSync(dst)) {
+      fs.copyFileSync(src, dst)
+    }
+    return entry
+  });
   fs.writeFileSync(
     path.join(OUTPUT_DIR, 'catalog-content.json'),
     JSON.stringify(outputCatalog, null, 2)

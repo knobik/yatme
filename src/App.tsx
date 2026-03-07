@@ -3,7 +3,7 @@ import { Application } from 'pixi.js'
 import type { AppearanceData } from './lib/appearances'
 import type { OtbmMap, OtbmTile } from './lib/otbm'
 import { deepCloneItem, serializeOtbm } from './lib/otbm'
-import { StaticFileProvider, type MapStorageProvider } from './lib/storage'
+import { StaticFileProvider, ServerStorageProvider, type MapStorageProvider } from './lib/storage'
 import { MapRenderer, type FloorViewMode } from './lib/MapRenderer'
 import { MapMutator } from './lib/MapMutator'
 import type { ItemRegistry } from './lib/items'
@@ -271,7 +271,17 @@ function App() {
     let appInstance: Application | null = null
 
     async function init() {
-      const provider = new StaticFileProvider()
+      let provider: MapStorageProvider
+      try {
+        const probe = await fetch('/api/map', { method: 'HEAD' })
+        if (probe.ok) {
+          provider = new ServerStorageProvider()
+        } else {
+          provider = new StaticFileProvider()
+        }
+      } catch {
+        provider = new StaticFileProvider()
+      }
       storageRef.current = provider
 
       const result = await loadAssets(container!, {
