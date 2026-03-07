@@ -110,7 +110,7 @@ classDiagram
 
 Client assets (appearances.dat, sprite sheets) cannot be bundled in the repo (CipSoft copyright). The existing `convert-sprites.ts` script already converts sprite sheets to PNG.
 
-- **Browser mode**: a GitHub Action pulls client assets, runs `convert-sprites.ts`, and includes the resulting PNGs in the static build.
+- **Browser mode**: a GitHub Action pulls client assets from [dudantas/tibia-client](https://github.com/dudantas/tibia-client) (tagged by client version), runs `convert-sprites.ts`, and includes the resulting PNGs in the static build.
 - **Server mode**: OTS creators mount a volume with their client files (appearances.dat, `.bmp.lzma` sprite sheets). The Docker entrypoint runs `convert-sprites.ts` on first start to produce PNGs, which are then served alongside the frontend.
 
 ### Mode 2: Server
@@ -133,7 +133,6 @@ services:
 - Server injects its config into the frontend, disabling browser upload UI
 - `GET /api/map` — returns OTBM binary + sidecars from mounted volume
 - `POST /api/map` — saves changes back to volume
-- Future: WebSocket for collaborative editing
 
 ### Init Flow
 
