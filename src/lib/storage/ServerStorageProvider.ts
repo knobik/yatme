@@ -70,18 +70,13 @@ export class ServerStorageProvider implements MapStorageProvider {
     return new Map()
   }
 
-  async saveMap(bundle: MapBundle): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/map`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        'X-Map-Filename': bundle.filename,
-      },
-      body: toArrayBuffer(bundle.otbm),
-    })
-    if (!response.ok) {
-      throw new Error(`Failed to save map: ${response.status} ${response.statusText}`)
-    }
+  async saveMap(bundle: MapBundle, onProgress?: (fraction: number) => void): Promise<void> {
+    await this.uploadWithProgress(
+      `${this.baseUrl}/map`,
+      toArrayBuffer(bundle.otbm),
+      { 'Content-Type': 'application/octet-stream', 'X-Map-Filename': bundle.filename },
+      onProgress,
+    )
 
     // Save sidecar files
     for (const [name, data] of bundle.sidecars) {
@@ -94,5 +89,37 @@ export class ServerStorageProvider implements MapStorageProvider {
         console.error(`[Save] Failed to save sidecar ${name}: ${sidecarRes.status}`)
       }
     }
+  }
+
+  private uploadWithProgress(
+    url: string,
+    body: ArrayBuffer,
+    headers: Record<string, string>,
+    onProgress?: (fraction: number) => void,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', url)
+      for (const [key, value] of Object.entries(headers)) {
+        xhr.setRequestHeader(key, value)
+      }
+      if (onProgress) {
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            onProgress(Math.min(e.loaded / e.total, 0.99))
+          }
+        })
+      }
+      xhr.addEventListener('load', () => {
+        onProgress?.(1)
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve()
+        } else {
+          reject(new Error(`Failed to save map: ${xhr.status} ${xhr.statusText}`))
+        }
+      })
+      xhr.addEventListener('error', () => reject(new Error('Network error while saving map')))
+      xhr.send(body)
+    })
   }
 }

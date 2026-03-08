@@ -37,7 +37,7 @@ export class StaticFileProvider implements MapStorageProvider {
     return result
   }
 
-  async saveMap(bundle: MapBundle): Promise<void> {
+  async saveMap(bundle: MapBundle, _onProgress?: (fraction: number) => void): Promise<void> {
     if (bundle.sidecars.size === 0) {
       triggerDownload(bundle.otbm, bundle.filename)
       return

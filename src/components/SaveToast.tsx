@@ -1,8 +1,16 @@
+export type SavePhase = 'serialize' | 'upload'
+
 interface SaveToastProps {
   progress: number // 0–1
+  phase: SavePhase
 }
 
-export function SaveToast({ progress }: SaveToastProps) {
+const phaseLabels: Record<SavePhase, string> = {
+  serialize: 'Serializing map\u2026',
+  upload: 'Uploading map\u2026',
+}
+
+export function SaveToast({ progress, phase }: SaveToastProps) {
   const pct = Math.round(progress * 100)
 
   return (
@@ -18,7 +26,7 @@ export function SaveToast({ progress }: SaveToastProps) {
       {/* Label + progress bar */}
       <div className="flex min-w-0 flex-1 flex-col gap-[6px]">
         <div className="flex items-baseline justify-between">
-          <span className="font-ui text-xs text-fg-muted">Saving map&hellip;</span>
+          <span className="font-ui text-xs text-fg-muted">{phaseLabels[phase]}</span>
           <span className="font-mono text-xs text-accent">{pct}%</span>
         </div>
         <div className="h-[3px] w-full overflow-hidden rounded-[2px] bg-elevated">

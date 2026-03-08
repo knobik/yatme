@@ -19,7 +19,7 @@ import { GoToPositionDialog } from './components/GoToPositionDialog'
 import { FindItemDialog } from './components/FindItemDialog'
 import { ReplaceItemsDialog } from './components/ReplaceItemsDialog'
 import { SettingsModal } from './components/SettingsModal'
-import { SaveToast } from './components/SaveToast'
+import { SaveToast, type SavePhase } from './components/SaveToast'
 import { loadSettings, saveSettings, type EditorSettings } from './lib/EditorSettings'
 import { getItemDisplayName } from './lib/items'
 import { loadAssets } from './lib/initPipeline'
@@ -242,6 +242,7 @@ function App() {
   }, [])
 
   const [saveProgress, setSaveProgress] = useState<number | null>(null)
+  const [savePhase, setSavePhase] = useState<SavePhase>('serialize')
   const lastReportedProgress = useRef(0)
 
   const handleSave = useCallback(async () => {
@@ -251,6 +252,7 @@ function App() {
     setSaveProgress(0)
     lastReportedProgress.current = 0
     try {
+      setSavePhase('serialize')
       const otbm = await serializeOtbm(md, (done, total) => {
         const pct = total > 0 ? done / total : 0
         if (pct - lastReportedProgress.current >= 0.02) {
@@ -259,7 +261,18 @@ function App() {
         }
       })
       const sidecars = sidecarsData ? serializeSidecars(sidecarsData, md) : new Map()
-      await provider.saveMap({ otbm, sidecars, filename: mapFilename })
+      const hasUploadPhase = 'uploadWithProgress' in provider
+      if (hasUploadPhase) {
+        setSavePhase('upload')
+        setSaveProgress(0)
+        lastReportedProgress.current = 0
+      }
+      await provider.saveMap({ otbm, sidecars, filename: mapFilename }, (fraction) => {
+        if (fraction - lastReportedProgress.current >= 0.02) {
+          lastReportedProgress.current = fraction
+          setSaveProgress(fraction)
+        }
+      })
     } catch (e) {
       console.error('[Save] Failed to save map:', e)
       alert(`Failed to save map: ${e instanceof Error ? e.message : String(e)}`)
@@ -870,7 +883,7 @@ function App() {
       {loading && <LoadingOverlay status={loadingStatus} progress={loadingProgress} />}
 
       {/* Save toast */}
-      {saveProgress != null && <SaveToast progress={saveProgress} />}
+      {saveProgress != null && <SaveToast progress={saveProgress} phase={savePhase} />}
 
       {/* Toolbar — top center */}
       {!loading && appearancesData && (
