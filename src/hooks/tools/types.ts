@@ -9,7 +9,7 @@ import type { DoodadBrush } from '../../lib/brushes/DoodadTypes'
 import type { SelectedItemInfo } from '../useSelection'
 import type { CopyBuffer } from '../../lib/CopyBuffer'
 
-export type EditorTool = 'select' | 'draw' | 'erase' | 'door' | 'fill' | 'zone'
+export type EditorTool = 'select' | 'draw' | 'erase' | 'door' | 'fill' | 'zone' | 'house'
 export type BrushShape = 'square' | 'circle'
 
 export type ZoneSelection =
@@ -78,6 +78,8 @@ export interface ToolContext {
   activeToolRef: React.MutableRefObject<EditorTool>
   // Zone tool
   selectedZoneRef: React.RefObject<ZoneSelection | null>
+  // House tool
+  selectedHouseRef: React.RefObject<number | null>
 }
 
 // ── Brush resolution ─────────────────────────────────────────────────

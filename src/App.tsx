@@ -3,7 +3,7 @@ import { Application } from 'pixi.js'
 import type { AppearanceData } from './lib/appearances'
 import type { OtbmMap, OtbmTile } from './lib/otbm'
 import { deepCloneItem, serializeOtbm } from './lib/otbm'
-import { serializeSidecars, emptySidecars, parseZonesXml, serializeZonesXml, type MapSidecars } from './lib/sidecars'
+import { serializeSidecars, emptySidecars, parseZonesXml, serializeZonesXml, parseHousesXml, serializeHousesXml, type MapSidecars } from './lib/sidecars'
 import { StaticFileProvider, ServerStorageProvider, type MapStorageProvider } from './lib/storage'
 import { MapRenderer, type FloorViewMode } from './lib/MapRenderer'
 import { MapMutator } from './lib/MapMutator'
@@ -27,7 +27,9 @@ import { setupEditor } from './lib/setupEditor'
 import { findEntryInTilesets } from './lib/tilesets/TilesetLoader'
 import { ZONE_FLAG_DEFS, type BrushSelection } from './hooks/tools/types'
 import { scrubZoneFromTiles } from './lib/zoneCleanup'
+import { scrubHouseFromTiles, updateAllHouseSizes } from './lib/houseCleanup'
 import { ZonePalette } from './components/ZonePalette'
+import { HousePalette } from './components/HousePalette'
 import { CaretUpIcon, CaretDownIcon, EyeIcon } from '@phosphor-icons/react'
 import type { CategoryType } from './lib/tilesets/TilesetTypes'
 
@@ -74,6 +76,11 @@ function App() {
   const [showLights, setShowLights] = useState(() => loadSettings().showLights)
   const [showZonePalette, setShowZonePalette] = useState(() => loadSettings().showZonePalette)
   const [showZoneOverlay, setShowZoneOverlay] = useState(() => loadSettings().showZoneOverlay)
+  const [showHousePalette, setShowHousePalette] = useState(() => loadSettings().showHousePalette)
+  const [showHouseOverlay, setShowHouseOverlay] = useState(() => loadSettings().showHouseOverlay)
+  const [placingHouseExit, setPlacingHouseExit] = useState<number | null>(null)
+  const placingHouseExitRef = useRef<number | null>(null)
+  placingHouseExitRef.current = placingHouseExit
 
   // Phase 7 state
   const [mapData, setMapData] = useState<OtbmMap | null>(null)
@@ -145,10 +152,50 @@ function App() {
     }
   }, [tools.activeTool])
 
+  // Auto-show house overlay + palette while house tool is active, restore on exit
+  const houseOverlayBeforeRef = useRef<boolean | null>(null)
+  const housePaletteBeforeRef = useRef<boolean | null>(null)
+  const showHouseOverlayRef = useRef(showHouseOverlay)
+  const showHousePaletteRef = useRef(showHousePalette)
+  showHouseOverlayRef.current = showHouseOverlay
+  showHousePaletteRef.current = showHousePalette
+  useEffect(() => {
+    if (tools.activeTool === 'house') {
+      houseOverlayBeforeRef.current = showHouseOverlayRef.current
+      housePaletteBeforeRef.current = showHousePaletteRef.current
+      if (!showHouseOverlayRef.current) {
+        setShowHouseOverlay(true)
+        rendererRef.current?.setShowHouseOverlay(true)
+      }
+      if (!showHousePaletteRef.current) {
+        setShowHousePalette(true)
+      }
+    } else {
+      if (houseOverlayBeforeRef.current !== null) {
+        if (!houseOverlayBeforeRef.current) {
+          setShowHouseOverlay(false)
+          rendererRef.current?.setShowHouseOverlay(false)
+        }
+        houseOverlayBeforeRef.current = null
+      }
+      if (housePaletteBeforeRef.current !== null) {
+        if (!housePaletteBeforeRef.current) {
+          setShowHousePalette(false)
+        }
+        housePaletteBeforeRef.current = null
+      }
+    }
+  }, [tools.activeTool])
+
   // Sync active zone highlighting to renderer
   useEffect(() => {
     rendererRef.current?.setActiveZone(tools.selectedZone)
   }, [tools.selectedZone])
+
+  // Sync active house highlighting to renderer
+  useEffect(() => {
+    rendererRef.current?.setActiveHouse(tools.selectedHouse?.id ?? null)
+  }, [tools.selectedHouse])
 
   const handleFloorChange = useCallback((delta: number) => {
     if (rendererRef.current) {
@@ -286,6 +333,9 @@ function App() {
     setShowZonePalette(next.showZonePalette)
     setShowZoneOverlay(next.showZoneOverlay)
     r?.setShowZoneOverlay(next.showZoneOverlay)
+    setShowHousePalette(next.showHousePalette)
+    setShowHouseOverlay(next.showHouseOverlay)
+    r?.setShowHouseOverlay(next.showHouseOverlay)
   }, [])
 
   const [saveProgress, setSaveProgress] = useState<number | null>(null)
@@ -299,6 +349,12 @@ function App() {
     setSaveProgress(0)
     lastReportedProgress.current = 0
     try {
+      // Ensure house sizes are up-to-date and houseFile is set
+      updateAllHouseSizes(md.tiles, sidecarsData.houses)
+      if (sidecarsData.houses.length > 0 && !md.houseFile) {
+        md.houseFile = mapFilename.replace(/\.otbm$/, '-house.xml')
+      }
+
       setSavePhase('serialize')
       const otbm = await serializeOtbm(md, (done, total) => {
         const pct = total > 0 ? done / total : 0
@@ -361,6 +417,46 @@ function App() {
           })
         } catch (e) {
           console.error('[Zones] Failed to parse imported zones:', e)
+        }
+      }
+      reader.readAsText(file)
+    }
+    input.click()
+  }, [])
+
+  const handleExportHouses = useCallback(() => {
+    const xml = serializeHousesXml(sidecarsData.houses)
+    const blob = new Blob([xml], { type: 'application/xml' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'houses.xml'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [sidecarsData.houses])
+
+  const handleImportHouses = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.xml'
+    input.onchange = () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = () => {
+        try {
+          const text = reader.result as string
+          const imported = parseHousesXml(text)
+          setSidecarsData(prev => {
+            const existingIds = new Set(prev.houses.map(h => h.id))
+            const newHouses = imported.filter(h => !existingIds.has(h.id))
+            if (newHouses.length === 0) return prev
+            return { ...prev, houses: [...prev.houses, ...newHouses] }
+          })
+        } catch (e) {
+          console.error('[Houses] Failed to parse imported houses:', e)
         }
       }
       reader.readAsText(file)
@@ -437,6 +533,25 @@ function App() {
         }
       }
 
+      // House exit placement intercept
+      const origOnTileClick = renderer.onTileClick
+      renderer.onTileClick = (tile, worldX, worldY) => {
+        const exitHouseId = placingHouseExitRef.current
+        if (exitHouseId != null && tile) {
+          setSidecarsData(prev => ({
+            ...prev,
+            houses: prev.houses.map(h =>
+              h.id === exitHouseId
+                ? { ...h, entryX: tile.x, entryY: tile.y, entryZ: tile.z }
+                : h
+            ),
+          }))
+          setPlacingHouseExit(null)
+          return
+        }
+        origOnTileClick?.(tile, worldX, worldY)
+      }
+
       renderer.onTileContextMenu = (pos, tile, screenX, screenY) => {
         if (toolsRef.current.isPasting) {
           toolsRef.current.cancelPaste()
@@ -505,6 +620,7 @@ function App() {
       renderer.setShowLights(savedSettings.showLights)
       renderer.setShowSelectionBorder(savedSettings.selectionBorder)
       renderer.setShowZoneOverlay(savedSettings.showZoneOverlay)
+      renderer.setShowHouseOverlay(savedSettings.showHouseOverlay)
 
       setLoadingProgress(1)
       setLoadingStatus('Ready')
@@ -655,7 +771,9 @@ function App() {
         toolsRef.current.deleteSelection()
       } else if (e.key === 'Escape') {
         e.preventDefault()
-        if (toolsRef.current.isPasting) {
+        if (placingHouseExit != null) {
+          setPlacingHouseExit(null)
+        } else if (toolsRef.current.isPasting) {
           toolsRef.current.cancelPaste()
         } else if (showGoToDialog) {
           setShowGoToDialog(false)
@@ -706,6 +824,9 @@ function App() {
       } else if (e.key === 'z' && !e.ctrlKey) {
         e.preventDefault()
         toolsRef.current.setActiveTool('zone')
+      } else if (e.key === 'h' && !e.ctrlKey) {
+        e.preventDefault()
+        toolsRef.current.setActiveTool('house')
       } else if (e.key === ']') {
         e.preventDefault()
         const cur = toolsRef.current.brushSize
@@ -718,7 +839,15 @@ function App() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [handleFloorChange, handleSave, showPalette, showZonePalette, selectedTilePos, contextMenu, showGoToDialog, showFindItem, showReplaceItems])
+  }, [handleFloorChange, handleSave, showPalette, showZonePalette, selectedTilePos, contextMenu, showGoToDialog, showFindItem, showReplaceItems, placingHouseExit])
+
+  // Derive house name for the currently inspected tile
+  const inspectedHouseName = (() => {
+    if (!selectedTilePos || !mapData) return null
+    const tile = mapData.tiles.get(`${selectedTilePos.x},${selectedTilePos.y},${selectedTilePos.z}`)
+    if (!tile?.houseId) return null
+    return sidecarsData.houses.find(h => h.id === tile.houseId)?.name ?? null
+  })()
 
   function buildContextMenuGroups(): ContextMenuGroup[] {
     if (!contextMenu) return []
@@ -1053,6 +1182,25 @@ function App() {
           }}
           onExportZones={handleExportZones}
           onImportZones={handleImportZones}
+          showHousePalette={showHousePalette}
+          onToggleHousePalette={() => {
+            setShowHousePalette(prev => {
+              const next = !prev
+              setEditorSettings(s => { const u = { ...s, showHousePalette: next }; saveSettings(u); return u })
+              return next
+            })
+          }}
+          showHouseOverlay={showHouseOverlay}
+          onToggleHouseOverlay={() => {
+            setShowHouseOverlay(prev => {
+              const next = !prev
+              rendererRef.current?.setShowHouseOverlay(next)
+              setEditorSettings(s => { const u = { ...s, showHouseOverlay: next }; saveSettings(u); return u })
+              return next
+            })
+          }}
+          onExportHouses={handleExportHouses}
+          onImportHouses={handleImportHouses}
         />
       )}
 
@@ -1135,6 +1283,7 @@ function App() {
         <ZonePalette
           sidecars={sidecarsData}
           onSidecarsChange={setSidecarsData}
+          mapData={mapData}
           selectedZone={tools.selectedZone}
           onZoneSelect={(zone) => {
             tools.setSelectedZone(zone)
@@ -1172,6 +1321,56 @@ function App() {
         />
       )}
 
+      {/* House palette — right side */}
+      {!loading && showHousePalette && (
+        <HousePalette
+          sidecars={sidecarsData}
+          onSidecarsChange={setSidecarsData}
+          mapData={mapData}
+          selectedHouse={tools.selectedHouse}
+          onHouseSelect={(house) => {
+            tools.setSelectedHouse(house)
+            if (tools.activeTool !== 'house') tools.setActiveTool('house')
+          }}
+          onHouseDelete={(houseId) => {
+            if (!mapData) return
+            scrubHouseFromTiles(mapData.tiles, houseId)
+            rendererRef.current?.markHouseOverlayDirty()
+            if (tools.selectedHouse?.id === houseId) {
+              tools.setSelectedHouse(null)
+            }
+          }}
+          onNavigateToHouse={(houseId) => {
+            if (!mapData) return
+            for (const tile of mapData.tiles.values()) {
+              if (tile.houseId === houseId) {
+                rendererRef.current?.setFloor(tile.z)
+                rendererRef.current?.centerOn(tile.x, tile.y)
+                break
+              }
+            }
+          }}
+          onSetHouseExit={(houseId) => {
+            setPlacingHouseExit(houseId)
+          }}
+          onExportHouses={handleExportHouses}
+          onImportHouses={handleImportHouses}
+          onClose={() => {
+            setShowHousePalette(false)
+            setEditorSettings(s => { const u = { ...s, showHousePalette: false }; saveSettings(u); return u })
+          }}
+        />
+      )}
+
+      {/* House exit placement mode indicator */}
+      {placingHouseExit != null && (
+        <div className="panel absolute bottom-[80px] left-1/2 z-20 -translate-x-1/2 px-6 py-3 pointer-events-auto select-none">
+          <span className="font-ui text-sm text-fg">
+            Click a tile to set house exit for house #{placingHouseExit}. Press <span className="kbd">Esc</span> to cancel.
+          </span>
+        </div>
+      )}
+
       {/* Browse Tile panel — left side (offset right when palette is open) */}
       {!loading && selectedTilePos && itemRegistry && appearancesData && mapData && mutatorReady && (
         <Inspector
@@ -1190,6 +1389,7 @@ function App() {
           onEditIndexConsumed={() => setEditItemIndex(null)}
           onDragToMap={(itemId) => { if (rendererRef.current) rendererRef.current.dragPreviewItemId = itemId }}
           onDragToMapEnd={() => { if (rendererRef.current) { rendererRef.current.dragPreviewItemId = null; rendererRef.current.clearGhostPreview() } }}
+          houseName={inspectedHouseName}
         />
       )}
 

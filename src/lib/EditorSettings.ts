@@ -17,6 +17,8 @@ export interface EditorSettings {
   mergePaste: boolean
   showZonePalette: boolean
   showZoneOverlay: boolean
+  showHousePalette: boolean
+  showHouseOverlay: boolean
 }
 
 export const DEFAULT_SETTINGS: EditorSettings = {
@@ -30,6 +32,8 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   mergePaste: true,
   showZonePalette: false,
   showZoneOverlay: false,
+  showHousePalette: false,
+  showHouseOverlay: false,
 }
 
 const SETTINGS_KEY = 'tibia-editor-settings'
@@ -81,5 +85,7 @@ function mergeWithDefaults(parsed: Record<string, unknown>): EditorSettings {
   if (typeof parsed.mergePaste === 'boolean') s.mergePaste = parsed.mergePaste
   if (typeof parsed.showZonePalette === 'boolean') s.showZonePalette = parsed.showZonePalette
   if (typeof parsed.showZoneOverlay === 'boolean') s.showZoneOverlay = parsed.showZoneOverlay
+  if (typeof parsed.showHousePalette === 'boolean') s.showHousePalette = parsed.showHousePalette
+  if (typeof parsed.showHouseOverlay === 'boolean') s.showHouseOverlay = parsed.showHouseOverlay
   return s
 }

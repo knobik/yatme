@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import clsx from 'clsx'
 import type { MapSidecars, ZoneData } from '../lib/sidecars'
+import type { OtbmMap } from '../lib/otbm'
 import type { ZoneSelection } from '../hooks/tools/types'
 import { zoneColorCSS } from '../lib/zoneColors'
 import { XIcon, PlusIcon, DownloadSimpleIcon, UploadSimpleIcon } from '@phosphor-icons/react'
@@ -8,6 +9,7 @@ import { XIcon, PlusIcon, DownloadSimpleIcon, UploadSimpleIcon } from '@phosphor
 interface ZonePaletteProps {
   sidecars: MapSidecars
   onSidecarsChange: (sidecars: MapSidecars) => void
+  mapData: OtbmMap | null
   selectedZone: ZoneSelection | null
   onZoneSelect: (zone: ZoneSelection) => void
   onZoneDelete?: (zoneId: number) => void
@@ -20,6 +22,7 @@ interface ZonePaletteProps {
 export function ZonePalette({
   sidecars,
   onSidecarsChange,
+  mapData,
   selectedZone,
   onZoneSelect,
   onZoneDelete,
@@ -38,6 +41,7 @@ export function ZonePalette({
     const maxId = sidecars.zones.reduce((max, z) => Math.max(max, z.id), 0)
     const newZone: ZoneData = { id: maxId + 1, name }
     onSidecarsChange({ ...sidecars, zones: [...sidecars.zones, newZone] })
+    onZoneSelect({ type: 'zone', zoneId: newZone.id, name: newZone.name })
     setNewZoneName('')
   }
 
@@ -60,6 +64,15 @@ export function ZonePalette({
       zones: sidecars.zones.map(z => z.id === editingId ? { ...z, name } : z),
     })
     setEditingId(null)
+  }
+
+  const getTileCount = (zoneId: number): number => {
+    if (!mapData) return 0
+    let count = 0
+    for (const tile of mapData.tiles.values()) {
+      if (tile.zones?.includes(zoneId)) count++
+    }
+    return count
   }
 
   const isZoneSelected = (zoneId: number) =>
@@ -130,7 +143,7 @@ export function ZonePalette({
                 key={zone.id}
                 className={clsx(
                   'group flex items-center gap-3 rounded-sm px-3 py-[7px] cursor-pointer transition-colors duration-100 hover:bg-panel-hover',
-                  isZoneSelected(zone.id) && 'bg-accent-subtle',
+                  isZoneSelected(zone.id) && 'bg-accent-subtle outline outline-1 -outline-offset-1 outline-accent',
                 )}
                 onClick={() => onZoneSelect({ type: 'zone', zoneId: zone.id, name: zone.name })}
                 onContextMenu={(e) => {
@@ -161,6 +174,7 @@ export function ZonePalette({
                     {zone.name}
                   </span>
                 )}
+                <span className="font-mono text-xs text-fg-faint">{getTileCount(zone.id)} tiles</span>
                 <span className="font-mono text-xs text-fg-faint">#{zone.id}</span>
                 <button
                   className="item-action-btn danger !w-[22px] !h-[22px] opacity-0 group-hover:opacity-100"

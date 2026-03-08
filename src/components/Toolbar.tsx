@@ -16,6 +16,7 @@ import { ZONE_FLAG_DEFS } from '../hooks/tools/types'
 import {
   CursorIcon, PencilSimpleIcon, EraserIcon, DoorIcon, PaintBucketIcon, FlagIcon,
   ArrowCounterClockwiseIcon, ArrowClockwiseIcon, SquareIcon, CircleIcon,
+  HouseIcon,
 } from '@phosphor-icons/react'
 
 interface ToolbarProps {
@@ -64,6 +65,12 @@ interface ToolbarProps {
   onZoneSelect: (zone: ZoneSelection) => void
   onExportZones: () => void
   onImportZones: () => void
+  showHousePalette: boolean
+  onToggleHousePalette: () => void
+  showHouseOverlay: boolean
+  onToggleHouseOverlay: () => void
+  onExportHouses: () => void
+  onImportHouses: () => void
 }
 
 const BRUSH_SIZES = [
@@ -86,6 +93,7 @@ const TOOLS: { id: EditorTool; label: string; shortcut: string; icon: React.Reac
   { id: 'door', label: 'Door', shortcut: 'R', icon: <DoorIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
   { id: 'fill', label: 'Fill', shortcut: 'F', icon: <PaintBucketIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
   { id: 'zone', label: 'Zone', shortcut: 'Z', icon: <FlagIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
+  { id: 'house', label: 'House', shortcut: 'H', icon: <HouseIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
 ]
 
 const DOOR_TYPES = [
@@ -143,6 +151,12 @@ export function Toolbar({
   onZoneSelect,
   onExportZones,
   onImportZones,
+  showHousePalette,
+  onToggleHousePalette,
+  showHouseOverlay,
+  onToggleHouseOverlay,
+  onExportHouses,
+  onImportHouses,
 }: ToolbarProps) {
   const previewId = selectedBrush ? getSelectionPreviewId(selectedBrush, brushRegistry) : 0
   const brushLabel = selectedBrush
@@ -159,6 +173,9 @@ export function Toolbar({
         'separator',
         { label: 'Import Zones...', onClick: onImportZones },
         { label: 'Export Zones', onClick: onExportZones },
+        'separator',
+        { label: 'Import Houses...', onClick: onImportHouses },
+        { label: 'Export Houses', onClick: onExportHouses },
       ],
     },
     {
@@ -189,8 +206,10 @@ export function Toolbar({
       items: [
         { label: 'Brush Palette', shortcut: 'P', checked: showPalette, onClick: onTogglePalette },
         { label: 'Zone Palette', shortcut: 'Z', checked: showZonePalette, onClick: onToggleZonePalette },
+        { label: 'House Palette', shortcut: 'H', checked: showHousePalette, onClick: onToggleHousePalette },
         'separator',
         { label: 'Show Zones', checked: showZoneOverlay, onClick: onToggleZoneOverlay },
+        { label: 'Show Houses', checked: showHouseOverlay, onClick: onToggleHouseOverlay },
         { label: 'Show Lights', shortcut: 'L', checked: showLights, onClick: onToggleLights },
         'separator',
         { label: 'Zoom In', shortcut: 'Ctrl+=', onClick: onZoomIn },
@@ -248,7 +267,7 @@ export function Toolbar({
       </div>
 
       {/* Brush size — for draw/erase */}
-      {(activeTool === 'draw' || activeTool === 'erase' || activeTool === 'zone') && (
+      {(activeTool === 'draw' || activeTool === 'erase' || activeTool === 'zone' || activeTool === 'house') && (
         <>
           <div className="h-[22px] w-px shrink-0 bg-border-subtle" />
           <div className="flex gap-1">

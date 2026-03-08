@@ -8,6 +8,7 @@ import type { SelectedItemInfo } from './useSelection'
 import { useSelection } from './useSelection'
 import { useClipboard } from './useClipboard'
 import type { EditorSettings } from '../lib/EditorSettings'
+import type { HouseData } from '../lib/sidecars'
 import type { EditorTool, BrushShape, BrushSelection, ToolContext, TilePos, ZoneSelection } from './tools/types'
 import { createDrawHandlers } from './tools/drawTool'
 import { createEraseHandlers } from './tools/eraseTool'
@@ -15,10 +16,12 @@ import { createDoorHandlers } from './tools/doorTool'
 import { createSelectHandlers } from './tools/selectTool'
 import { createFillHandlers } from './tools/fillTool'
 import { createZoneHandlers } from './tools/zoneTool'
+import { createHouseHandlers } from './tools/houseTool'
 import { createHoverHandler } from './tools/hoverHandler'
 
 // Re-export types for consumers
 export type { EditorTool, BrushShape, BrushSelection, TilePos, ZoneSelection }
+export type { HouseData }
 export type { SelectedItemInfo }
 export { deriveHighlights } from './useSelection'
 
@@ -50,6 +53,8 @@ export interface EditorToolsState {
   cancelPaste: () => void
   selectedZone: ZoneSelection | null
   setSelectedZone: (zone: ZoneSelection | null) => void
+  selectedHouse: HouseData | null
+  setSelectedHouse: (house: HouseData | null) => void
 }
 
 export function useEditorTools(
@@ -70,6 +75,7 @@ export function useEditorTools(
   const [brushShape, setBrushShape] = useState<BrushShape>('square')
   const [activeDoorType, setActiveDoorType] = useState<number>(DOOR_NORMAL)
   const [selectedZone, setSelectedZone] = useState<ZoneSelection | null>(null)
+  const [selectedHouse, setSelectedHouse] = useState<HouseData | null>(null)
 
   // ── Refs (avoid stale closures in pointer handlers) ──────────────
   const activeToolRef = useRef(activeTool)
@@ -79,6 +85,7 @@ export function useEditorTools(
   const brushRegistryRef = useRef(brushRegistry)
   const activeDoorTypeRef = useRef(activeDoorType)
   const selectedZoneRef = useRef(selectedZone)
+  const selectedHouseRef = useRef<number | null>(selectedHouse?.id ?? null)
   const onRequestEditItemRef = useRef(onRequestEditItem)
   const clickToInspectRef = useRef(clickToInspect)
   activeToolRef.current = activeTool
@@ -88,6 +95,7 @@ export function useEditorTools(
   brushRegistryRef.current = brushRegistry
   activeDoorTypeRef.current = activeDoorType
   selectedZoneRef.current = selectedZone
+  selectedHouseRef.current = selectedHouse?.id ?? null
   onRequestEditItemRef.current = onRequestEditItem
   clickToInspectRef.current = clickToInspect
 
@@ -137,6 +145,7 @@ export function useEditorTools(
       cancelPaste: clipboard.cancelPaste,
       activeToolRef,
       selectedZoneRef,
+      selectedHouseRef,
     }
 
     const draw = createDrawHandlers(ctx)
@@ -144,6 +153,7 @@ export function useEditorTools(
     const door = createDoorHandlers(ctx)
     const fill = createFillHandlers(ctx)
     const zone = createZoneHandlers(ctx)
+    const house = createHouseHandlers(ctx)
     const select = createSelectHandlers(ctx)
     const hover = createHoverHandler(ctx)
 
@@ -159,7 +169,8 @@ export function useEditorTools(
         case 'erase': erase.onDown(pos); break
         case 'door': door.onDown(pos); break
         case 'fill': fill.onDown(pos); break
-        case 'zone': renderer.beginZonePaint(); zone.onDown(pos, event); break
+        case 'zone': zone.onDown(pos, event); break
+        case 'house': house.onDown(pos, event); break
         case 'select': select.onDown(pos, event); break
       }
     }
@@ -171,6 +182,7 @@ export function useEditorTools(
         case 'erase': erase.onMove(pos); break
         case 'door': door.onMove(pos); break
         case 'zone': zone.onMove(pos); break
+        case 'house': house.onMove(pos); break
         case 'select': select.onMove(pos); break
       }
     }
@@ -178,10 +190,13 @@ export function useEditorTools(
     renderer.onTilePointerUp = (pos) => {
       isDraggingRef.current = false
       const tool = activeToolRef.current
-      if (tool === 'draw' || tool === 'erase' || tool === 'door' || tool === 'zone') {
+      if (tool === 'draw' || tool === 'erase' || tool === 'door') {
         paintedTilesRef.current.clear()
         mutator.commitBatch()
-        if (tool === 'zone') renderer.endZonePaint()
+      } else if (tool === 'zone') {
+        zone.onUp()
+      } else if (tool === 'house') {
+        house.onUp()
       } else if (tool === 'select') {
         select.onUp(pos)
       }
@@ -225,6 +240,7 @@ export function useEditorTools(
       case 'door': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
       case 'fill': renderer.setCursorStyle('crosshair'); break
       case 'zone': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
+      case 'house': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
     }
   }, [renderer, activeTool])
 
@@ -276,5 +292,7 @@ export function useEditorTools(
     cancelPaste: clipboard.cancelPaste,
     selectedZone,
     setSelectedZone,
+    selectedHouse,
+    setSelectedHouse,
   }
 }

@@ -55,6 +55,7 @@ type MutationAction =
   | { type: 'deleteTile'; x: number; y: number; z: number; tile: OtbmTile }
   | { type: 'setTileFlags'; x: number; y: number; z: number; oldFlags: number; newFlags: number }
   | { type: 'setTileZones'; x: number; y: number; z: number; oldZones: number[]; newZones: number[] }
+  | { type: 'setTileHouseId'; x: number; y: number; z: number; oldHouseId: number | undefined; newHouseId: number | undefined }
 
 interface MutationBatch {
   description: string
@@ -340,6 +341,14 @@ export class MapMutator {
         if (tile) tile.zones = action.oldZones.length > 0 ? [...action.oldZones] : undefined
         break
       }
+      case 'setTileHouseId': {
+        const tile = this.mapData.tiles.get(key)
+        if (tile) {
+          if (action.oldHouseId != null) tile.houseId = action.oldHouseId
+          else delete tile.houseId
+        }
+        break
+      }
     }
   }
 
@@ -377,6 +386,14 @@ export class MapMutator {
       case 'setTileZones': {
         const tile = this.mapData.tiles.get(key)
         if (tile) tile.zones = action.newZones.length > 0 ? [...action.newZones] : undefined
+        break
+      }
+      case 'setTileHouseId': {
+        const tile = this.mapData.tiles.get(key)
+        if (tile) {
+          if (action.newHouseId != null) tile.houseId = action.newHouseId
+          else delete tile.houseId
+        }
         break
       }
     }
@@ -432,6 +449,44 @@ export class MapMutator {
       const newZones = oldZones.filter(id => id !== zoneId)
       tile.zones = newZones.length > 0 ? newZones : undefined
       this.recordAction({ type: 'setTileZones', x, y, z, oldZones, newZones })
+      this.onTileChanged?.(x, y, z)
+    })
+  }
+
+  // --- House ID mutations ---
+
+  setTileHouseId(x: number, y: number, z: number, houseId: number): void {
+    this.autoBatch('Set house ID', () => {
+      const tile = this.getOrCreateTile(x, y, z)
+      const oldHouseId = tile.houseId
+      if (oldHouseId === houseId) return
+      tile.houseId = houseId
+      // Set PZ flag per RME convention
+      const oldFlags = tile.flags
+      const newFlags = oldFlags | 0x0001
+      if (oldFlags !== newFlags) {
+        tile.flags = newFlags
+        this.recordAction({ type: 'setTileFlags', x, y, z, oldFlags, newFlags })
+      }
+      this.recordAction({ type: 'setTileHouseId', x, y, z, oldHouseId, newHouseId: houseId })
+      this.onTileChanged?.(x, y, z)
+    })
+  }
+
+  clearTileHouseId(x: number, y: number, z: number): void {
+    this.autoBatch('Clear house ID', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile || tile.houseId == null) return
+      const oldHouseId = tile.houseId
+      delete tile.houseId
+      // Clear PZ flag
+      const oldFlags = tile.flags
+      const newFlags = oldFlags & ~0x0001
+      if (oldFlags !== newFlags) {
+        tile.flags = newFlags
+        this.recordAction({ type: 'setTileFlags', x, y, z, oldFlags, newFlags })
+      }
+      this.recordAction({ type: 'setTileHouseId', x, y, z, oldHouseId, newHouseId: undefined })
       this.onTileChanged?.(x, y, z)
     })
   }

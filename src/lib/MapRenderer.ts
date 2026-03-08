@@ -4,6 +4,7 @@ import { Camera } from './Camera'
 import { TileRenderer } from './TileRenderer'
 import { SelectionOverlay } from './SelectionOverlay'
 import { ZoneOverlay } from './ZoneOverlay'
+import { HouseOverlay } from './HouseOverlay'
 import { FloorManager } from './FloorManager'
 import { LightEngine } from './LightEngine'
 import { setupMapInput, type InputHost } from './InputHandler'
@@ -30,6 +31,7 @@ export class MapRenderer implements InputHost {
   private tileRenderer: TileRenderer
   private selection: SelectionOverlay
   private zoneOverlay: ZoneOverlay
+  private houseOverlay: HouseOverlay
   private floorManager: FloorManager
   private chunkManager: ChunkManager
   private lightEngine: LightEngine
@@ -72,6 +74,7 @@ export class MapRenderer implements InputHost {
     this.tileRenderer = new TileRenderer(appearances)
     this.selection = new SelectionOverlay()
     this.zoneOverlay = new ZoneOverlay()
+    this.houseOverlay = new HouseOverlay()
 
     // Chunk manager
     const { index, animatedKeys } = buildChunkIndex(mapData.tiles, appearances)
@@ -93,6 +96,9 @@ export class MapRenderer implements InputHost {
     // Zone overlay (between tile layers and selection overlay)
     this.mapContainer.addChild(this.zoneOverlay.container)
 
+    // House overlay (between zone overlay and selection overlay)
+    this.mapContainer.addChild(this.houseOverlay.container)
+
     // Selection overlay (added to mapContainer; FloorManager keeps it on top)
     this.mapContainer.addChild(this.selection.container)
 
@@ -101,7 +107,13 @@ export class MapRenderer implements InputHost {
     this.mapContainer.addChild(this.lightEngine.container)
 
     // Floor manager
-    this.floorManager = new FloorManager(this.mapContainer, this.selection.container, this.lightEngine.container, this.zoneOverlay.container)
+    this.floorManager = new FloorManager(
+      this.mapContainer,
+      this.zoneOverlay.container,
+      this.houseOverlay.container,
+      this.selection.container,
+      this.lightEngine.container,
+    )
 
     // Input
     this._cleanupInput = setupMapInput(
@@ -139,6 +151,7 @@ export class MapRenderer implements InputHost {
     this.deselectTile()
     this.recycleAllChunks()
     this.zoneOverlay.markDirty()
+    this.houseOverlay.markDirty()
     this.notifyCamera()
   }
 
@@ -194,6 +207,7 @@ export class MapRenderer implements InputHost {
     this.chunkManager.invalidateChunks(keys)
     this.lightEngine.markDirty()
     this.zoneOverlay.markDirty()
+    this.houseOverlay.markDirty()
   }
 
   /** Update the chunk index when a tile is created or modified. */
@@ -231,6 +245,34 @@ export class MapRenderer implements InputHost {
 
   endZonePaint(): void {
     this.zoneOverlay.endPaint()
+  }
+
+  // ── House overlay ─────────────────────────────────────────────
+
+  markHouseOverlayDirty(): void {
+    this.houseOverlay.markDirty()
+  }
+
+  get showHouseOverlay(): boolean { return this.houseOverlay.visible }
+
+  setShowHouseOverlay(enabled: boolean): void {
+    this.houseOverlay.setVisible(enabled)
+  }
+
+  setActiveHouse(houseId: number | null): void {
+    this.houseOverlay.setActiveHouse(houseId)
+  }
+
+  beginHousePaint(): void {
+    this.houseOverlay.beginPaint()
+  }
+
+  paintHouseTile(x: number, y: number, houseId: number | undefined): void {
+    this.houseOverlay.paintTile(x, y, houseId)
+  }
+
+  endHousePaint(): void {
+    this.houseOverlay.endPaint()
   }
 
   get showLights(): boolean { return this.lightEngine.enabled }
@@ -424,6 +466,9 @@ export class MapRenderer implements InputHost {
 
     this.zoneOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
     this.zoneOverlay.rebuild(this.mapData, this.camera.floor)
+
+    this.houseOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
+    this.houseOverlay.rebuild(this.mapData, this.camera.floor)
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────
@@ -438,6 +483,7 @@ export class MapRenderer implements InputHost {
     this._cleanupInput?.()
     this.recycleAllChunks()
     this.lightEngine.destroy()
+    this.houseOverlay.destroy()
     this.zoneOverlay.destroy()
     this.selection.destroy()
     this.floorManager.destroy()

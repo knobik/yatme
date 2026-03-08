@@ -30,6 +30,7 @@ interface InspectorProps {
   onEditIndexConsumed?: () => void
   onDragToMap?: (itemId: number) => void
   onDragToMapEnd?: () => void
+  houseName?: string | null
 }
 
 export function Inspector({
@@ -48,6 +49,7 @@ export function Inspector({
   onEditIndexConsumed,
   onDragToMap,
   onDragToMapEnd,
+  houseName,
 }: InspectorProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -316,7 +318,9 @@ export function Inspector({
         {tile?.houseId != null && (
           <div className="flex items-baseline gap-4">
             <span className="label text-base">HOUSE</span>
-            <span className="value text-md">{tile.houseId}</span>
+            <span className="value text-md">
+              {houseName ? `${houseName} (#${tile.houseId})` : `#${tile.houseId}`}
+            </span>
           </div>
         )}
       </div>

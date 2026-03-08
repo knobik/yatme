@@ -8,15 +8,11 @@ export class FloorManager {
   private _lastVisibleFloors: number[] = []
 
   private _parent: Container
-  private _zoneOverlay?: Container
-  private _overlay: Container
-  private _lightOverlay?: Container
+  private _overlays: Container[]   // ordered overlay containers (zones, houses, selection, lights…)
 
-  constructor(parent: Container, overlay: Container, lightOverlay?: Container, zoneOverlay?: Container) {
+  constructor(parent: Container, ...overlays: (Container | undefined)[]) {
     this._parent = parent
-    this._overlay = overlay
-    this._lightOverlay = lightOverlay
-    this._zoneOverlay = zoneOverlay
+    this._overlays = overlays.filter((c): c is Container => c != null)
   }
 
   /** Get (or lazily create) the container for a floor. */
@@ -71,18 +67,17 @@ export class FloorManager {
         this._parent.removeChild(container)
       }
     }
-    if (this._zoneOverlay?.parent === this._parent) {
-      this._parent.removeChild(this._zoneOverlay)
-    }
-    if (this._overlay.parent === this._parent) {
-      this._parent.removeChild(this._overlay)
+    for (const overlay of this._overlays) {
+      if (overlay.parent === this._parent) {
+        this._parent.removeChild(overlay)
+      }
     }
     for (const z of visibleFloors) {
       this._parent.addChild(this._containers.get(z)!)
     }
-    if (this._zoneOverlay) this._parent.addChild(this._zoneOverlay)
-    this._parent.addChild(this._overlay)
-    if (this._lightOverlay) this._parent.addChild(this._lightOverlay)
+    for (const overlay of this._overlays) {
+      this._parent.addChild(overlay)
+    }
 
     this._lastVisibleFloors = visibleFloors.slice()
   }
