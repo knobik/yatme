@@ -53,6 +53,8 @@ type MutationAction =
   | { type: 'setTileItems'; x: number; y: number; z: number; oldItems: OtbmItem[]; newItems: OtbmItem[] }
   | { type: 'createTile'; x: number; y: number; z: number }
   | { type: 'deleteTile'; x: number; y: number; z: number; tile: OtbmTile }
+  | { type: 'setTileFlags'; x: number; y: number; z: number; oldFlags: number; newFlags: number }
+  | { type: 'setTileZones'; x: number; y: number; z: number; oldZones: number[]; newZones: number[] }
 
 interface MutationBatch {
   description: string
@@ -328,6 +330,16 @@ export class MapMutator {
         })
         break
       }
+      case 'setTileFlags': {
+        const tile = this.mapData.tiles.get(key)
+        if (tile) tile.flags = action.oldFlags
+        break
+      }
+      case 'setTileZones': {
+        const tile = this.mapData.tiles.get(key)
+        if (tile) tile.zones = action.oldZones.length > 0 ? [...action.oldZones] : undefined
+        break
+      }
     }
   }
 
@@ -357,7 +369,71 @@ export class MapMutator {
         this.mapData.tiles.delete(key)
         break
       }
+      case 'setTileFlags': {
+        const tile = this.mapData.tiles.get(key)
+        if (tile) tile.flags = action.newFlags
+        break
+      }
+      case 'setTileZones': {
+        const tile = this.mapData.tiles.get(key)
+        if (tile) tile.zones = action.newZones.length > 0 ? [...action.newZones] : undefined
+        break
+      }
     }
+  }
+
+  // --- Flag & zone mutations ---
+
+  setTileFlag(x: number, y: number, z: number, flag: number): void {
+    this.autoBatch('Set tile flag', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile) return
+      const oldFlags = tile.flags
+      const newFlags = oldFlags | flag
+      if (oldFlags === newFlags) return
+      tile.flags = newFlags
+      this.recordAction({ type: 'setTileFlags', x, y, z, oldFlags, newFlags })
+      this.onTileChanged?.(x, y, z)
+    })
+  }
+
+  clearTileFlag(x: number, y: number, z: number, flag: number): void {
+    this.autoBatch('Clear tile flag', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile) return
+      const oldFlags = tile.flags
+      const newFlags = oldFlags & ~flag
+      if (oldFlags === newFlags) return
+      tile.flags = newFlags
+      this.recordAction({ type: 'setTileFlags', x, y, z, oldFlags, newFlags })
+      this.onTileChanged?.(x, y, z)
+    })
+  }
+
+  addTileZone(x: number, y: number, z: number, zoneId: number): void {
+    this.autoBatch('Add tile zone', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile) return
+      const oldZones = tile.zones ? [...tile.zones] : []
+      if (oldZones.includes(zoneId)) return
+      const newZones = [...oldZones, zoneId]
+      tile.zones = newZones
+      this.recordAction({ type: 'setTileZones', x, y, z, oldZones, newZones })
+      this.onTileChanged?.(x, y, z)
+    })
+  }
+
+  removeTileZone(x: number, y: number, z: number, zoneId: number): void {
+    this.autoBatch('Remove tile zone', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile) return
+      const oldZones = tile.zones ? [...tile.zones] : []
+      if (!oldZones.includes(zoneId)) return
+      const newZones = oldZones.filter(id => id !== zoneId)
+      tile.zones = newZones.length > 0 ? newZones : undefined
+      this.recordAction({ type: 'setTileZones', x, y, z, oldZones, newZones })
+      this.onTileChanged?.(x, y, z)
+    })
   }
 
   // --- Ground brush painting ---

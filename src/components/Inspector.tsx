@@ -8,10 +8,11 @@ import type { MapMutator } from '../lib/MapMutator'
 import { classifyItem } from '../lib/MapMutator'
 import { getItemDisplayName } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
-import { X, DotsSixVertical, Crosshair, Faders, Trash } from '@phosphor-icons/react'
+import { XIcon, DotsSixVerticalIcon, CrosshairIcon, FadersIcon, TrashIcon } from '@phosphor-icons/react'
 import { parsePositionString } from '../lib/position'
 import { MIME_TIBIA_ITEM, MIME_TIBIA_INSPECTOR } from '../lib/dragUtils'
 import type { SelectedItemInfo } from '../hooks/useSelection'
+import { zoneColorCSS } from '../lib/zoneColors'
 
 interface InspectorProps {
   tilePos: { x: number; y: number; z: number } | null
@@ -272,7 +273,7 @@ export function Inspector({
           BROWSE TILE
         </span>
         <button className="btn btn-icon border-none bg-transparent" onClick={onClose} title="Close (Esc)">
-          <X size={14} weight="bold" />
+          <XIcon size={14} weight="bold" />
         </button>
       </div>
 
@@ -291,6 +292,22 @@ export function Inspector({
               {TILE_FLAGS.filter(f => (tile.flags & f.bit) !== 0).map(({ bit, label }) => (
                 <span key={bit} className="rounded-sm bg-accent-subtle px-3 py-[2px] font-display text-xs font-semibold tracking-wide uppercase text-accent-fg">
                   {label}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {tile && tile.zones && tile.zones.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <span className="label text-base">ZONES</span>
+            <div className="flex flex-wrap gap-2">
+              {tile.zones.map(zoneId => (
+                <span
+                  key={zoneId}
+                  className="rounded-sm px-3 py-[2px] font-display text-xs font-semibold tracking-wide uppercase text-fg"
+                  style={{ backgroundColor: zoneColorCSS(zoneId, 30) }}
+                >
+                  Zone {zoneId}
                 </span>
               ))}
             </div>
@@ -379,19 +396,19 @@ export function Inspector({
 // ── Icons (16x16) ─────────────────────────────────────────────────
 
 function GripIcon() {
-  return <DotsSixVertical size={16} weight="bold" />
+  return <DotsSixVerticalIcon size={16} weight="bold" />
 }
 
-function CrosshairIcon() {
-  return <Crosshair size={16} weight="bold" />
+function SelectAsBrushIcon() {
+  return <CrosshairIcon size={16} weight="bold" />
 }
 
 function SlidersIcon() {
-  return <Faders size={16} weight="bold" />
+  return <FadersIcon size={16} weight="bold" />
 }
 
-function TrashIcon() {
-  return <Trash size={16} weight="bold" />
+function DeleteIcon() {
+  return <TrashIcon size={16} weight="bold" />
 }
 
 // ── ItemRow ────────────────────────────────────────────────────────
@@ -484,7 +501,7 @@ function ItemRow({
         <>
           <div className="flex shrink-0 items-center gap-2 opacity-0 transition-opacity duration-100 ease-out group-hover:opacity-100">
             <button className="item-action-btn brush" onClick={onSelectAsBrush} title="Select as brush">
-              <CrosshairIcon />
+              <SelectAsBrushIcon />
             </button>
             <button className="item-action-btn" onClick={onEditToggle} title="Edit properties">
               <SlidersIcon />
@@ -496,13 +513,13 @@ function ItemRow({
       {hasActions && (
         <div className="flex shrink-0 items-center gap-2 opacity-0 transition-opacity duration-100 ease-out group-hover:opacity-100">
           <button className="item-action-btn brush" onClick={onSelectAsBrush} title="Select as brush">
-            <CrosshairIcon />
+            <SelectAsBrushIcon />
           </button>
           <button className="item-action-btn" onClick={onEditToggle} title="Edit properties">
             <SlidersIcon />
           </button>
           <button className="item-action-btn danger" onClick={onDelete} title="Delete item">
-            <TrashIcon />
+            <DeleteIcon />
           </button>
         </div>
       )}

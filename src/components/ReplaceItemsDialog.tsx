@@ -10,7 +10,7 @@ import type { SelectedItemInfo } from '../hooks/useSelection'
 import { ItemPicker } from './ItemPicker'
 import { ItemSprite } from './ItemSprite'
 import { ScopeSelector } from './ScopeSelector'
-import { X, ArrowRight, Swap, Plus } from '@phosphor-icons/react'
+import { XIcon, ArrowRightIcon, SwapIcon, PlusIcon } from '@phosphor-icons/react'
 
 interface ReplaceRule {
   sourceId: number
@@ -119,7 +119,7 @@ export function ReplaceItemsDialog({
       <div className="flex items-center justify-between px-6 py-4">
         <span className="label text-lg tracking-wide">REPLACE ITEMS</span>
         <button className="btn btn-icon border-none bg-transparent" onClick={onClose} title="Close (Esc)">
-          <X size={14} weight="bold" />
+          <XIcon size={14} weight="bold" />
         </button>
       </div>
 
@@ -137,7 +137,7 @@ export function ReplaceItemsDialog({
             onClick={() => setExpandedPicker(expandedPicker === 'source' ? null : 'source')}
           />
           <div className="flex items-center px-1">
-            <ArrowRight size={20} weight="bold" className="text-fg-faint" />
+            <ArrowRightIcon size={20} weight="bold" className="text-fg-faint" />
           </div>
           <ItemSelectorButton
             itemId={targetId}
@@ -201,7 +201,7 @@ export function ReplaceItemsDialog({
                     <ItemSprite itemId={rule.sourceId} appearances={appearances} size={24} />
                     <span className="value text-xs">{rule.sourceId}</span>
                   </div>
-                  <ArrowRight size={14} className="text-fg-faint shrink-0" />
+                  <ArrowRightIcon size={14} className="text-fg-faint shrink-0" />
                   <div className="find-replace-rule-item">
                     <ItemSprite itemId={rule.targetId} appearances={appearances} size={24} />
                     <span className="value text-xs">{rule.targetId}</span>
@@ -215,14 +215,14 @@ export function ReplaceItemsDialog({
                     onClick={() => handleRemoveRule(i)}
                     title="Remove rule"
                   >
-                    <X size={10} weight="bold" />
+                    <XIcon size={10} weight="bold" />
                   </button>
                 </div>
               ))}
             </div>
           ) : (
             <div className="find-empty-state">
-              <Swap size={24} className="text-fg-disabled" />
+              <SwapIcon size={24} className="text-fg-disabled" />
               <span>Select items and click + Add</span>
             </div>
           )}
@@ -288,7 +288,7 @@ function ItemSelectorButton({
           <ItemSprite itemId={itemId} appearances={appearances} size={36} />
         ) : (
           <div className="h-[36px] w-[36px] rounded-sm border border-dashed border-border-default flex items-center justify-center">
-            <Plus size={14} className="text-fg-faint" />
+            <PlusIcon size={14} className="text-fg-faint" />
           </div>
         )}
       </div>

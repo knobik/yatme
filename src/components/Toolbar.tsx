@@ -13,8 +13,8 @@ import {
   DOOR_WINDOW, DOOR_HATCH_WINDOW,
 } from '../lib/brushes/WallTypes'
 import {
-  Cursor, PencilSimple, Eraser, Door, PaintBucket,
-  ArrowCounterClockwise, ArrowClockwise, Square, Circle,
+  CursorIcon, PencilSimpleIcon, EraserIcon, DoorIcon, PaintBucketIcon, FlagIcon,
+  ArrowCounterClockwiseIcon, ArrowClockwiseIcon, SquareIcon, CircleIcon,
 } from '@phosphor-icons/react'
 
 interface ToolbarProps {
@@ -55,6 +55,10 @@ interface ToolbarProps {
   onDoorTypeChange: (type: number) => void
   onSave: () => void
   canSave: boolean
+  showZonePalette: boolean
+  onToggleZonePalette: () => void
+  showZoneOverlay: boolean
+  onToggleZoneOverlay: () => void
 }
 
 const BRUSH_SIZES = [
@@ -71,11 +75,12 @@ const ICON_SIZE = 18
 const ICON_WEIGHT = 'bold' as const
 
 const TOOLS: { id: EditorTool; label: string; shortcut: string; icon: React.ReactNode }[] = [
-  { id: 'select', label: 'Select', shortcut: 'S', icon: <Cursor size={ICON_SIZE} weight={ICON_WEIGHT} /> },
-  { id: 'draw', label: 'Draw', shortcut: 'D', icon: <PencilSimple size={ICON_SIZE} weight={ICON_WEIGHT} /> },
-  { id: 'erase', label: 'Erase', shortcut: 'E', icon: <Eraser size={ICON_SIZE} weight={ICON_WEIGHT} /> },
-  { id: 'door', label: 'Door', shortcut: 'R', icon: <Door size={ICON_SIZE} weight={ICON_WEIGHT} /> },
-  { id: 'fill', label: 'Fill', shortcut: 'F', icon: <PaintBucket size={ICON_SIZE} weight={ICON_WEIGHT} /> },
+  { id: 'select', label: 'Select', shortcut: 'S', icon: <CursorIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
+  { id: 'draw', label: 'Draw', shortcut: 'D', icon: <PencilSimpleIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
+  { id: 'erase', label: 'Erase', shortcut: 'E', icon: <EraserIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
+  { id: 'door', label: 'Door', shortcut: 'R', icon: <DoorIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
+  { id: 'fill', label: 'Fill', shortcut: 'F', icon: <PaintBucketIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
+  { id: 'zone', label: 'Zone', shortcut: 'Z', icon: <FlagIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
 ]
 
 const DOOR_TYPES = [
@@ -125,6 +130,10 @@ export function Toolbar({
   onToggleLights,
   onSave,
   canSave,
+  showZonePalette,
+  onToggleZonePalette,
+  showZoneOverlay,
+  onToggleZoneOverlay,
 }: ToolbarProps) {
   const previewId = selectedBrush ? getSelectionPreviewId(selectedBrush, brushRegistry) : 0
   const brushLabel = selectedBrush
@@ -167,6 +176,9 @@ export function Toolbar({
       title: 'View',
       items: [
         { label: 'Brush Palette', shortcut: 'P', checked: showPalette, onClick: onTogglePalette },
+        { label: 'Zone Palette', shortcut: 'Z', checked: showZonePalette, onClick: onToggleZonePalette },
+        'separator',
+        { label: 'Show Zones', checked: showZoneOverlay, onClick: onToggleZoneOverlay },
         { label: 'Show Lights', shortcut: 'L', checked: showLights, onClick: onToggleLights },
         'separator',
         { label: 'Zoom In', shortcut: 'Ctrl+=', onClick: onZoomIn },
@@ -210,7 +222,7 @@ export function Toolbar({
           title="Undo (Ctrl+Z)"
           style={{ opacity: canUndo ? 1 : 0.45 }}
         >
-          <ArrowCounterClockwise size={ICON_SIZE} weight={ICON_WEIGHT} />
+          <ArrowCounterClockwiseIcon size={ICON_SIZE} weight={ICON_WEIGHT} />
         </button>
         <button
           className="btn btn-icon border-none bg-transparent"
@@ -219,12 +231,12 @@ export function Toolbar({
           title="Redo (Ctrl+Y)"
           style={{ opacity: canRedo ? 1 : 0.45 }}
         >
-          <ArrowClockwise size={ICON_SIZE} weight={ICON_WEIGHT} />
+          <ArrowClockwiseIcon size={ICON_SIZE} weight={ICON_WEIGHT} />
         </button>
       </div>
 
       {/* Brush size — for draw/erase */}
-      {(activeTool === 'draw' || activeTool === 'erase') && (
+      {(activeTool === 'draw' || activeTool === 'erase' || activeTool === 'zone') && (
         <>
           <div className="h-[22px] w-px shrink-0 bg-border-subtle" />
           <div className="flex gap-1">
@@ -249,14 +261,14 @@ export function Toolbar({
               onClick={() => onBrushShapeChange('square')}
               title="Square brush"
             >
-              <Square size={16} weight="bold" />
+              <SquareIcon size={16} weight="bold" />
             </button>
             <button
               className={clsx('btn btn-icon border-none bg-transparent', brushShape === 'circle' && 'tool-active')}
               onClick={() => onBrushShapeChange('circle')}
               title="Circle brush"
             >
-              <Circle size={16} weight="bold" />
+              <CircleIcon size={16} weight="bold" />
             </button>
           </div>
         </>

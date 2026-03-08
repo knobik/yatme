@@ -9,8 +9,19 @@ import type { DoodadBrush } from '../../lib/brushes/DoodadTypes'
 import type { SelectedItemInfo } from '../useSelection'
 import type { CopyBuffer } from '../../lib/CopyBuffer'
 
-export type EditorTool = 'select' | 'draw' | 'erase' | 'door' | 'fill'
+export type EditorTool = 'select' | 'draw' | 'erase' | 'door' | 'fill' | 'zone'
 export type BrushShape = 'square' | 'circle'
+
+export type ZoneSelection =
+  | { type: 'flag'; flag: number; label: string }
+  | { type: 'zone'; zoneId: number; name: string }
+
+export const ZONE_FLAG_DEFS = [
+  { flag: 0x0001, label: 'PZ', color: 0x00c800 },
+  { flag: 0x0004, label: 'No PvP', color: 0x0064c8 },
+  { flag: 0x0008, label: 'No Logout', color: 0xc89600 },
+  { flag: 0x0010, label: 'PvP Zone', color: 0xc80000 },
+] as const
 
 // ── Brush selection (what the user picked in the palette) ───────────
 
@@ -64,6 +75,8 @@ export interface ToolContext {
   cancelPaste: () => void
   // Active tool
   activeToolRef: React.MutableRefObject<EditorTool>
+  // Zone tool
+  selectedZoneRef: React.RefObject<ZoneSelection | null>
 }
 
 // ── Brush resolution ─────────────────────────────────────────────────

@@ -7,7 +7,7 @@ import { getItemDisplayName } from '../lib/items'
 import type { ItemRegistry } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
 import { MIME_TIBIA_ITEM, setCanvasDragImage } from '../lib/dragUtils'
-import { X, CaretDown, PencilSimple } from '@phosphor-icons/react'
+import { XIcon, CaretDownIcon, PencilSimpleIcon } from '@phosphor-icons/react'
 
 interface BrushPaletteProps {
   tilesets: ResolvedTileset[]
@@ -241,7 +241,7 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
         </span>
         <div className="flex-1" />
         <button className="btn btn-icon h-[22px] w-[22px] border-none bg-transparent" onClick={onClose} title="Close (Esc)">
-          <X size={10} weight="bold" />
+          <XIcon size={10} weight="bold" />
         </button>
       </div>
 
@@ -266,7 +266,7 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
             onClick={() => { setTilesetOpen(!tilesetOpen); setTilesetSearch('') }}
           >
             <span className="tileset-select-label">{selectedLabel}</span>
-            <CaretDown size={10} weight="bold" className="shrink-0" />
+            <CaretDownIcon size={10} weight="bold" className="shrink-0" />
           </button>
           {tilesetOpen && (
             <div className="tileset-dropdown">
@@ -356,7 +356,7 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
                     <ItemSprite itemId={spriteId} appearances={appearances} size={36} />
                     {isBrush && (
                       <span className={`brush-badge brush-badge-${entry.brushType}`} title={`Brush: ${entry.brushType}`}>
-                        <PencilSimple size={8} weight="fill" />
+                        <PencilSimpleIcon size={8} weight="fill" />
                       </span>
                     )}
                   </div>

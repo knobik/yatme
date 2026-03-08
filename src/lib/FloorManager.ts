@@ -8,13 +8,15 @@ export class FloorManager {
   private _lastVisibleFloors: number[] = []
 
   private _parent: Container
+  private _zoneOverlay?: Container
   private _overlay: Container
   private _lightOverlay?: Container
 
-  constructor(parent: Container, overlay: Container, lightOverlay?: Container) {
+  constructor(parent: Container, overlay: Container, lightOverlay?: Container, zoneOverlay?: Container) {
     this._parent = parent
     this._overlay = overlay
     this._lightOverlay = lightOverlay
+    this._zoneOverlay = zoneOverlay
   }
 
   /** Get (or lazily create) the container for a floor. */
@@ -69,12 +71,16 @@ export class FloorManager {
         this._parent.removeChild(container)
       }
     }
+    if (this._zoneOverlay?.parent === this._parent) {
+      this._parent.removeChild(this._zoneOverlay)
+    }
     if (this._overlay.parent === this._parent) {
       this._parent.removeChild(this._overlay)
     }
     for (const z of visibleFloors) {
       this._parent.addChild(this._containers.get(z)!)
     }
+    if (this._zoneOverlay) this._parent.addChild(this._zoneOverlay)
     this._parent.addChild(this._overlay)
     if (this._lightOverlay) this._parent.addChild(this._lightOverlay)
 

@@ -7,7 +7,7 @@ import { getItemDisplayName } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
 import { MIME_TIBIA_ITEM, setCanvasDragImage } from '../lib/dragUtils'
 import { itemCategory } from '../proto/appearances'
-import { X, PencilSimple } from '@phosphor-icons/react'
+import { XIcon, PencilSimpleIcon } from '@phosphor-icons/react'
 
 type SmartBrushType = 'ground' | 'wall' | 'carpet' | 'table' | 'doodad' | null
 
@@ -174,7 +174,7 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
         </span>
         <div className="flex-1" />
         <button className="btn btn-icon h-[22px] w-[22px] border-none bg-transparent" onClick={onClose} title="Close (Esc)">
-          <X size={10} weight="bold" />
+          <XIcon size={10} weight="bold" />
         </button>
       </div>
 
@@ -238,7 +238,7 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
                   <ItemSprite itemId={item.id} appearances={appearances} size={36} />
                   {item.brush && (
                     <span className={`brush-badge brush-badge-${item.brush}`} title={`Smart brush: ${item.brush}`}>
-                      <PencilSimple size={8} weight="fill" />
+                      <PencilSimpleIcon size={8} weight="fill" />
                     </span>
                   )}
                 </div>

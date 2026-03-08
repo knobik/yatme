@@ -3,6 +3,7 @@ import { ChunkManager, buildChunkIndex, chunkKeyForTile } from './ChunkManager'
 import { Camera } from './Camera'
 import { TileRenderer } from './TileRenderer'
 import { SelectionOverlay } from './SelectionOverlay'
+import { ZoneOverlay } from './ZoneOverlay'
 import { FloorManager } from './FloorManager'
 import { LightEngine } from './LightEngine'
 import { setupMapInput, type InputHost } from './InputHandler'
@@ -27,6 +28,7 @@ export class MapRenderer implements InputHost {
   // Sub-modules
   private tileRenderer: TileRenderer
   private selection: SelectionOverlay
+  private zoneOverlay: ZoneOverlay
   private floorManager: FloorManager
   private chunkManager: ChunkManager
   private lightEngine: LightEngine
@@ -68,6 +70,7 @@ export class MapRenderer implements InputHost {
     // Sub-modules
     this.tileRenderer = new TileRenderer(appearances)
     this.selection = new SelectionOverlay()
+    this.zoneOverlay = new ZoneOverlay()
 
     // Chunk manager
     const { index, animatedKeys } = buildChunkIndex(mapData.tiles, appearances)
@@ -86,6 +89,9 @@ export class MapRenderer implements InputHost {
     this.mapContainer = new Container()
     this.app.stage.addChild(this.mapContainer)
 
+    // Zone overlay (between tile layers and selection overlay)
+    this.mapContainer.addChild(this.zoneOverlay.container)
+
     // Selection overlay (added to mapContainer; FloorManager keeps it on top)
     this.mapContainer.addChild(this.selection.container)
 
@@ -94,7 +100,7 @@ export class MapRenderer implements InputHost {
     this.mapContainer.addChild(this.lightEngine.container)
 
     // Floor manager
-    this.floorManager = new FloorManager(this.mapContainer, this.selection.container, this.lightEngine.container)
+    this.floorManager = new FloorManager(this.mapContainer, this.selection.container, this.lightEngine.container, this.zoneOverlay.container)
 
     // Input
     this._cleanupInput = setupMapInput(
@@ -131,6 +137,7 @@ export class MapRenderer implements InputHost {
     if (!this.camera.setFloor(z)) return
     this.deselectTile()
     this.recycleAllChunks()
+    this.zoneOverlay.markDirty()
     this.notifyCamera()
   }
 
@@ -185,6 +192,7 @@ export class MapRenderer implements InputHost {
   invalidateChunks(keys: Set<string>): void {
     this.chunkManager.invalidateChunks(keys)
     this.lightEngine.markDirty()
+    this.zoneOverlay.markDirty()
   }
 
   /** Update the chunk index when a tile is created or modified. */
@@ -194,6 +202,14 @@ export class MapRenderer implements InputHost {
   }
 
   // ── Light engine ──────────────────────────────────────────────
+
+  // ── Zone overlay ──────────────────────────────────────────────
+
+  get showZoneOverlay(): boolean { return this.zoneOverlay.visible }
+
+  setShowZoneOverlay(enabled: boolean): void {
+    this.zoneOverlay.setVisible(enabled)
+  }
 
   get showLights(): boolean { return this.lightEngine.enabled }
 
@@ -383,6 +399,9 @@ export class MapRenderer implements InputHost {
 
     this.selection.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
     this.selection.updatePing()
+
+    this.zoneOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
+    this.zoneOverlay.rebuild(this.mapData, this.camera.floor)
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────
@@ -397,6 +416,7 @@ export class MapRenderer implements InputHost {
     this._cleanupInput?.()
     this.recycleAllChunks()
     this.lightEngine.destroy()
+    this.zoneOverlay.destroy()
     this.selection.destroy()
     this.floorManager.destroy()
     this.mapContainer.destroy({ children: true })

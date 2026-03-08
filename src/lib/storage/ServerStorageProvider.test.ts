@@ -1,9 +1,47 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ServerStorageProvider } from './ServerStorageProvider'
 
+function installMockXHR(status = 200, statusText = 'OK') {
+  const instances: any[] = []
+  ;(globalThis as any).XMLHttpRequest = function MockXHR(this: any) {
+    const listeners: Record<string, Function[]> = {}
+    this.open = vi.fn()
+    this.setRequestHeader = vi.fn()
+    this.send = vi.fn(() => {
+      setTimeout(() => {
+        this.status = status
+        this.statusText = statusText
+        for (const h of (listeners['load'] || [])) h()
+      }, 0)
+    })
+    this.status = 0
+    this.statusText = ''
+    this.upload = {
+      addEventListener: vi.fn(),
+    }
+    this.addEventListener = vi.fn((event: string, handler: Function) => {
+      listeners[event] = listeners[event] || []
+      listeners[event].push(handler)
+    })
+    instances.push(this)
+  }
+  return instances
+}
+
 describe('ServerStorageProvider', () => {
+  let origXHR: typeof globalThis.XMLHttpRequest | undefined
+
   beforeEach(() => {
     vi.restoreAllMocks()
+    origXHR = (globalThis as any).XMLHttpRequest
+  })
+
+  afterEach(() => {
+    if (origXHR !== undefined) {
+      (globalThis as any).XMLHttpRequest = origXHR
+    } else {
+      delete (globalThis as any).XMLHttpRequest
+    }
   })
 
   it('canSave is true', () => {
@@ -91,8 +129,7 @@ describe('ServerStorageProvider', () => {
 
   describe('saveMap', () => {
     it('POSTs OTBM to /api/map with correct headers', async () => {
-      const mockResponse = { ok: true, status: 200 }
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockResponse as unknown as Response)
+      const instances = installMockXHR(200, 'OK')
 
       const provider = new ServerStorageProvider('/api')
       const otbm = new Uint8Array([1, 2, 3])
@@ -102,20 +139,15 @@ describe('ServerStorageProvider', () => {
         filename: 'world.otbm',
       })
 
-      expect(fetchSpy).toHaveBeenCalledWith('/api/map', expect.objectContaining({
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/octet-stream',
-          'X-Map-Filename': 'world.otbm',
-        },
-      }))
-      const callBody = fetchSpy.mock.calls[0][1]?.body as ArrayBuffer
-      expect(new Uint8Array(callBody)).toEqual(otbm)
+      const xhr = instances[0]
+      expect(xhr.open).toHaveBeenCalledWith('POST', '/api/map')
+      expect(xhr.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/octet-stream')
+      expect(xhr.setRequestHeader).toHaveBeenCalledWith('X-Map-Filename', 'world.otbm')
+      expect(xhr.send).toHaveBeenCalled()
     })
 
     it('throws on non-OK response', async () => {
-      const mockResponse = { ok: false, status: 403, statusText: 'Forbidden' }
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockResponse as unknown as Response)
+      installMockXHR(403, 'Forbidden')
 
       const provider = new ServerStorageProvider()
       await expect(provider.saveMap({

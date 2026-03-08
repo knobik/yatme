@@ -6,7 +6,7 @@ import { findItemsOnMap, type SearchResult } from '../lib/mapSearch'
 import type { SelectedItemInfo } from '../hooks/useSelection'
 import { ItemPicker } from './ItemPicker'
 import { ScopeSelector } from './ScopeSelector'
-import { X, MagnifyingGlass, MagnifyingGlassMinus } from '@phosphor-icons/react'
+import { XIcon, MagnifyingGlassIcon, MagnifyingGlassMinusIcon } from '@phosphor-icons/react'
 
 interface FindItemDialogProps {
   mapData: OtbmMap
@@ -77,7 +77,7 @@ export function FindItemDialog({
       <div className="flex items-center justify-between px-6 py-4">
         <span className="label text-lg tracking-wide">FIND ITEM</span>
         <button className="btn btn-icon border-none bg-transparent" onClick={onClose} title="Close (Esc)">
-          <X size={14} weight="bold" />
+          <XIcon size={14} weight="bold" />
         </button>
       </div>
 
@@ -155,12 +155,12 @@ export function FindItemDialog({
             </div>
           ) : results !== null ? (
             <div className="find-empty-state">
-              <MagnifyingGlassMinus size={24} className="text-fg-disabled" />
+              <MagnifyingGlassMinusIcon size={24} className="text-fg-disabled" />
               <span>No matches found</span>
             </div>
           ) : (
             <div className="find-empty-state">
-              <MagnifyingGlass size={24} className="text-fg-disabled" />
+              <MagnifyingGlassIcon size={24} className="text-fg-disabled" />
               <span>Select an item and click Find All</span>
             </div>
           )}

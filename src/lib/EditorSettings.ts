@@ -15,6 +15,8 @@ export interface EditorSettings {
   clickToInspect: boolean
   autoMagic: boolean
   mergePaste: boolean
+  showZonePalette: boolean
+  showZoneOverlay: boolean
 }
 
 export const DEFAULT_SETTINGS: EditorSettings = {
@@ -26,6 +28,8 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   clickToInspect: false,
   autoMagic: true,
   mergePaste: true,
+  showZonePalette: false,
+  showZoneOverlay: false,
 }
 
 const SETTINGS_KEY = 'tibia-editor-settings'
@@ -75,5 +79,7 @@ function mergeWithDefaults(parsed: Record<string, unknown>): EditorSettings {
   if (typeof parsed.clickToInspect === 'boolean') s.clickToInspect = parsed.clickToInspect
   if (typeof parsed.autoMagic === 'boolean') s.autoMagic = parsed.autoMagic
   if (typeof parsed.mergePaste === 'boolean') s.mergePaste = parsed.mergePaste
+  if (typeof parsed.showZonePalette === 'boolean') s.showZonePalette = parsed.showZonePalette
+  if (typeof parsed.showZoneOverlay === 'boolean') s.showZoneOverlay = parsed.showZoneOverlay
   return s
 }

@@ -26,7 +26,8 @@ import { loadAssets } from './lib/initPipeline'
 import { setupEditor } from './lib/setupEditor'
 import { findEntryInTilesets } from './lib/tilesets/TilesetLoader'
 import type { BrushSelection } from './hooks/tools/types'
-import { CaretUp, CaretDown, Eye } from '@phosphor-icons/react'
+import { ZonePalette } from './components/ZonePalette'
+import { CaretUpIcon, CaretDownIcon, EyeIcon } from '@phosphor-icons/react'
 import type { CategoryType } from './lib/tilesets/TilesetTypes'
 
 /** Compute left offset for elements that need to dodge all left-side panels. */
@@ -70,6 +71,8 @@ function App() {
   const [appearancesData, setAppearancesData] = useState<AppearanceData | null>(null)
   const [showPalette, setShowPalette] = useState(() => loadSettings().showPalette)
   const [showLights, setShowLights] = useState(() => loadSettings().showLights)
+  const [showZonePalette, setShowZonePalette] = useState(() => loadSettings().showZonePalette)
+  const [showZoneOverlay, setShowZoneOverlay] = useState(() => loadSettings().showZoneOverlay)
 
   // Phase 7 state
   const [mapData, setMapData] = useState<OtbmMap | null>(null)
@@ -239,6 +242,9 @@ function App() {
     }
     setShowPalette(next.showPalette)
     setShowLights(next.showLights)
+    setShowZonePalette(next.showZonePalette)
+    setShowZoneOverlay(next.showZoneOverlay)
+    r?.setShowZoneOverlay(next.showZoneOverlay)
   }, [])
 
   const [saveProgress, setSaveProgress] = useState<number | null>(null)
@@ -417,6 +423,7 @@ function App() {
       renderer.setShowTransparentUpper(savedSettings.showTransparentUpper)
       renderer.setShowLights(savedSettings.showLights)
       renderer.setShowSelectionBorder(savedSettings.selectionBorder)
+      renderer.setShowZoneOverlay(savedSettings.showZoneOverlay)
 
       setLoadingProgress(1)
       setLoadingStatus('Ready')
@@ -615,6 +622,13 @@ function App() {
       } else if (e.key === 'f' && !e.ctrlKey) {
         e.preventDefault()
         toolsRef.current.setActiveTool('fill')
+      } else if (e.key === 'z' && !e.ctrlKey) {
+        e.preventDefault()
+        toolsRef.current.setActiveTool('zone')
+        if (!showZonePalette) {
+          setShowZonePalette(true)
+          setEditorSettings(s => { const u = { ...s, showZonePalette: true }; saveSettings(u); return u })
+        }
       } else if (e.key === ']') {
         e.preventDefault()
         const cur = toolsRef.current.brushSize
@@ -938,6 +952,23 @@ function App() {
           onDoorTypeChange={tools.setActiveDoorType}
           onSave={handleSave}
           canSave={!!mapData}
+          showZonePalette={showZonePalette}
+          onToggleZonePalette={() => {
+            setShowZonePalette(prev => {
+              const next = !prev
+              setEditorSettings(s => { const u = { ...s, showZonePalette: next }; saveSettings(u); return u })
+              return next
+            })
+          }}
+          showZoneOverlay={showZoneOverlay}
+          onToggleZoneOverlay={() => {
+            setShowZoneOverlay(prev => {
+              const next = !prev
+              rendererRef.current?.setShowZoneOverlay(next)
+              setEditorSettings(s => { const u = { ...s, showZoneOverlay: next }; saveSettings(u); return u })
+              return next
+            })
+          }}
         />
       )}
 
@@ -1015,6 +1046,28 @@ function App() {
         />
       )}
 
+      {/* Zone palette — right side */}
+      {!loading && showZonePalette && sidecarsData && (
+        <ZonePalette
+          sidecars={sidecarsData}
+          onSidecarsChange={setSidecarsData}
+          selectedZone={tools.selectedZone}
+          onZoneSelect={(zone) => {
+            tools.setSelectedZone(zone)
+            if (tools.activeTool !== 'zone') tools.setActiveTool('zone')
+            if (!showZoneOverlay) {
+              setShowZoneOverlay(true)
+              rendererRef.current?.setShowZoneOverlay(true)
+              setEditorSettings(s => { const u = { ...s, showZoneOverlay: true }; saveSettings(u); return u })
+            }
+          }}
+          onClose={() => {
+            setShowZonePalette(false)
+            setEditorSettings(s => { const u = { ...s, showZonePalette: false }; saveSettings(u); return u })
+          }}
+        />
+      )}
+
       {/* Browse Tile panel — left side (offset right when palette is open) */}
       {!loading && selectedTilePos && itemRegistry && appearancesData && mapData && mutatorReady && (
         <Inspector
@@ -1062,7 +1115,7 @@ function App() {
             onClick={() => handleFloorChange(-1)}
             title="Floor up (PageUp)"
           >
-            <CaretUp size={16} weight="bold" />
+            <CaretUpIcon size={16} weight="bold" />
           </button>
 
           <span className="value text-accent-fg text-2xl font-medium leading-none py-1">
@@ -1074,7 +1127,7 @@ function App() {
             onClick={() => handleFloorChange(1)}
             title="Floor down (PageDown)"
           >
-            <CaretDown size={16} weight="bold" />
+            <CaretDownIcon size={16} weight="bold" />
           </button>
 
           <div className="mx-1 my-1 h-px w-full bg-border-subtle" />
@@ -1125,7 +1178,7 @@ function App() {
             title="Show transparent upper floor"
             style={{ color: camera.showTransparentUpper ? 'var(--color-accent)' : undefined }}
           >
-            <Eye size={18} weight="bold" />
+            <EyeIcon size={18} weight="bold" />
           </button>
         </div>
       )}
