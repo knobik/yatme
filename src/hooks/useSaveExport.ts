@@ -14,6 +14,31 @@ import { updateAllHouseSizes } from '../lib/houseCleanup'
 import { triggerDownload } from '../lib/triggerDownload'
 import type { SavePhase } from '../components/SaveToast'
 
+/** Open a file picker, read the selected XML file, and pass parsed results to the updater. */
+function importXmlFile<T>(
+  parser: (xml: string) => T[],
+  updater: (items: T[]) => void,
+  label: string,
+) {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.xml'
+  input.onchange = () => {
+    const file = input.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        updater(parser(reader.result as string))
+      } catch (e) {
+        console.error(`[${label}] Failed to parse imported data:`, e)
+      }
+    }
+    reader.readAsText(file)
+  }
+  input.click()
+}
+
 interface UseSaveExportOptions {
   mapData: OtbmMap | null
   mapFilename: string
@@ -83,30 +108,14 @@ export function useSaveExport({
   }, [sidecarsData.zones])
 
   const handleImportZones = useCallback(() => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.xml'
-    input.onchange = () => {
-      const file = input.files?.[0]
-      if (!file) return
-      const reader = new FileReader()
-      reader.onload = () => {
-        try {
-          const text = reader.result as string
-          const imported = parseZonesXml(text)
-          setSidecarsData(prev => {
-            const existingIds = new Set(prev.zones.map(z => z.id))
-            const newZones = imported.filter(z => !existingIds.has(z.id))
-            if (newZones.length === 0) return prev
-            return { ...prev, zones: [...prev.zones, ...newZones] }
-          })
-        } catch (e) {
-          console.error('[Zones] Failed to parse imported zones:', e)
-        }
-      }
-      reader.readAsText(file)
-    }
-    input.click()
+    importXmlFile(parseZonesXml, (imported) => {
+      setSidecarsData(prev => {
+        const existingIds = new Set(prev.zones.map(z => z.id))
+        const newZones = imported.filter(z => !existingIds.has(z.id))
+        if (newZones.length === 0) return prev
+        return { ...prev, zones: [...prev.zones, ...newZones] }
+      })
+    }, 'Zones')
   }, [])
 
   const handleExportHouses = useCallback(() => {
@@ -114,30 +123,14 @@ export function useSaveExport({
   }, [sidecarsData.houses])
 
   const handleImportHouses = useCallback(() => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.xml'
-    input.onchange = () => {
-      const file = input.files?.[0]
-      if (!file) return
-      const reader = new FileReader()
-      reader.onload = () => {
-        try {
-          const text = reader.result as string
-          const imported = parseHousesXml(text)
-          setSidecarsData(prev => {
-            const existingIds = new Set(prev.houses.map(h => h.id))
-            const newHouses = imported.filter(h => !existingIds.has(h.id))
-            if (newHouses.length === 0) return prev
-            return { ...prev, houses: [...prev.houses, ...newHouses] }
-          })
-        } catch (e) {
-          console.error('[Houses] Failed to parse imported houses:', e)
-        }
-      }
-      reader.readAsText(file)
-    }
-    input.click()
+    importXmlFile(parseHousesXml, (imported) => {
+      setSidecarsData(prev => {
+        const existingIds = new Set(prev.houses.map(h => h.id))
+        const newHouses = imported.filter(h => !existingIds.has(h.id))
+        if (newHouses.length === 0) return prev
+        return { ...prev, houses: [...prev.houses, ...newHouses] }
+      })
+    }, 'Houses')
   }, [])
 
   return {

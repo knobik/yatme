@@ -29,6 +29,7 @@ import { useEditorInit, type CameraState } from './hooks/useEditorInit'
 import { useContextMenu } from './hooks/useContextMenu'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useSaveExport } from './hooks/useSaveExport'
+import { useToolAutoToggle } from './hooks/useToolAutoToggle'
 import { FloorSelector } from './components/FloorSelector'
 import { LoadingOverlay } from './components/LoadingOverlay'
 import { HudField } from './components/HudField'
@@ -187,83 +188,33 @@ function App() {
     mapData, mapFilename, sidecarsData, setSidecarsData, storageRef,
   })
 
-  // ── Auto-toggle zone overlay/palette when zone tool is active ──────
-  const zoneOverlayBeforeRef = useRef<boolean | null>(null)
-  const zonePaletteBeforeRef = useRef<boolean | null>(null)
-  const showZoneOverlayRef = useRef(showZoneOverlay)
-  const showZonePaletteRef = useRef(showZonePalette)
-  showZoneOverlayRef.current = showZoneOverlay
-  showZonePaletteRef.current = showZonePalette
-
-  useEffect(() => {
-    if (tools.activeTool === 'zone') {
-      if (!showZoneOverlayRef.current) {
-        zoneOverlayBeforeRef.current = false
-        setShowZoneOverlay(true)
-        rendererRef.current?.setShowZoneOverlay(true)
-        setEditorSettings(s => { const u = { ...s, showZoneOverlay: true }; saveSettings(u); return u })
-      }
-      if (!showZonePaletteRef.current) {
-        zonePaletteBeforeRef.current = false
-        setShowZonePalette(true)
-        setEditorSettings(s => { const u = { ...s, showZonePalette: true }; saveSettings(u); return u })
-      }
-    } else {
-      if (zoneOverlayBeforeRef.current === false) {
-        zoneOverlayBeforeRef.current = null
-        setShowZoneOverlay(false)
-        rendererRef.current?.setShowZoneOverlay(false)
-        setEditorSettings(s => { const u = { ...s, showZoneOverlay: false }; saveSettings(u); return u })
-      }
-      if (zonePaletteBeforeRef.current === false) {
-        zonePaletteBeforeRef.current = null
-        setShowZonePalette(false)
-        setEditorSettings(s => { const u = { ...s, showZonePalette: false }; saveSettings(u); return u })
-      }
-    }
-  }, [tools.activeTool])
-
-  // ── Auto-toggle house overlay/palette when house tool is active ────
-  const houseOverlayBeforeRef = useRef<boolean | null>(null)
-  const housePaletteBeforeRef = useRef<boolean | null>(null)
-  const showHouseOverlayRef = useRef(showHouseOverlay)
-  const showHousePaletteRef = useRef(showHousePalette)
-  showHouseOverlayRef.current = showHouseOverlay
-  showHousePaletteRef.current = showHousePalette
-
-  useEffect(() => {
-    if (tools.activeTool === 'house') {
-      if (!showHouseOverlayRef.current) {
-        houseOverlayBeforeRef.current = false
-        setShowHouseOverlay(true)
-        rendererRef.current?.setShowHouseOverlay(true)
-        setEditorSettings(s => { const u = { ...s, showHouseOverlay: true }; saveSettings(u); return u })
-      }
-      if (!showHousePaletteRef.current) {
-        housePaletteBeforeRef.current = false
-        setShowHousePalette(true)
-        setEditorSettings(s => { const u = { ...s, showHousePalette: true }; saveSettings(u); return u })
-      }
-    } else {
-      if (houseOverlayBeforeRef.current === false) {
-        houseOverlayBeforeRef.current = null
-        setShowHouseOverlay(false)
-        rendererRef.current?.setShowHouseOverlay(false)
-        setEditorSettings(s => { const u = { ...s, showHouseOverlay: false }; saveSettings(u); return u })
-      }
-      if (housePaletteBeforeRef.current === false) {
-        housePaletteBeforeRef.current = null
-        setShowHousePalette(false)
-        setEditorSettings(s => { const u = { ...s, showHousePalette: false }; saveSettings(u); return u })
-      }
-    }
-  }, [tools.activeTool])
+  // ── Auto-toggle overlay/palette when zone or house tool is active ───
+  useToolAutoToggle(
+    tools.activeTool, 'zone',
+    { show: showZoneOverlay, setShow: setShowZoneOverlay, rendererSet: (v) => rendererRef.current?.setShowZoneOverlay(v), settingsKey: 'showZoneOverlay' },
+    { show: showZonePalette, setShow: setShowZonePalette, settingsKey: 'showZonePalette' },
+    setEditorSettings,
+  )
+  useToolAutoToggle(
+    tools.activeTool, 'house',
+    { show: showHouseOverlay, setShow: setShowHouseOverlay, rendererSet: (v) => rendererRef.current?.setShowHouseOverlay(v), settingsKey: 'showHouseOverlay' },
+    { show: showHousePalette, setShow: setShowHousePalette, settingsKey: 'showHousePalette' },
+    setEditorSettings,
+  )
 
   useEffect(() => {
     if (rendererReady) {
       rendererReady.setHighlights(deriveHighlights(tools.selectedItems, mapData!))
     }
   }, [tools.selectedItems, rendererReady])
+
+  useEffect(() => {
+    rendererRef.current?.setActiveZone(tools.selectedZone)
+  }, [tools.selectedZone])
+
+  useEffect(() => {
+    rendererRef.current?.setActiveHouse(tools.selectedHouse?.id ?? null)
+  }, [tools.selectedHouse])
 
   useEffect(() => {
     rendererRef.current?.setShowSelectionBorder(editorSettings.selectionBorder)

@@ -58,27 +58,26 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
     setPlacingHouseExit,
   } = options
 
-  const borderizeCurrentSelection = useCallback(() => {
+  const getUniqueTilePositions = useCallback(() => {
     const sel = toolsRef.current.selectedItems
-    if (sel.length === 0 || !mutatorRef.current) return
-    const uniqueTiles = new Map<string, { x: number; y: number; z: number }>()
+    if (sel.length === 0) return null
+    const unique = new Map<string, { x: number; y: number; z: number }>()
     for (const item of sel) {
       const key = `${item.x},${item.y},${item.z}`
-      if (!uniqueTiles.has(key)) uniqueTiles.set(key, { x: item.x, y: item.y, z: item.z })
+      if (!unique.has(key)) unique.set(key, { x: item.x, y: item.y, z: item.z })
     }
-    mutatorRef.current.borderizeSelection([...uniqueTiles.values()])
-  }, [toolsRef, mutatorRef])
+    return [...unique.values()]
+  }, [toolsRef])
+
+  const borderizeCurrentSelection = useCallback(() => {
+    const tiles = getUniqueTilePositions()
+    if (tiles && mutatorRef.current) mutatorRef.current.borderizeSelection(tiles)
+  }, [getUniqueTilePositions, mutatorRef])
 
   const randomizeCurrentSelection = useCallback(() => {
-    const sel = toolsRef.current.selectedItems
-    if (sel.length === 0 || !mutatorRef.current) return
-    const uniqueTiles = new Map<string, { x: number; y: number; z: number }>()
-    for (const item of sel) {
-      const key = `${item.x},${item.y},${item.z}`
-      if (!uniqueTiles.has(key)) uniqueTiles.set(key, { x: item.x, y: item.y, z: item.z })
-    }
-    mutatorRef.current.randomizeSelection([...uniqueTiles.values()])
-  }, [toolsRef, mutatorRef])
+    const tiles = getUniqueTilePositions()
+    if (tiles && mutatorRef.current) mutatorRef.current.randomizeSelection(tiles)
+  }, [getUniqueTilePositions, mutatorRef])
 
   // Keyboard shortcuts
   useEffect(() => {
