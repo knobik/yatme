@@ -128,6 +128,12 @@ Mark tiles as house tiles, set house IDs, place house exits.
 - **RME ref**: `vendor/remeres-map-editor/source/house_exit_brush.h` / `.cpp`
 - **RME ref**: `vendor/remeres-map-editor/source/house.h` / `.cpp`
 
+### Town Editor
+Edit towns dialog (Map > Edit Towns): add/rename/delete towns, set temple position (x,y,z). Towns stored in OTBM as `OTBM_TOWNS`/`OTBM_TOWN` nodes. Houses reference towns via `townid`. Cannot delete a town that still has houses.
+- **RME ref**: `vendor/remeres-map-editor/source/town.h` / `.cpp`
+- **RME ref**: `vendor/remeres-map-editor/source/common_windows.cpp` (`EditTownsDialog`)
+- **RME ref**: `vendor/remeres-map-editor/source/iomap_otbm.cpp` (lines ~876-923 read, ~1691-1703 write)
+
 ### Monster & NPC Spawns
 Place individual monsters/NPCs and define spawn areas with radius.
 - **RME ref**: `vendor/remeres-map-editor/source/monster_brush.h` / `.cpp`
