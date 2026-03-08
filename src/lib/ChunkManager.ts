@@ -326,18 +326,44 @@ export class ChunkManager {
     this.processBuildQueue(frameStart)
   }
 
-  /** Invalidate specific chunks, forcing them to rebuild on next frame. */
+  /** Invalidate specific chunks, rebuilding active ones in-place. */
   invalidateChunks(keys: Set<string>): void {
     for (const key of keys) {
       const active = this.activeChunks.get(key)
       if (active) {
-        destroyContainer(active)
-        this.activeChunks.delete(key)
+        // In-place rebuild: reuse the existing container instead of destroy+recreate
+        const tiles = this.chunkIndex.get(key)
+        if (tiles && tiles.length > 0) {
+          active.removeChildren()
+          const hlSprites: Sprite[] = []
+          const animSprites = this.buildChunkSync(active, tiles, this._animElapsed, hlSprites)
+          if (animSprites.length > 0) {
+            this._chunkAnimSprites.set(key, animSprites)
+          } else {
+            this._chunkAnimSprites.delete(key)
+          }
+          if (hlSprites.length > 0) {
+            this._chunkHighlightSprites.set(key, hlSprites)
+          } else {
+            this._chunkHighlightSprites.delete(key)
+          }
+          if (active.isCachedAsTexture) {
+            active.updateCacheTexture()
+          }
+          this.preloadAndRebuild(active, tiles, key)
+        } else {
+          destroyContainer(active)
+          this.activeChunks.delete(key)
+          this._chunkAnimSprites.delete(key)
+          this._chunkHighlightSprites.delete(key)
+        }
+      } else {
+        // Not active — just evict from cache so it rebuilds fresh when scrolled into view
+        this.chunkCache.delete(key)
+        this._chunkAnimSprites.delete(key)
+        this._chunkHighlightSprites.delete(key)
+        this._priorityKeys.add(key)
       }
-      this.chunkCache.delete(key)
-      this._chunkAnimSprites.delete(key)
-      this._chunkHighlightSprites.delete(key)
-      this._priorityKeys.add(key)
     }
     this._lastRangeKey = ''
   }

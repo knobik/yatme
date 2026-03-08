@@ -21,6 +21,7 @@ export abstract class TileOverlay {
   private _visible = false
   private _dirty = true
   private _painting = false
+  private _erasing = false
   private _lastFloorOffset = NaN
 
   constructor() {
@@ -44,13 +45,20 @@ export abstract class TileOverlay {
     this._dirty = true
   }
 
-  beginPaint(): void {
+  beginPaint(erasing = false): void {
     this._painting = true
+    this._erasing = erasing
     this._live.clear()
+    if (erasing) {
+      // When erasing we need to rebuild _base each frame since we can't
+      // "un-draw" rects from _base. Mark dirty so rebuild() runs.
+      this._dirty = true
+    }
   }
 
   endPaint(): void {
     this._painting = false
+    this._erasing = false
     this._live.clear()
     this._dirty = true
   }
@@ -63,7 +71,7 @@ export abstract class TileOverlay {
   }
 
   rebuild(mapData: OtbmMap, floor: number): void {
-    if (!this._visible || !this._dirty || this._painting) return
+    if (!this._visible || !this._dirty || (this._painting && !this._erasing)) return
     this._dirty = false
 
     const g = this._base
@@ -95,6 +103,8 @@ export abstract class TileOverlay {
     g.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
     g.fill({ color, alpha })
   }
+
+  protected get isPaintErasing(): boolean { return this._erasing }
 
   protected get liveGraphics(): Graphics { return this._live }
 

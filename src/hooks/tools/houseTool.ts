@@ -6,7 +6,7 @@ export function createHouseHandlers(ctx: ToolContext) {
     label: 'Paint house',
     eraseLabel: 'Remove house',
     isReady: () => ctx.selectedHouseRef.current != null,
-    beginPaint: () => ctx.renderer.beginHousePaint(),
+    beginPaint: (erasing) => ctx.renderer.beginHousePaint(erasing),
     endPaint: () => ctx.renderer.endHousePaint(),
     applyToTile: (x, y, z, erasing) => {
       const houseId = ctx.selectedHouseRef.current!

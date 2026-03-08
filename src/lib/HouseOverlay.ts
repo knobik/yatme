@@ -13,9 +13,13 @@ export class HouseOverlay extends TileOverlay {
   }
 
   paintTile(x: number, y: number, houseId: number | undefined): void {
-    if (!this.isVisible || houseId == null) return
-    const active = this._activeHouseId === houseId
-    this.fillRect(this.liveGraphics, x, y, houseColorHex(houseId), this.alphaFor(active))
+    if (!this.isVisible) return
+    if (this.isPaintErasing) {
+      this.markDirty()
+    } else if (houseId != null) {
+      const active = this._activeHouseId === houseId
+      this.fillRect(this.liveGraphics, x, y, houseColorHex(houseId), this.alphaFor(active))
+    }
   }
 
   protected hasActiveSelection(): boolean {

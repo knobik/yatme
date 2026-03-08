@@ -6,7 +6,7 @@ export function createZoneHandlers(ctx: ToolContext) {
     label: 'Paint zone',
     eraseLabel: 'Remove zone',
     isReady: () => ctx.selectedZoneRef.current != null,
-    beginPaint: () => ctx.renderer.beginZonePaint(),
+    beginPaint: (erasing) => ctx.renderer.beginZonePaint(erasing),
     endPaint: () => ctx.renderer.endZonePaint(),
     applyToTile: (x, y, z, erasing) => {
       const zone = ctx.selectedZoneRef.current!

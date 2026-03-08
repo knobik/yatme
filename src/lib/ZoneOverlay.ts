@@ -21,7 +21,11 @@ export class ZoneOverlay extends TileOverlay {
 
   paintTile(x: number, y: number, flags: number, zones: number[] | undefined): void {
     if (!this.isVisible) return
-    this._drawZoneTile(this.liveGraphics, x, y, flags, zones)
+    if (this.isPaintErasing) {
+      this.markDirty()
+    } else {
+      this._drawZoneTile(this.liveGraphics, x, y, flags, zones)
+    }
   }
 
   protected hasActiveSelection(): boolean {

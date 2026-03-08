@@ -202,7 +202,7 @@ export class MapRenderer implements InputHost {
 
   // ── Editor support ─────────────────────────────────────────────
 
-  /** Invalidate specific chunks, forcing them to rebuild on next frame. */
+  /** Invalidate specific chunks, rebuilding active ones in-place. */
   invalidateChunks(keys: Set<string>): void {
     this.chunkManager.invalidateChunks(keys)
     this.lightEngine.markDirty()
@@ -235,8 +235,8 @@ export class MapRenderer implements InputHost {
     this.zoneOverlay.setActiveZone(zone)
   }
 
-  beginZonePaint(): void {
-    this.zoneOverlay.beginPaint()
+  beginZonePaint(erasing = false): void {
+    this.zoneOverlay.beginPaint(erasing)
   }
 
   paintZoneTile(x: number, y: number, flags: number, zones: number[] | undefined): void {
@@ -263,8 +263,8 @@ export class MapRenderer implements InputHost {
     this.houseOverlay.setActiveHouse(houseId)
   }
 
-  beginHousePaint(): void {
-    this.houseOverlay.beginPaint()
+  beginHousePaint(erasing = false): void {
+    this.houseOverlay.beginPaint(erasing)
   }
 
   paintHouseTile(x: number, y: number, houseId: number | undefined): void {
