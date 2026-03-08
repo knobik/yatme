@@ -1,37 +1,29 @@
-import type { ToolContext, TilePos } from './types'
-import { resolveBrush, brushBatchName, applyBrushToTile, getTilesInBrush } from './types'
+import type { ToolContext } from './types'
+import { resolveBrush, brushBatchName, eraseBatchName, applyBrushToTile, eraseBrushFromTile } from './types'
+import { createPaintToolHandlers } from './paintTool'
 
 export function createDrawHandlers(ctx: ToolContext) {
-  function onDown(pos: TilePos) {
+  function resolveLabel(erase: boolean): string {
     const selection = ctx.selectedBrushRef.current
-    if (!selection) return
-    ctx.paintedTilesRef.current.clear()
+    if (!selection) return erase ? 'Erase' : 'Draw'
     const brush = resolveBrush(selection, ctx.brushRegistryRef.current)
-    ctx.mutator.beginBatch(brushBatchName(brush))
-    const tiles = getTilesInBrush(pos.x, pos.y, ctx.brushSizeRef.current, ctx.brushShapeRef.current)
-    for (const t of tiles) {
-      const key = `${t.x},${t.y}`
-      ctx.paintedTilesRef.current.add(key)
-      applyBrushToTile(ctx.mutator, t.x, t.y, pos.z, brush, ctx.brushSizeRef.current)
-    }
-    ctx.mutator.flushChunkUpdates()
+    return erase ? eraseBatchName(brush) : brushBatchName(brush)
   }
 
-  function onMove(pos: TilePos) {
-    const selection = ctx.selectedBrushRef.current
-    if (!selection) return
-    const brush = resolveBrush(selection, ctx.brushRegistryRef.current)
-    const tiles = getTilesInBrush(pos.x, pos.y, ctx.brushSizeRef.current, ctx.brushShapeRef.current)
-    let any = false
-    for (const t of tiles) {
-      const key = `${t.x},${t.y}`
-      if (ctx.paintedTilesRef.current.has(key)) continue
-      ctx.paintedTilesRef.current.add(key)
-      applyBrushToTile(ctx.mutator, t.x, t.y, pos.z, brush, ctx.brushSizeRef.current)
-      any = true
-    }
-    if (any) ctx.mutator.flushChunkUpdates()
-  }
-
-  return { onDown, onMove }
+  return createPaintToolHandlers(ctx, {
+    get label() { return resolveLabel(false) },
+    get eraseLabel() { return resolveLabel(true) },
+    isReady: () => ctx.selectedBrushRef.current != null,
+    flushChunks: true,
+    applyToTile: (x, y, z, erasing) => {
+      const selection = ctx.selectedBrushRef.current
+      if (!selection) return
+      const brush = resolveBrush(selection, ctx.brushRegistryRef.current)
+      if (erasing) {
+        eraseBrushFromTile(ctx.mutator, x, y, z, brush, ctx.brushRegistryRef.current)
+      } else {
+        applyBrushToTile(ctx.mutator, x, y, z, brush, ctx.brushSizeRef.current)
+      }
+    },
+  })
 }

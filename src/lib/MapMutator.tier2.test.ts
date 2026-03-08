@@ -727,8 +727,8 @@ describe('MapMutator — Tier 2', () => {
     })
   })
 
-  describe('removeDoodadItems', () => {
-    it('removes matching doodad items', () => {
+  describe('removeBrushItems', () => {
+    it('removes items matching the predicate', () => {
       const appearances = makeLayeredAppearances()
       const brush = makeDoodadBrush({
         id: 1, name: 'flower',
@@ -739,7 +739,7 @@ describe('MapMutator — Tier 2', () => {
       const mutator = new MapMutator(mapData, appearances)
       mutator.brushRegistry = registry
 
-      mutator.removeDoodadItems(10, 10, 7, brush)
+      mutator.removeBrushItems(10, 10, 7, 'Erase doodad', id => registry.getDoodadBrushForItem(id)?.id === brush.id)
       expect(mapData.tiles.get('10,10,7')!.items.length).toBe(0)
     })
 
@@ -754,7 +754,7 @@ describe('MapMutator — Tier 2', () => {
       const mutator = new MapMutator(mapData, appearances)
       mutator.brushRegistry = registry
 
-      mutator.removeDoodadItems(10, 10, 7, brush)
+      mutator.removeBrushItems(10, 10, 7, 'Erase doodad', id => registry.getDoodadBrushForItem(id)?.id === brush.id)
       expect(mapData.tiles.get('10,10,7')!.items.length).toBe(1)
     })
   })

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createDrawHandlers } from './drawTool'
-import { makeToolContext } from '../../test/toolFixtures'
+import { makeToolContext, makePointerEvent } from '../../test/toolFixtures'
 import { makeGroundBrush, makeMinimalRegistry } from '../../test/brushFixtures'
 
 // Mock resolveBrush — we control what brush is "selected"
@@ -32,7 +32,7 @@ describe('drawTool', () => {
       ctx.paintedTilesRef.current.add('old')
 
       const { onDown } = createDrawHandlers(ctx)
-      onDown({ x: 5, y: 5, z: 7 })
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
 
       expect(ctx.paintedTilesRef.current.has('old')).toBe(false)
       expect(mutator.beginBatch).toHaveBeenCalledWith('Paint ground')
@@ -46,7 +46,7 @@ describe('drawTool', () => {
       })
 
       const { onDown } = createDrawHandlers(ctx)
-      onDown({ x: 5, y: 5, z: 7 })
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
 
       expect(mutator.paintGround).toHaveBeenCalledTimes(1)
       expect(mutator.paintGround).toHaveBeenCalledWith(5, 5, 7, grassBrush)
@@ -61,7 +61,7 @@ describe('drawTool', () => {
       })
 
       const { onDown } = createDrawHandlers(ctx)
-      onDown({ x: 5, y: 5, z: 7 })
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
 
       expect(mutator.paintGround).toHaveBeenCalledTimes(9)
     })
@@ -78,7 +78,7 @@ describe('drawTool', () => {
       mutator.flushChunkUpdates.mockImplementation(() => { callOrder.push('flushChunkUpdates') })
 
       const { onDown } = createDrawHandlers(ctx)
-      onDown({ x: 5, y: 5, z: 7 })
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
 
       expect(callOrder[callOrder.length - 1]).toBe('flushChunkUpdates')
     })
@@ -86,7 +86,7 @@ describe('drawTool', () => {
     it('no-op when no brush selected (selectedBrushRef is null)', () => {
       const { ctx, mutator } = makeToolContext({ selectedBrush: null })
       const { onDown } = createDrawHandlers(ctx)
-      onDown({ x: 5, y: 5, z: 7 })
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
 
       expect(mutator.beginBatch).not.toHaveBeenCalled()
     })
@@ -101,7 +101,7 @@ describe('drawTool', () => {
       })
 
       const { onDown, onMove } = createDrawHandlers(ctx)
-      onDown({ x: 5, y: 5, z: 7 })
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
       expect(mutator.paintGround).toHaveBeenCalledTimes(1)
 
       onMove({ x: 5, y: 5, z: 7 }) // same tile
@@ -116,7 +116,7 @@ describe('drawTool', () => {
       })
 
       const { onDown, onMove } = createDrawHandlers(ctx)
-      onDown({ x: 5, y: 5, z: 7 })
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
       onMove({ x: 6, y: 5, z: 7 }) // new tile
       onMove({ x: 5, y: 5, z: 7 }) // already done on onDown
 
@@ -131,7 +131,7 @@ describe('drawTool', () => {
       })
 
       const { onDown, onMove } = createDrawHandlers(ctx)
-      onDown({ x: 5, y: 5, z: 7 })
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
       onMove({ x: 6, y: 5, z: 7 })
       onMove({ x: 7, y: 5, z: 7 })
       onMove({ x: 6, y: 5, z: 7 }) // already done

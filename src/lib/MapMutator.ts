@@ -496,32 +496,26 @@ export class MapMutator {
   paintGround(x: number, y: number, z: number, brush: GroundBrush): void {
     const registry = this._brushRegistry!
     this.autoBatch('Paint ground', () => {
-      // 1. Pick random ground item from brush
-      const groundItemId = registry.pickRandomItem(brush)
-      if (!groundItemId) return
-
-      // 2. Replace ground item on center tile
       const tile = this.getOrCreateTile(x, y, z)
+
       const oldItems = deepCloneItems(tile.items)
 
-      // Remove existing ground item
+      // Replace ground item on center tile
+      const groundItemId = registry.pickRandomItem(brush)
+      if (!groundItemId) return
       const groundIdx = tile.items.findIndex(
         it => classifyItem(it.id, this.appearances) === 'ground'
       )
       if (groundIdx >= 0) {
         tile.items.splice(groundIdx, 1)
       }
-      // Insert new ground at position 0
       tile.items.splice(0, 0, { id: groundItemId })
 
-      // 3. Remove old border items from center tile
+      // Recompute borders for center tile
       this.removeBorderItems(tile, registry)
-
-      // 4. Recompute borders for center tile
       const centerBorders = computeBorders(x, y, z, this.mapData, registry)
       this.insertBorderItems(tile, centerBorders)
 
-      // Record as setTileItems for clean undo
       this.recordAction({
         type: 'setTileItems', x, y, z,
         oldItems,
@@ -529,14 +523,40 @@ export class MapMutator {
       })
       this.onTileChanged?.(x, y, z)
 
-      // 5. Recompute borders for 8 neighbors
-      this.updateNeighborTiles(x, y, z, OFFSETS_8, {
-        update: (tile, nx, ny) => {
-          this.removeBorderItems(tile, registry)
-          const newBorders = computeBorders(nx, ny, z, this.mapData, registry)
-          this.insertBorderItems(tile, newBorders)
-        },
+      // Recompute borders for 8 neighbors
+      this.reborderNeighbors(x, y, z)
+    })
+  }
+
+  eraseGround(x: number, y: number, z: number, brush: GroundBrush): void {
+    const registry = this._brushRegistry!
+    this.autoBatch('Erase ground', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile) return
+
+      const oldItems = deepCloneItems(tile.items)
+
+      // Remove ground item belonging to this brush
+      const groundIdx = tile.items.findIndex(
+        it => classifyItem(it.id, this.appearances) === 'ground' && registry.getBrushForItem(it.id)?.id === brush.id
+      )
+      if (groundIdx < 0) return
+      tile.items.splice(groundIdx, 1)
+
+      // Recompute borders for center tile
+      this.removeBorderItems(tile, registry)
+      const centerBorders = computeBorders(x, y, z, this.mapData, registry)
+      this.insertBorderItems(tile, centerBorders)
+
+      this.recordAction({
+        type: 'setTileItems', x, y, z,
+        oldItems,
+        newItems: deepCloneItems(tile.items),
       })
+      this.onTileChanged?.(x, y, z)
+
+      // Recompute borders for 8 neighbors
+      this.reborderNeighbors(x, y, z)
     })
   }
 
@@ -546,6 +566,7 @@ export class MapMutator {
     const registry = this._brushRegistry!
     this.autoBatch('Paint wall', () => {
       const tile = this.getOrCreateTile(x, y, z)
+
       const oldItems = deepCloneItems(tile.items)
 
       // Remove existing wall items from the SAME brush on this tile
@@ -564,20 +585,16 @@ export class MapMutator {
           break
         }
       }
-      if (!placeholderId) return // brush has no items
+      if (!placeholderId) return
 
-      // Insert at correct layer position (walls go in 'bottom' or 'common' layer)
       const layer = classifyItem(placeholderId, this.appearances)
       const index = this.findInsertIndex(tile, layer)
       tile.items.splice(index, 0, { id: placeholderId })
 
       // Run doWalls() on center tile to get correctly aligned wall items
       const alignedWalls = doWalls(x, y, z, this.mapData, registry)
-
-      // Replace wall items on this tile with aligned ones
       this.replaceWallItems(tile, alignedWalls, registry)
 
-      // Record the change
       this.recordAction({
         type: 'setTileItems', x, y, z,
         oldItems,
@@ -586,13 +603,38 @@ export class MapMutator {
       this.onTileChanged?.(x, y, z)
 
       // Update 4 cardinal neighbors
-      this.updateNeighborTiles(x, y, z, OFFSETS_4, {
-        filter: (tile) => tile.items.some(item => registry.isWallItem(item.id)),
-        update: (tile, nx, ny) => {
-          const neighborWalls = doWalls(nx, ny, z, this.mapData, registry)
-          this.replaceWallItems(tile, neighborWalls, registry)
-        },
+      this.realignWallNeighbors(x, y, z)
+    })
+  }
+
+  eraseWall(x: number, y: number, z: number, brush: WallBrush): void {
+    const registry = this._brushRegistry!
+    this.autoBatch('Erase wall', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile) return
+
+      const oldItems = deepCloneItems(tile.items)
+
+      // Remove existing wall items from the SAME brush on this tile
+      let removed = false
+      for (let i = tile.items.length - 1; i >= 0; i--) {
+        const wb = registry.getWallBrushForItem(tile.items[i].id)
+        if (wb && wb.id === brush.id) {
+          tile.items.splice(i, 1)
+          removed = true
+        }
+      }
+      if (!removed) return
+
+      this.recordAction({
+        type: 'setTileItems', x, y, z,
+        oldItems,
+        newItems: deepCloneItems(tile.items),
       })
+      this.onTileChanged?.(x, y, z)
+
+      // Update 4 cardinal neighbors
+      this.realignWallNeighbors(x, y, z)
     })
   }
 
@@ -688,6 +730,7 @@ export class MapMutator {
     const registry = this._brushRegistry!
     this.autoBatch('Paint carpet', () => {
       const tile = this.getOrCreateTile(x, y, z)
+
       const oldItems = deepCloneItems(tile.items)
 
       // Remove existing carpet items from the SAME brush on this tile
@@ -704,7 +747,6 @@ export class MapMutator {
       if (centerNode.items.length > 0) {
         placeholderId = centerNode.items[0].id
       } else {
-        // Fallback: first available item from any slot
         for (const node of brush.carpetItems) {
           if (node.items.length > 0) { placeholderId = node.items[0].id; break }
         }
@@ -715,7 +757,6 @@ export class MapMutator {
       const index = this.findInsertIndex(tile, layer)
       tile.items.splice(index, 0, { id: placeholderId })
 
-      // Run doCarpets() to get correctly aligned items
       const alignedCarpets = doCarpets(x, y, z, this.mapData, registry)
       this.replaceBrushItems(tile, alignedCarpets, registry, 'carpet')
 
@@ -726,7 +767,35 @@ export class MapMutator {
       })
       this.onTileChanged?.(x, y, z)
 
-      // Update 8 neighbors (carpets use 8-directional)
+      this.updateNeighborBrush(x, y, z, registry, 'carpet')
+    })
+  }
+
+  eraseCarpet(x: number, y: number, z: number, brush: CarpetBrush): void {
+    const registry = this._brushRegistry!
+    this.autoBatch('Erase carpet', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile) return
+
+      const oldItems = deepCloneItems(tile.items)
+
+      let removed = false
+      for (let i = tile.items.length - 1; i >= 0; i--) {
+        const cb = registry.getCarpetBrushForItem(tile.items[i].id)
+        if (cb && cb.id === brush.id) {
+          tile.items.splice(i, 1)
+          removed = true
+        }
+      }
+      if (!removed) return
+
+      this.recordAction({
+        type: 'setTileItems', x, y, z,
+        oldItems,
+        newItems: deepCloneItems(tile.items),
+      })
+      this.onTileChanged?.(x, y, z)
+
       this.updateNeighborBrush(x, y, z, registry, 'carpet')
     })
   }
@@ -737,6 +806,7 @@ export class MapMutator {
     const registry = this._brushRegistry!
     this.autoBatch('Paint table', () => {
       const tile = this.getOrCreateTile(x, y, z)
+
       const oldItems = deepCloneItems(tile.items)
 
       // Remove existing table items from the SAME brush on this tile
@@ -747,7 +817,6 @@ export class MapMutator {
         }
       }
 
-      // Pick an alone item as placeholder
       let placeholderId = 0
       const aloneNode = brush.tableItems[TABLE_ALONE]
       if (aloneNode.items.length > 0) {
@@ -765,6 +834,35 @@ export class MapMutator {
 
       const alignedTables = doTables(x, y, z, this.mapData, registry)
       this.replaceBrushItems(tile, alignedTables, registry, 'table')
+
+      this.recordAction({
+        type: 'setTileItems', x, y, z,
+        oldItems,
+        newItems: deepCloneItems(tile.items),
+      })
+      this.onTileChanged?.(x, y, z)
+
+      this.updateNeighborBrush(x, y, z, registry, 'table')
+    })
+  }
+
+  eraseTable(x: number, y: number, z: number, brush: TableBrush): void {
+    const registry = this._brushRegistry!
+    this.autoBatch('Erase table', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile) return
+
+      const oldItems = deepCloneItems(tile.items)
+
+      let removed = false
+      for (let i = tile.items.length - 1; i >= 0; i--) {
+        const tb = registry.getTableBrushForItem(tile.items[i].id)
+        if (tb && tb.id === brush.id) {
+          tile.items.splice(i, 1)
+          removed = true
+        }
+      }
+      if (!removed) return
 
       this.recordAction({
         type: 'setTileItems', x, y, z,
@@ -988,17 +1086,16 @@ export class MapMutator {
     })
   }
 
-  removeDoodadItems(x: number, y: number, z: number, brush: DoodadBrush): void {
-    const registry = this._brushRegistry!
-    this.autoBatch('Remove doodad', () => {
+  /** Remove items from a tile that match the given predicate. No-op if nothing matches. */
+  removeBrushItems(x: number, y: number, z: number, label: string, match: (itemId: number) => boolean): void {
+    this.autoBatch(label, () => {
       const tile = this.mapData.tiles.get(tileKey(x, y, z))
       if (!tile) return
 
       const oldItems = deepCloneItems(tile.items)
 
       for (let i = tile.items.length - 1; i >= 0; i--) {
-        const db = registry.getDoodadBrushForItem(tile.items[i].id)
-        if (db && db.id === brush.id) {
+        if (match(tile.items[i].id)) {
           tile.items.splice(i, 1)
         }
       }
@@ -1011,6 +1108,30 @@ export class MapMutator {
         })
         this.onTileChanged?.(x, y, z)
       }
+    })
+  }
+
+  // Recompute borders for 8 neighbors around (x, y, z)
+  private reborderNeighbors(x: number, y: number, z: number): void {
+    const registry = this._brushRegistry!
+    this.updateNeighborTiles(x, y, z, OFFSETS_8, {
+      update: (tile, nx, ny) => {
+        this.removeBorderItems(tile, registry)
+        const newBorders = computeBorders(nx, ny, z, this.mapData, registry)
+        this.insertBorderItems(tile, newBorders)
+      },
+    })
+  }
+
+  // Realign wall items on 4 cardinal neighbors
+  private realignWallNeighbors(x: number, y: number, z: number): void {
+    const registry = this._brushRegistry!
+    this.updateNeighborTiles(x, y, z, OFFSETS_4, {
+      filter: (tile) => tile.items.some(item => registry.isWallItem(item.id)),
+      update: (tile, nx, ny) => {
+        const neighborWalls = doWalls(nx, ny, z, this.mapData, registry)
+        this.replaceWallItems(tile, neighborWalls, registry)
+      },
     })
   }
 

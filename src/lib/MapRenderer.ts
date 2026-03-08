@@ -265,10 +265,6 @@ export class MapRenderer implements InputHost {
     this.lightEngine.setEnabled(enabled)
   }
 
-  setGlobalLightColor(r: number, g: number, b: number): void {
-    this.lightEngine.setGlobalLightColor(r, g, b)
-  }
-
   // ── Selection border ────────────────────────────────────────────
 
   get selectionBorder(): boolean { return this._showSelectionBorder }
@@ -323,10 +319,6 @@ export class MapRenderer implements InputHost {
   /** Update the brush cursor (hover preview). */
   updateBrushCursor(tiles: { x: number; y: number; z: number }[]): void {
     this.selection.updateBrushCursor(tiles, this.camera.floor)
-  }
-
-  clearBrushCursor(): void {
-    this.selection.clearBrushCursor()
   }
 
   /** Show a ghost preview of tiles being dragged to a new position. */

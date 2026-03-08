@@ -10,6 +10,8 @@ export interface PaintToolConfig {
   isReady: () => boolean
   /** Apply the mutation + overlay paint for a single tile. */
   applyToTile: (x: number, y: number, z: number, erasing: boolean) => void
+  /** If true, call mutator.flushChunkUpdates() after each batch of tile applications. */
+  flushChunks?: boolean
 }
 
 /**
@@ -30,17 +32,21 @@ export function createPaintToolHandlers(ctx: ToolContext, config: PaintToolConfi
       ctx.paintedTilesRef.current.add(key)
       config.applyToTile(t.x, t.y, pos.z, isErasing)
     }
+    if (config.flushChunks) ctx.mutator.flushChunkUpdates()
   }
 
   function onMove(pos: TilePos) {
     if (!config.isReady()) return
     const tiles = getTilesInBrush(pos.x, pos.y, ctx.brushSizeRef.current, ctx.brushShapeRef.current)
+    let any = false
     for (const t of tiles) {
       const key = `${t.x},${t.y}`
       if (ctx.paintedTilesRef.current.has(key)) continue
       ctx.paintedTilesRef.current.add(key)
       config.applyToTile(t.x, t.y, pos.z, isErasing)
+      any = true
     }
+    if (any && config.flushChunks) ctx.mutator.flushChunkUpdates()
   }
 
   function onUp() {

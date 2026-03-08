@@ -133,16 +133,18 @@ export function resolveBrush(selection: BrushSelection, registry: BrushRegistry 
   return { type: 'raw', itemId: 0 }
 }
 
+const BRUSH_LABELS: Record<ResolvedBrush['type'], [string, string]> = {
+  ground: ['Paint ground', 'Erase ground'],
+  door:   ['Place door', 'Erase door'],
+  wall:   ['Paint wall', 'Erase wall'],
+  carpet: ['Paint carpet', 'Erase carpet'],
+  table:  ['Paint table', 'Erase table'],
+  doodad: ['Paint doodad', 'Erase doodad'],
+  raw:    ['Draw items', 'Erase items'],
+}
+
 export function brushBatchName(brush: ResolvedBrush): string {
-  switch (brush.type) {
-    case 'ground': return 'Paint ground'
-    case 'door': return 'Place door'
-    case 'wall': return 'Paint wall'
-    case 'carpet': return 'Paint carpet'
-    case 'table': return 'Paint table'
-    case 'doodad': return 'Paint doodad'
-    case 'raw': return 'Draw items'
-  }
+  return BRUSH_LABELS[brush.type][0]
 }
 
 export function applyBrushToTile(
@@ -161,6 +163,34 @@ export function applyBrushToTile(
       break
     case 'raw': mutator.addItem(x, y, z, { id: brush.itemId }); break
   }
+}
+
+export function eraseBrushFromTile(
+  mutator: MapMutator, x: number, y: number, z: number,
+  brush: ResolvedBrush, registry: BrushRegistry | null,
+): void {
+  if (!registry) return
+  switch (brush.type) {
+    case 'ground': mutator.eraseGround(x, y, z, brush.brush); break
+    case 'wall': mutator.eraseWall(x, y, z, brush.brush); break
+    case 'carpet': mutator.eraseCarpet(x, y, z, brush.brush); break
+    case 'table': mutator.eraseTable(x, y, z, brush.brush); break
+    case 'doodad': {
+      const b = brush.brush
+      mutator.removeBrushItems(x, y, z, 'Erase doodad', id => registry.getDoodadBrushForItem(id)?.id === b.id)
+      break
+    }
+    case 'raw': {
+      const targetId = brush.itemId
+      mutator.removeBrushItems(x, y, z, 'Erase item', id => id === targetId)
+      break
+    }
+    case 'door': break // doors are removed via wall brush erase
+  }
+}
+
+export function eraseBatchName(brush: ResolvedBrush): string {
+  return BRUSH_LABELS[brush.type][1]
 }
 
 export function getPreviewItemId(brush: ResolvedBrush, fallbackId: number): number {

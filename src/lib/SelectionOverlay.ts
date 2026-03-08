@@ -231,12 +231,6 @@ export class SelectionOverlay {
     g.visible = true
   }
 
-  clearBrushCursor(): void {
-    this._brushCursorKey = ''
-    this._brushCursorGraphics.clear()
-    this._brushCursorGraphics.visible = false
-  }
-
   // ── Ghost sprite preview ───────────────────────────────────────
 
   setGhostTexture(

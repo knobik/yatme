@@ -62,11 +62,6 @@ export class LightEngine {
     }
   }
 
-  setGlobalLightColor(r: number, g: number, b: number): void {
-    this._globalColor = [r, g, b]
-    this._dirty = true
-  }
-
   markDirty(): void {
     this._dirty = true
   }

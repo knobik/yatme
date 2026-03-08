@@ -165,7 +165,7 @@ export function useEditorTools(
       }
       isDraggingRef.current = true
       switch (activeToolRef.current) {
-        case 'draw': draw.onDown(pos); break
+        case 'draw': draw.onDown(pos, event); break
         case 'erase': erase.onDown(pos); break
         case 'door': door.onDown(pos); break
         case 'fill': fill.onDown(pos); break
@@ -190,7 +190,9 @@ export function useEditorTools(
     renderer.onTilePointerUp = (pos) => {
       isDraggingRef.current = false
       const tool = activeToolRef.current
-      if (tool === 'draw' || tool === 'erase' || tool === 'door') {
+      if (tool === 'draw') {
+        draw.onUp()
+      } else if (tool === 'erase' || tool === 'door') {
         paintedTilesRef.current.clear()
         mutator.commitBatch()
       } else if (tool === 'zone') {
