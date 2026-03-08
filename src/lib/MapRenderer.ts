@@ -211,6 +211,18 @@ export class MapRenderer implements InputHost {
     this.zoneOverlay.setVisible(enabled)
   }
 
+  beginZonePaint(): void {
+    this.zoneOverlay.beginPaint()
+  }
+
+  paintZoneTile(x: number, y: number, flags: number, zones: number[] | undefined): void {
+    this.zoneOverlay.paintTile(x, y, flags, zones)
+  }
+
+  endZonePaint(): void {
+    this.zoneOverlay.endPaint()
+  }
+
   get showLights(): boolean { return this.lightEngine.enabled }
 
   setShowLights(enabled: boolean): void {

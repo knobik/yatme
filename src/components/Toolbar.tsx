@@ -1,6 +1,6 @@
 import type React from 'react'
 import clsx from 'clsx'
-import type { EditorTool, BrushShape, BrushSelection } from '../hooks/useEditorTools'
+import type { EditorTool, BrushShape, BrushSelection, ZoneSelection } from '../hooks/useEditorTools'
 import type { AppearanceData } from '../lib/appearances'
 import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
 import type { ItemRegistry } from '../lib/items'
@@ -12,6 +12,7 @@ import {
   DOOR_NORMAL, DOOR_LOCKED, DOOR_QUEST, DOOR_MAGIC,
   DOOR_WINDOW, DOOR_HATCH_WINDOW,
 } from '../lib/brushes/WallTypes'
+import { ZONE_FLAG_DEFS } from '../hooks/tools/types'
 import {
   CursorIcon, PencilSimpleIcon, EraserIcon, DoorIcon, PaintBucketIcon, FlagIcon,
   ArrowCounterClockwiseIcon, ArrowClockwiseIcon, SquareIcon, CircleIcon,
@@ -59,6 +60,8 @@ interface ToolbarProps {
   onToggleZonePalette: () => void
   showZoneOverlay: boolean
   onToggleZoneOverlay: () => void
+  selectedZone: ZoneSelection | null
+  onZoneSelect: (zone: ZoneSelection) => void
 }
 
 const BRUSH_SIZES = [
@@ -134,6 +137,8 @@ export function Toolbar({
   onToggleZonePalette,
   showZoneOverlay,
   onToggleZoneOverlay,
+  selectedZone,
+  onZoneSelect,
 }: ToolbarProps) {
   const previewId = selectedBrush ? getSelectionPreviewId(selectedBrush, brushRegistry) : 0
   const brushLabel = selectedBrush
@@ -270,6 +275,33 @@ export function Toolbar({
             >
               <CircleIcon size={16} weight="bold" />
             </button>
+          </div>
+        </>
+      )}
+
+      {/* Flag selector — only for zone tool */}
+      {activeTool === 'zone' && (
+        <>
+          <div className="h-[22px] w-px shrink-0 bg-border-subtle" />
+          <div className="flex gap-1">
+            <span className="label self-center mr-1 text-xs">FLAG</span>
+            {ZONE_FLAG_DEFS.map(def => (
+              <button
+                key={def.flag}
+                className={clsx(
+                  'btn border-none bg-transparent px-[6px] py-[4px] font-display text-xs uppercase tracking-[0.04em] flex items-center gap-[5px]',
+                  selectedZone?.type === 'flag' && selectedZone.flag === def.flag && 'tool-active',
+                )}
+                onClick={() => onZoneSelect({ type: 'flag', flag: def.flag, label: def.label })}
+                title={def.label}
+              >
+                <span
+                  className="inline-block h-[8px] w-[8px] rounded-full"
+                  style={{ backgroundColor: `#${def.color.toString(16).padStart(6, '0')}` }}
+                />
+                {def.label}
+              </button>
+            ))}
           </div>
         </>
       )}

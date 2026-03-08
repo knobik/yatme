@@ -159,7 +159,7 @@ export function useEditorTools(
         case 'erase': erase.onDown(pos); break
         case 'door': door.onDown(pos); break
         case 'fill': fill.onDown(pos); break
-        case 'zone': zone.onDown(pos, event); break
+        case 'zone': renderer.beginZonePaint(); zone.onDown(pos, event); break
         case 'select': select.onDown(pos, event); break
       }
     }
@@ -181,6 +181,7 @@ export function useEditorTools(
       if (tool === 'draw' || tool === 'erase' || tool === 'door' || tool === 'zone') {
         paintedTilesRef.current.clear()
         mutator.commitBatch()
+        if (tool === 'zone') renderer.endZonePaint()
       } else if (tool === 'select') {
         select.onUp(pos)
       }

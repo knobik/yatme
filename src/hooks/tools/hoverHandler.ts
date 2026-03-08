@@ -15,7 +15,7 @@ export function createHoverHandler(ctx: ToolContext) {
     }
 
     const tool = ctx.activeToolRef.current
-    const size = (tool === 'draw' || tool === 'erase' || tool === 'door') ? ctx.brushSizeRef.current : 0
+    const size = (tool === 'draw' || tool === 'erase' || tool === 'door' || tool === 'zone') ? ctx.brushSizeRef.current : 0
     // Fill tool always uses single-tile cursor
     const shape = ctx.brushShapeRef.current
     const tiles = getTilesInBrush(pos.x, pos.y, size, shape)

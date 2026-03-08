@@ -3,7 +3,7 @@ import { Application } from 'pixi.js'
 import type { AppearanceData } from './lib/appearances'
 import type { OtbmMap, OtbmTile } from './lib/otbm'
 import { deepCloneItem, serializeOtbm } from './lib/otbm'
-import { serializeSidecars, type MapSidecars } from './lib/sidecars'
+import { serializeSidecars, emptySidecars, type MapSidecars } from './lib/sidecars'
 import { StaticFileProvider, ServerStorageProvider, type MapStorageProvider } from './lib/storage'
 import { MapRenderer, type FloorViewMode } from './lib/MapRenderer'
 import { MapMutator } from './lib/MapMutator'
@@ -76,7 +76,7 @@ function App() {
 
   // Phase 7 state
   const [mapData, setMapData] = useState<OtbmMap | null>(null)
-  const [sidecarsData, setSidecarsData] = useState<MapSidecars | null>(null)
+  const [sidecarsData, setSidecarsData] = useState<MapSidecars>(() => emptySidecars())
   const [rendererReady, setRendererReady] = useState<MapRenderer | null>(null)
   const [mutatorReady, setMutatorReady] = useState<MapMutator | null>(null)
 
@@ -108,6 +108,41 @@ function App() {
   const tools = useEditorTools(rendererReady, mutatorReady, mapData, brushRegistryState, handleRequestEditItem, editorSettings.clickToInspect, editorSettingsRef)
   const toolsRef = useRef(tools)
   toolsRef.current = tools
+
+  // Auto-show zone overlay + palette while zone tool is active, restore on exit
+  const zoneOverlayBeforeRef = useRef<boolean | null>(null)
+  const zonePaletteBeforeRef = useRef<boolean | null>(null)
+  const showZoneOverlayRef = useRef(showZoneOverlay)
+  const showZonePaletteRef = useRef(showZonePalette)
+  showZoneOverlayRef.current = showZoneOverlay
+  showZonePaletteRef.current = showZonePalette
+  useEffect(() => {
+    if (tools.activeTool === 'zone') {
+      zoneOverlayBeforeRef.current = showZoneOverlayRef.current
+      zonePaletteBeforeRef.current = showZonePaletteRef.current
+      if (!showZoneOverlayRef.current) {
+        setShowZoneOverlay(true)
+        rendererRef.current?.setShowZoneOverlay(true)
+      }
+      if (!showZonePaletteRef.current) {
+        setShowZonePalette(true)
+      }
+    } else {
+      if (zoneOverlayBeforeRef.current !== null) {
+        if (!zoneOverlayBeforeRef.current) {
+          setShowZoneOverlay(false)
+          rendererRef.current?.setShowZoneOverlay(false)
+        }
+        zoneOverlayBeforeRef.current = null
+      }
+      if (zonePaletteBeforeRef.current !== null) {
+        if (!zonePaletteBeforeRef.current) {
+          setShowZonePalette(false)
+        }
+        zonePaletteBeforeRef.current = null
+      }
+    }
+  }, [tools.activeTool])
 
   const handleFloorChange = useCallback((delta: number) => {
     if (rendererRef.current) {
@@ -266,7 +301,7 @@ function App() {
           setSaveProgress(pct)
         }
       })
-      const sidecars = sidecarsData ? serializeSidecars(sidecarsData, md) : new Map()
+      const sidecars = serializeSidecars(sidecarsData, md)
       const hasUploadPhase = 'uploadWithProgress' in provider
       if (hasUploadPhase) {
         setSavePhase('upload')
@@ -625,10 +660,6 @@ function App() {
       } else if (e.key === 'z' && !e.ctrlKey) {
         e.preventDefault()
         toolsRef.current.setActiveTool('zone')
-        if (!showZonePalette) {
-          setShowZonePalette(true)
-          setEditorSettings(s => { const u = { ...s, showZonePalette: true }; saveSettings(u); return u })
-        }
       } else if (e.key === ']') {
         e.preventDefault()
         const cur = toolsRef.current.brushSize
@@ -641,7 +672,7 @@ function App() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [handleFloorChange, handleSave, showPalette, selectedTilePos, contextMenu, showGoToDialog, showFindItem, showReplaceItems])
+  }, [handleFloorChange, handleSave, showPalette, showZonePalette, selectedTilePos, contextMenu, showGoToDialog, showFindItem, showReplaceItems])
 
   function buildContextMenuGroups(): ContextMenuGroup[] {
     if (!contextMenu) return []
@@ -969,6 +1000,11 @@ function App() {
               return next
             })
           }}
+          selectedZone={tools.selectedZone}
+          onZoneSelect={(zone) => {
+            tools.setSelectedZone(zone)
+            if (tools.activeTool !== 'zone') tools.setActiveTool('zone')
+          }}
         />
       )}
 
@@ -1047,7 +1083,7 @@ function App() {
       )}
 
       {/* Zone palette — right side */}
-      {!loading && showZonePalette && sidecarsData && (
+      {!loading && showZonePalette && (
         <ZonePalette
           sidecars={sidecarsData}
           onSidecarsChange={setSidecarsData}
@@ -1055,11 +1091,6 @@ function App() {
           onZoneSelect={(zone) => {
             tools.setSelectedZone(zone)
             if (tools.activeTool !== 'zone') tools.setActiveTool('zone')
-            if (!showZoneOverlay) {
-              setShowZoneOverlay(true)
-              rendererRef.current?.setShowZoneOverlay(true)
-              setEditorSettings(s => { const u = { ...s, showZoneOverlay: true }; saveSettings(u); return u })
-            }
           }}
           onClose={() => {
             setShowZonePalette(false)

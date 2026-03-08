@@ -3,7 +3,6 @@ import { getTilesInBrush } from './types'
 
 export function createZoneHandlers(ctx: ToolContext) {
   let isErasing = false
-
   function applyToTile(x: number, y: number, z: number) {
     const zone = ctx.selectedZoneRef.current
     if (!zone) return
@@ -20,6 +19,12 @@ export function createZoneHandlers(ctx: ToolContext) {
       } else {
         ctx.mutator.addTileZone(x, y, z, zone.zoneId)
       }
+    }
+
+    // Draw the tile incrementally on the zone overlay
+    const tile = ctx.mapData.tiles.get(`${x},${y},${z}`)
+    if (tile) {
+      ctx.renderer.paintZoneTile(x, y, tile.flags, tile.zones)
     }
   }
 
