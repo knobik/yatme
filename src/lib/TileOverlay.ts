@@ -1,13 +1,17 @@
 import { Container, Graphics } from 'pixi.js'
 import { TILE_SIZE } from './constants'
-import type { OtbmMap, OtbmTile } from './otbm'
+import { chunkKeyForTile, floorFromChunkKey } from './ChunkManager'
+import type { OtbmTile } from './otbm'
 
 export const ALPHA_ACTIVE = 0.35
-export const ALPHA_INACTIVE = 0.12
+export const ALPHA_INACTIVE = 0.20
 export const ALPHA_NONE = 0.25
 
 /**
  * Base class for tile-based color overlays (zones, houses, etc.).
+ *
+ * Uses chunk-scoped Graphics objects so that invalidation only redraws
+ * affected chunks instead of iterating every tile on the map.
  *
  * Subclasses implement:
  * - `drawTile(g, tile)` — draw a single tile onto a Graphics object
@@ -16,51 +20,47 @@ export const ALPHA_NONE = 0.25
  */
 export abstract class TileOverlay {
   readonly container: Container
-  protected _base: Graphics
-  protected _live: Graphics
+  private _baseContainer: Container
   private _visible = false
-  private _dirty = true
-  private _painting = false
-  private _erasing = false
+  private _fullDirty = true
+  private _dirtyChunks = new Set<string>()
   private _lastFloorOffset = NaN
+  private _lastFloor = -1
+
+  // chunk key -> Graphics for that chunk
+  private _chunkGraphics = new Map<string, Graphics>()
 
   constructor() {
     this.container = new Container()
-    this._base = new Graphics()
-    this._live = new Graphics()
-    this.container.addChild(this._base)
-    this.container.addChild(this._live)
+    this._baseContainer = new Container()
+    this.container.addChild(this._baseContainer)
     this.container.visible = false
   }
 
   setVisible(visible: boolean): void {
     this._visible = visible
     this.container.visible = visible
-    if (visible) this._dirty = true
+    if (visible) this._fullDirty = true
   }
 
   get visible(): boolean { return this._visible }
 
+  /** Mark all chunks dirty — triggers a full rebuild. */
   markDirty(): void {
-    this._dirty = true
+    this._fullDirty = true
   }
 
-  beginPaint(erasing = false): void {
-    this._painting = true
-    this._erasing = erasing
-    this._live.clear()
-    if (erasing) {
-      // When erasing we need to rebuild _base each frame since we can't
-      // "un-draw" rects from _base. Mark dirty so rebuild() runs.
-      this._dirty = true
+  /** Mark only specific chunks dirty (by chunk key "cx,cy,z"). */
+  invalidateChunks(keys: Iterable<string>): void {
+    for (const key of keys) {
+      this._dirtyChunks.add(key)
     }
   }
 
-  endPaint(): void {
-    this._painting = false
-    this._erasing = false
-    this._live.clear()
-    this._dirty = true
+  /** Invalidate the overlay chunk for a single tile (used by paint tools). */
+  paintTile(x: number, y: number, z: number): void {
+    if (!this._visible) return
+    this._dirtyChunks.add(chunkKeyForTile(x, y, z))
   }
 
   updateContainerOffset(floorOffset: number): void {
@@ -70,29 +70,37 @@ export abstract class TileOverlay {
     }
   }
 
-  rebuild(mapData: OtbmMap, floor: number): void {
-    if (!this._visible || !this._dirty || (this._painting && !this._erasing)) return
-    this._dirty = false
+  rebuild(floor: number, chunkIndex: Map<string, OtbmTile[]>): void {
+    if (!this._visible) return
 
-    const g = this._base
-    g.clear()
+    // Floor changed — need full rebuild
+    if (floor !== this._lastFloor) {
+      this._fullDirty = true
+      this._lastFloor = floor
+    }
 
-    for (const tile of mapData.tiles.values()) {
-      if (tile.z !== floor) continue
-      if (!this.shouldDrawTile(tile)) continue
-      this.drawTile(g, tile)
+    if (this._fullDirty) {
+      this._fullDirty = false
+      this._dirtyChunks.clear()
+      this.rebuildAll(chunkIndex, floor)
+      return
+    }
+
+    if (this._dirtyChunks.size > 0) {
+      const dirty = this._dirtyChunks
+      this._dirtyChunks = new Set()
+      this.rebuildChunks(dirty, chunkIndex, floor)
     }
   }
 
   destroy(): void {
-    this._base.destroy()
-    this._live.destroy()
+    for (const g of this._chunkGraphics.values()) g.destroy()
+    this._chunkGraphics.clear()
+    this._baseContainer.destroy()
     this.container.destroy()
   }
 
   // ── Helpers for subclasses ────────────────────────────────────
-
-  protected get isVisible(): boolean { return this._visible }
 
   protected alphaFor(isActive: boolean): number {
     if (!this.hasActiveSelection()) return ALPHA_NONE
@@ -104,18 +112,81 @@ export abstract class TileOverlay {
     g.fill({ color, alpha })
   }
 
-  protected get isPaintErasing(): boolean { return this._erasing }
-
-  protected get liveGraphics(): Graphics { return this._live }
-
   // ── Abstract ──────────────────────────────────────────────────
 
-  /** Whether any active item is selected (affects alpha calculation). */
   protected abstract hasActiveSelection(): boolean
-
-  /** Filter: should this tile be drawn during a full rebuild? */
   protected abstract shouldDrawTile(tile: OtbmTile): boolean
-
-  /** Draw a single tile's overlay onto the given Graphics object. */
   protected abstract drawTile(g: Graphics, tile: OtbmTile): void
+
+  // ── Private ───────────────────────────────────────────────────
+
+  /** Full rebuild: clear all chunk Graphics, redraw from chunkIndex. */
+  private rebuildAll(chunkIndex: Map<string, OtbmTile[]>, floor: number): void {
+    for (const g of this._chunkGraphics.values()) g.destroy()
+    this._chunkGraphics.clear()
+    this._baseContainer.removeChildren()
+
+    for (const [key, tiles] of chunkIndex) {
+      if (floorFromChunkKey(key) !== floor) continue
+      this.rebuildSingleChunk(key, tiles)
+    }
+  }
+
+  /** Rebuild only specific dirty chunks, reusing existing Graphics when possible. */
+  private rebuildChunks(
+    dirtyKeys: Set<string>,
+    chunkIndex: Map<string, OtbmTile[]>,
+    floor: number,
+  ): void {
+    for (const key of dirtyKeys) {
+      if (floorFromChunkKey(key) !== floor) continue
+
+      const tiles = chunkIndex.get(key)
+      const existing = this._chunkGraphics.get(key)
+
+      if (!tiles || !this.chunkHasOverlayTiles(tiles)) {
+        // No overlay tiles in this chunk — remove Graphics if it exists
+        if (existing) {
+          this._baseContainer.removeChild(existing)
+          existing.destroy()
+          this._chunkGraphics.delete(key)
+        }
+        continue
+      }
+
+      if (existing) {
+        // Reuse: clear and redraw
+        existing.clear()
+        for (const tile of tiles) {
+          if (!this.shouldDrawTile(tile)) continue
+          this.drawTile(existing, tile)
+        }
+      } else {
+        this.rebuildSingleChunk(key, tiles)
+      }
+    }
+  }
+
+  /** Build Graphics for a single chunk from its tiles. */
+  private rebuildSingleChunk(key: string, tiles: OtbmTile[]): void {
+    let g: Graphics | null = null
+
+    for (const tile of tiles) {
+      if (!this.shouldDrawTile(tile)) continue
+      if (!g) g = new Graphics()
+      this.drawTile(g, tile)
+    }
+
+    if (g) {
+      this._chunkGraphics.set(key, g)
+      this._baseContainer.addChild(g)
+    }
+  }
+
+  private chunkHasOverlayTiles(tiles: OtbmTile[]): boolean {
+    for (const tile of tiles) {
+      if (this.shouldDrawTile(tile)) return true
+    }
+    return false
+  }
 }

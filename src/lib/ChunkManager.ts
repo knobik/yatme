@@ -23,6 +23,11 @@ export function chunkKeyForTile(x: number, y: number, z: number): string {
   return `${Math.floor(x / CHUNK_SIZE)},${Math.floor(y / CHUNK_SIZE)},${z}`
 }
 
+/** Extract the floor (z) from a chunk key string "cx,cy,z". */
+export function floorFromChunkKey(key: string): number {
+  return parseInt(key.substring(key.lastIndexOf(',') + 1), 10)
+}
+
 // ── Chunk index ─────────────────────────────────────────────────────
 
 export function buildChunkIndex(

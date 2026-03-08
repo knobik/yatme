@@ -10,10 +10,6 @@ export interface PaintToolConfig {
   isReady: () => boolean
   /** Apply the mutation + overlay paint for a single tile. */
   applyToTile: (x: number, y: number, z: number, erasing: boolean) => void
-  /** Called before the first tile on pointer down (e.g. beginPaint on overlay). */
-  beginPaint?: (erasing: boolean) => void
-  /** Called after batch commit on pointer up (e.g. endPaint on overlay). */
-  endPaint?: () => void
 }
 
 /**
@@ -28,7 +24,6 @@ export function createPaintToolHandlers(ctx: ToolContext, config: PaintToolConfi
     isErasing = event.button === 2 || (event.button === 0 && (event.ctrlKey || event.metaKey))
     ctx.paintedTilesRef.current.clear()
     ctx.mutator.beginBatch(isErasing ? config.eraseLabel : config.label)
-    config.beginPaint?.(isErasing)
     const tiles = getTilesInBrush(pos.x, pos.y, ctx.brushSizeRef.current, ctx.brushShapeRef.current)
     for (const t of tiles) {
       const key = `${t.x},${t.y}`
@@ -51,7 +46,6 @@ export function createPaintToolHandlers(ctx: ToolContext, config: PaintToolConfi
   function onUp() {
     ctx.paintedTilesRef.current.clear()
     ctx.mutator.commitBatch()
-    config.endPaint?.()
   }
 
   return { onDown, onMove, onUp }

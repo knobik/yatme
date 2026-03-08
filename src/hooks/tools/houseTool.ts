@@ -6,8 +6,6 @@ export function createHouseHandlers(ctx: ToolContext) {
     label: 'Paint house',
     eraseLabel: 'Remove house',
     isReady: () => ctx.selectedHouseRef.current != null,
-    beginPaint: (erasing) => ctx.renderer.beginHousePaint(erasing),
-    endPaint: () => ctx.renderer.endHousePaint(),
     applyToTile: (x, y, z, erasing) => {
       const houseId = ctx.selectedHouseRef.current!
       if (erasing) {
@@ -15,8 +13,7 @@ export function createHouseHandlers(ctx: ToolContext) {
       } else {
         ctx.mutator.setTileHouseId(x, y, z, houseId)
       }
-      const tile = ctx.mapData.tiles.get(`${x},${y},${z}`)
-      if (tile) ctx.renderer.paintHouseTile(x, y, tile.houseId)
+      ctx.renderer.paintHouseTile(x, y)
     },
   })
 }

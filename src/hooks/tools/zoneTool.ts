@@ -6,8 +6,6 @@ export function createZoneHandlers(ctx: ToolContext) {
     label: 'Paint zone',
     eraseLabel: 'Remove zone',
     isReady: () => ctx.selectedZoneRef.current != null,
-    beginPaint: (erasing) => ctx.renderer.beginZonePaint(erasing),
-    endPaint: () => ctx.renderer.endZonePaint(),
     applyToTile: (x, y, z, erasing) => {
       const zone = ctx.selectedZoneRef.current!
       if (zone.type === 'flag') {
@@ -17,8 +15,7 @@ export function createZoneHandlers(ctx: ToolContext) {
         if (erasing) ctx.mutator.removeTileZone(x, y, z, zone.zoneId)
         else ctx.mutator.addTileZone(x, y, z, zone.zoneId)
       }
-      const tile = ctx.mapData.tiles.get(`${x},${y},${z}`)
-      if (tile) ctx.renderer.paintZoneTile(x, y, tile.flags, tile.zones)
+      ctx.renderer.paintZoneTile(x, y)
     },
   })
 }

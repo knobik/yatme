@@ -19,15 +19,6 @@ export class ZoneOverlay extends TileOverlay {
     this.markDirty()
   }
 
-  paintTile(x: number, y: number, flags: number, zones: number[] | undefined): void {
-    if (!this.isVisible) return
-    if (this.isPaintErasing) {
-      this.markDirty()
-    } else {
-      this._drawZoneTile(this.liveGraphics, x, y, flags, zones)
-    }
-  }
-
   protected hasActiveSelection(): boolean {
     return this._activeZone != null
   }
@@ -37,23 +28,19 @@ export class ZoneOverlay extends TileOverlay {
   }
 
   protected drawTile(g: Graphics, tile: OtbmTile): void {
-    this._drawZoneTile(g, tile.x, tile.y, tile.flags, tile.zones)
-  }
-
-  private _drawZoneTile(g: Graphics, x: number, y: number, flags: number, zones: number[] | undefined): void {
-    if (flags & FLAG_MASK) {
+    if (tile.flags & FLAG_MASK) {
       for (const def of ZONE_FLAG_DEFS) {
-        if ((flags & def.flag) !== 0) {
+        if ((tile.flags & def.flag) !== 0) {
           const active = this._activeZone?.type === 'flag' && this._activeZone.flag === def.flag
-          this.fillRect(g, x, y, def.color, this.alphaFor(active))
+          this.fillRect(g, tile.x, tile.y, def.color, this.alphaFor(active))
         }
       }
     }
 
-    if (zones && zones.length > 0) {
-      for (const zoneId of zones) {
+    if (tile.zones && tile.zones.length > 0) {
+      for (const zoneId of tile.zones) {
         const active = this._activeZone?.type === 'zone' && this._activeZone.zoneId === zoneId
-        this.fillRect(g, x, y, zoneColorHex(zoneId), this.alphaFor(active))
+        this.fillRect(g, tile.x, tile.y, zoneColorHex(zoneId), this.alphaFor(active))
       }
     }
   }

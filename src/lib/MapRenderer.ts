@@ -206,8 +206,8 @@ export class MapRenderer implements InputHost {
   invalidateChunks(keys: Set<string>): void {
     this.chunkManager.invalidateChunks(keys)
     this.lightEngine.markDirty()
-    this.zoneOverlay.markDirty()
-    this.houseOverlay.markDirty()
+    this.zoneOverlay.invalidateChunks(keys)
+    this.houseOverlay.invalidateChunks(keys)
   }
 
   /** Update the chunk index when a tile is created or modified. */
@@ -235,16 +235,8 @@ export class MapRenderer implements InputHost {
     this.zoneOverlay.setActiveZone(zone)
   }
 
-  beginZonePaint(erasing = false): void {
-    this.zoneOverlay.beginPaint(erasing)
-  }
-
-  paintZoneTile(x: number, y: number, flags: number, zones: number[] | undefined): void {
-    this.zoneOverlay.paintTile(x, y, flags, zones)
-  }
-
-  endZonePaint(): void {
-    this.zoneOverlay.endPaint()
+  paintZoneTile(x: number, y: number): void {
+    this.zoneOverlay.paintTile(x, y, this.camera.floor)
   }
 
   // ── House overlay ─────────────────────────────────────────────
@@ -263,16 +255,8 @@ export class MapRenderer implements InputHost {
     this.houseOverlay.setActiveHouse(houseId)
   }
 
-  beginHousePaint(erasing = false): void {
-    this.houseOverlay.beginPaint(erasing)
-  }
-
-  paintHouseTile(x: number, y: number, houseId: number | undefined): void {
-    this.houseOverlay.paintTile(x, y, houseId)
-  }
-
-  endHousePaint(): void {
-    this.houseOverlay.endPaint()
+  paintHouseTile(x: number, y: number): void {
+    this.houseOverlay.paintTile(x, y, this.camera.floor)
   }
 
   get showLights(): boolean { return this.lightEngine.enabled }
@@ -465,10 +449,10 @@ export class MapRenderer implements InputHost {
     this.selection.updatePing()
 
     this.zoneOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
-    this.zoneOverlay.rebuild(this.mapData, this.camera.floor)
+    this.zoneOverlay.rebuild(this.camera.floor, this.chunkManager.index)
 
     this.houseOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
-    this.houseOverlay.rebuild(this.mapData, this.camera.floor)
+    this.houseOverlay.rebuild(this.camera.floor, this.chunkManager.index)
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────

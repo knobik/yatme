@@ -12,16 +12,6 @@ export class HouseOverlay extends TileOverlay {
     this.markDirty()
   }
 
-  paintTile(x: number, y: number, houseId: number | undefined): void {
-    if (!this.isVisible) return
-    if (this.isPaintErasing) {
-      this.markDirty()
-    } else if (houseId != null) {
-      const active = this._activeHouseId === houseId
-      this.fillRect(this.liveGraphics, x, y, houseColorHex(houseId), this.alphaFor(active))
-    }
-  }
-
   protected hasActiveSelection(): boolean {
     return this._activeHouseId != null
   }
