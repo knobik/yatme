@@ -25,7 +25,7 @@ export function createPaintToolHandlers(ctx: ToolContext, config: PaintToolConfi
 
   function onDown(pos: TilePos, event: PointerEvent) {
     if (!config.isReady()) return
-    isErasing = event.button === 2
+    isErasing = event.button === 2 || (event.button === 0 && (event.ctrlKey || event.metaKey))
     ctx.paintedTilesRef.current.clear()
     ctx.mutator.beginBatch(isErasing ? config.eraseLabel : config.label)
     config.beginPaint?.()
