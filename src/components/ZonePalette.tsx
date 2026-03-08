@@ -3,13 +3,17 @@ import clsx from 'clsx'
 import type { MapSidecars, ZoneData } from '../lib/sidecars'
 import type { ZoneSelection } from '../hooks/tools/types'
 import { zoneColorCSS } from '../lib/zoneColors'
-import { XIcon, PlusIcon } from '@phosphor-icons/react'
+import { XIcon, PlusIcon, DownloadSimpleIcon, UploadSimpleIcon } from '@phosphor-icons/react'
 
 interface ZonePaletteProps {
   sidecars: MapSidecars
   onSidecarsChange: (sidecars: MapSidecars) => void
   selectedZone: ZoneSelection | null
   onZoneSelect: (zone: ZoneSelection) => void
+  onZoneDelete?: (zoneId: number) => void
+  onNavigateToZone?: (zoneId: number) => void
+  onExportZones?: () => void
+  onImportZones?: () => void
   onClose: () => void
 }
 
@@ -18,6 +22,10 @@ export function ZonePalette({
   onSidecarsChange,
   selectedZone,
   onZoneSelect,
+  onZoneDelete,
+  onNavigateToZone,
+  onExportZones,
+  onImportZones,
   onClose,
 }: ZonePaletteProps) {
   const [newZoneName, setNewZoneName] = useState('')
@@ -35,6 +43,7 @@ export function ZonePalette({
 
   const handleDeleteZone = (id: number) => {
     onSidecarsChange({ ...sidecars, zones: sidecars.zones.filter(z => z.id !== id) })
+    onZoneDelete?.(id)
   }
 
   const handleStartRename = (zone: ZoneData) => {
@@ -61,9 +70,26 @@ export function ZonePalette({
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4">
         <span className="label text-lg tracking-wide">ZONES</span>
-        <button className="btn btn-icon border-none bg-transparent" onClick={onClose} title="Close (Esc)">
-          <XIcon size={14} weight="bold" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            className="btn btn-icon border-none bg-transparent"
+            onClick={onImportZones}
+            title="Import Zones"
+          >
+            <UploadSimpleIcon size={14} weight="bold" />
+          </button>
+          <button
+            className="btn btn-icon border-none bg-transparent"
+            onClick={onExportZones}
+            disabled={sidecars.zones.length === 0}
+            title="Export Zones"
+          >
+            <DownloadSimpleIcon size={14} weight="bold" />
+          </button>
+          <button className="btn btn-icon border-none bg-transparent" onClick={onClose} title="Close (Esc)">
+            <XIcon size={14} weight="bold" />
+          </button>
+        </div>
       </div>
 
       <div className="mx-6 h-px bg-border-subtle" />
@@ -107,6 +133,11 @@ export function ZonePalette({
                   isZoneSelected(zone.id) && 'bg-accent-subtle',
                 )}
                 onClick={() => onZoneSelect({ type: 'zone', zoneId: zone.id, name: zone.name })}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  onNavigateToZone?.(zone.id)
+                }}
+                title="Right-click to navigate to zone"
               >
                 <div
                   className="h-3 w-3 shrink-0 rounded-sm"

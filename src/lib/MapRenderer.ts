@@ -206,6 +206,11 @@ export class MapRenderer implements InputHost {
 
   // ── Zone overlay ──────────────────────────────────────────────
 
+  /** Mark the zone overlay as dirty so it rebuilds on the next frame. */
+  markZoneOverlayDirty(): void {
+    this.zoneOverlay.markDirty()
+  }
+
   get showZoneOverlay(): boolean { return this.zoneOverlay.visible }
 
   setShowZoneOverlay(enabled: boolean): void {

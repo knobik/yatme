@@ -8,7 +8,7 @@ import { zoneColorHex } from './zoneColors'
 const ALPHA_ACTIVE = 0.35
 const ALPHA_INACTIVE = 0.12
 const ALPHA_NONE = 0.25   // when no zone is selected, all shown equally
-const FLAG_MASK = 0x0001 | 0x0004 | 0x0008 | 0x0010
+const FLAG_MASK = 0x0001 | 0x0004 | 0x0008 | 0x0010 | 0x0020
 
 export class ZoneOverlay {
   readonly container: Container

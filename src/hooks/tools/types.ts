@@ -21,6 +21,7 @@ export const ZONE_FLAG_DEFS = [
   { flag: 0x0004, label: 'No PvP', color: 0x0064c8 },
   { flag: 0x0008, label: 'No Logout', color: 0xc89600 },
   { flag: 0x0010, label: 'PvP Zone', color: 0xc80000 },
+  { flag: 0x0020, label: 'Refresh', color: 0xc800c8 },
 ] as const
 
 // ── Brush selection (what the user picked in the palette) ───────────

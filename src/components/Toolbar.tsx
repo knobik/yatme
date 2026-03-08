@@ -62,6 +62,8 @@ interface ToolbarProps {
   onToggleZoneOverlay: () => void
   selectedZone: ZoneSelection | null
   onZoneSelect: (zone: ZoneSelection) => void
+  onExportZones: () => void
+  onImportZones: () => void
 }
 
 const BRUSH_SIZES = [
@@ -139,6 +141,8 @@ export function Toolbar({
   onToggleZoneOverlay,
   selectedZone,
   onZoneSelect,
+  onExportZones,
+  onImportZones,
 }: ToolbarProps) {
   const previewId = selectedBrush ? getSelectionPreviewId(selectedBrush, brushRegistry) : 0
   const brushLabel = selectedBrush
@@ -152,6 +156,9 @@ export function Toolbar({
       title: 'File',
       items: [
         { label: 'Save Map', shortcut: 'Ctrl+S', disabled: !canSave, onClick: onSave },
+        'separator',
+        { label: 'Import Zones...', onClick: onImportZones },
+        { label: 'Export Zones', onClick: onExportZones },
       ],
     },
     {

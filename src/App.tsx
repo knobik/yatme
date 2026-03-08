@@ -3,7 +3,7 @@ import { Application } from 'pixi.js'
 import type { AppearanceData } from './lib/appearances'
 import type { OtbmMap, OtbmTile } from './lib/otbm'
 import { deepCloneItem, serializeOtbm } from './lib/otbm'
-import { serializeSidecars, emptySidecars, type MapSidecars } from './lib/sidecars'
+import { serializeSidecars, emptySidecars, parseZonesXml, serializeZonesXml, type MapSidecars } from './lib/sidecars'
 import { StaticFileProvider, ServerStorageProvider, type MapStorageProvider } from './lib/storage'
 import { MapRenderer, type FloorViewMode } from './lib/MapRenderer'
 import { MapMutator } from './lib/MapMutator'
@@ -25,7 +25,8 @@ import { getItemDisplayName } from './lib/items'
 import { loadAssets } from './lib/initPipeline'
 import { setupEditor } from './lib/setupEditor'
 import { findEntryInTilesets } from './lib/tilesets/TilesetLoader'
-import type { BrushSelection } from './hooks/tools/types'
+import { ZONE_FLAG_DEFS, type BrushSelection } from './hooks/tools/types'
+import { scrubZoneFromTiles } from './lib/zoneCleanup'
 import { ZonePalette } from './components/ZonePalette'
 import { CaretUpIcon, CaretDownIcon, EyeIcon } from '@phosphor-icons/react'
 import type { CategoryType } from './lib/tilesets/TilesetTypes'
@@ -326,6 +327,46 @@ function App() {
       setSaveProgress(null)
     }
   }, [mapData, mapFilename, sidecarsData, saveProgress])
+
+  const handleExportZones = useCallback(() => {
+    const xml = serializeZonesXml(sidecarsData.zones)
+    const blob = new Blob([xml], { type: 'application/xml' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'zones.xml'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [sidecarsData.zones])
+
+  const handleImportZones = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.xml'
+    input.onchange = () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = () => {
+        try {
+          const text = reader.result as string
+          const imported = parseZonesXml(text)
+          setSidecarsData(prev => {
+            const existingIds = new Set(prev.zones.map(z => z.id))
+            const newZones = imported.filter(z => !existingIds.has(z.id))
+            if (newZones.length === 0) return prev
+            return { ...prev, zones: [...prev.zones, ...newZones] }
+          })
+        } catch (e) {
+          console.error('[Zones] Failed to parse imported zones:', e)
+        }
+      }
+      reader.readAsText(file)
+    }
+    input.click()
+  }, [])
 
   const handleGoToPosition = useCallback((x: number, y: number, z: number) => {
     if (!rendererRef.current) return
@@ -1010,6 +1051,8 @@ function App() {
             tools.setSelectedZone(zone)
             if (tools.activeTool !== 'zone') tools.setActiveTool('zone')
           }}
+          onExportZones={handleExportZones}
+          onImportZones={handleImportZones}
         />
       )}
 
@@ -1097,6 +1140,31 @@ function App() {
             tools.setSelectedZone(zone)
             if (tools.activeTool !== 'zone') tools.setActiveTool('zone')
           }}
+          onZoneDelete={(zoneId) => {
+            if (!mapData) return
+            // Scrub zone from all tiles
+            scrubZoneFromTiles(mapData.tiles, zoneId)
+            // Refresh zone overlay
+            rendererRef.current?.markZoneOverlayDirty()
+            // If the deleted zone was selected, fall back to first flag def
+            if (tools.selectedZone?.type === 'zone' && tools.selectedZone.zoneId === zoneId) {
+              const fallback = ZONE_FLAG_DEFS[0]
+              tools.setSelectedZone({ type: 'flag', flag: fallback.flag, label: fallback.label })
+            }
+          }}
+          onNavigateToZone={(zoneId) => {
+            if (!mapData) return
+            for (const [key, tile] of mapData.tiles) {
+              if (tile.zones?.includes(zoneId)) {
+                const [x, y, z] = key.split(',').map(Number)
+                rendererRef.current?.setFloor(z)
+                rendererRef.current?.centerOn(x, y)
+                break
+              }
+            }
+          }}
+          onExportZones={handleExportZones}
+          onImportZones={handleImportZones}
           onClose={() => {
             setShowZonePalette(false)
             setEditorSettings(s => { const u = { ...s, showZonePalette: false }; saveSettings(u); return u })
