@@ -1,6 +1,7 @@
 import type { OtbmMap, OtbmItem } from './otbm'
 import { deepCloneItem } from './otbm'
 import type { MapMutator } from './MapMutator'
+import { yieldToMain } from './yieldToMain'
 
 export interface SearchResult {
   x: number
@@ -10,10 +11,6 @@ export interface SearchResult {
 }
 
 const YIELD_INTERVAL = 2000 // tiles per chunk before yielding to browser
-
-function yieldToMain(): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, 0))
-}
 
 export async function findItemsOnMap(
   mapData: OtbmMap,

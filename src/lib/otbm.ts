@@ -1,5 +1,7 @@
 // ── OTBM binary map parser ──────────────────────────────────────────
 
+import { yieldToMain } from './yieldToMain'
+
 // Special bytes in the binary tree encoding
 const NODE_START = 0xfe
 const NODE_END = 0xff
@@ -834,43 +836,17 @@ function computeInlineCount(items: OtbmItem[]): number {
 }
 
 /**
- * Stream tiles into tile area nodes, starting a new area whenever the
- * 256x256 area key changes. This mirrors RME's serialization behaviour:
- * it writes a new OTBM_TILE_AREA each time it crosses an area boundary
- * while iterating tiles, rather than pre-grouping all tiles into one
- * node per unique area key. Preserving this pattern is essential for
- * byte-identical round-trips on files produced by RME.
+ * Serialize an OtbmMap to binary OTBM format.
+ * Yields to the main thread periodically during tile serialization,
+ * preventing the browser from freezing on large maps.
  */
-function writeTileAreas(writer: BinaryWriter, tiles: Map<string, OtbmTile>): void {
-  let curBaseX = -1
-  let curBaseY = -1
-  let curBaseZ = -1
-  let areaOpen = false
+export async function serializeOtbm(
+  map: OtbmMap,
+  onProgress?: (done: number, total: number) => void,
+): Promise<Uint8Array> {
+  const YIELD_EVERY = 5000 // tiles between yields
+  const totalTiles = map.tiles.size
 
-  for (const tile of tiles.values()) {
-    const baseX = tile.x & 0xFF00
-    const baseY = tile.y & 0xFF00
-    const baseZ = tile.z
-
-    if (baseX !== curBaseX || baseY !== curBaseY || baseZ !== curBaseZ) {
-      if (areaOpen) writer.endNode()
-      writer.startNode(OTBM_TILE_AREA)
-      writer.writeU16(baseX)
-      writer.writeU16(baseY)
-      writer.writeU8(baseZ)
-      curBaseX = baseX
-      curBaseY = baseY
-      curBaseZ = baseZ
-      areaOpen = true
-    }
-
-    serializeTile(writer, tile)
-  }
-
-  if (areaOpen) writer.endNode()
-}
-
-export function serializeOtbm(map: OtbmMap): Uint8Array {
   const writer = new BinaryWriter()
 
   // 4-byte header
@@ -911,7 +887,9 @@ export function serializeOtbm(map: OtbmMap): Uint8Array {
     writer.writeString(map.zoneFile)
   }
 
-  // Tile areas — use original grouping if available for byte-identical output
+  // Tile areas — with periodic yields
+  let tileCount = 0
+
   if (map._areaSequence) {
     for (const area of map._areaSequence) {
       writer.startNode(OTBM_TILE_AREA)
@@ -921,14 +899,53 @@ export function serializeOtbm(map: OtbmMap): Uint8Array {
 
       for (const key of area.tileKeys) {
         const tile = map.tiles.get(key)
-        if (tile) serializeTile(writer, tile)
+        if (tile) {
+          serializeTile(writer, tile)
+          tileCount++
+          if (tileCount % YIELD_EVERY === 0) {
+            onProgress?.(tileCount, totalTiles)
+            await yieldToMain()
+          }
+        }
       }
 
       writer.endNode()
     }
   } else {
-    writeTileAreas(writer, map.tiles)
+    let curBaseX = -1
+    let curBaseY = -1
+    let curBaseZ = -1
+    let areaOpen = false
+
+    for (const tile of map.tiles.values()) {
+      const baseX = tile.x & 0xFF00
+      const baseY = tile.y & 0xFF00
+      const baseZ = tile.z
+
+      if (baseX !== curBaseX || baseY !== curBaseY || baseZ !== curBaseZ) {
+        if (areaOpen) writer.endNode()
+        writer.startNode(OTBM_TILE_AREA)
+        writer.writeU16(baseX)
+        writer.writeU16(baseY)
+        writer.writeU8(baseZ)
+        curBaseX = baseX
+        curBaseY = baseY
+        curBaseZ = baseZ
+        areaOpen = true
+      }
+
+      serializeTile(writer, tile)
+      tileCount++
+      if (tileCount % YIELD_EVERY === 0) {
+        onProgress?.(tileCount, totalTiles)
+        await yieldToMain()
+      }
+    }
+
+    if (areaOpen) writer.endNode()
   }
+
+  if (totalTiles > 0) onProgress?.(totalTiles, totalTiles)
 
   // Towns
   writer.startNode(OTBM_TOWNS)

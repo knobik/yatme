@@ -19,6 +19,7 @@ import { GoToPositionDialog } from './components/GoToPositionDialog'
 import { FindItemDialog } from './components/FindItemDialog'
 import { ReplaceItemsDialog } from './components/ReplaceItemsDialog'
 import { SettingsModal } from './components/SettingsModal'
+import { SaveToast } from './components/SaveToast'
 import { loadSettings, saveSettings, type EditorSettings } from './lib/EditorSettings'
 import { getItemDisplayName } from './lib/items'
 import { loadAssets } from './lib/initPipeline'
@@ -240,24 +241,32 @@ function App() {
     setShowLights(next.showLights)
   }, [])
 
-  const savingRef = useRef(false)
+  const [saveProgress, setSaveProgress] = useState<number | null>(null)
+  const lastReportedProgress = useRef(0)
 
   const handleSave = useCallback(async () => {
     const md = mapData
     const provider = storageRef.current
-    if (!md || !provider || !provider.canSave || savingRef.current) return
-    savingRef.current = true
+    if (!md || !provider || !provider.canSave || saveProgress != null) return
+    setSaveProgress(0)
+    lastReportedProgress.current = 0
     try {
-      const otbm = serializeOtbm(md)
+      const otbm = await serializeOtbm(md, (done, total) => {
+        const pct = total > 0 ? done / total : 0
+        if (pct - lastReportedProgress.current >= 0.02) {
+          lastReportedProgress.current = pct
+          setSaveProgress(pct)
+        }
+      })
       const sidecars = sidecarsData ? serializeSidecars(sidecarsData, md) : new Map()
       await provider.saveMap({ otbm, sidecars, filename: mapFilename })
     } catch (e) {
       console.error('[Save] Failed to save map:', e)
       alert(`Failed to save map: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
-      savingRef.current = false
+      setSaveProgress(null)
     }
-  }, [mapData, mapFilename, sidecarsData])
+  }, [mapData, mapFilename, sidecarsData, saveProgress])
 
   const handleGoToPosition = useCallback((x: number, y: number, z: number) => {
     if (!rendererRef.current) return
@@ -859,6 +868,9 @@ function App() {
 
       {/* Loading overlay */}
       {loading && <LoadingOverlay status={loadingStatus} progress={loadingProgress} />}
+
+      {/* Save toast */}
+      {saveProgress != null && <SaveToast progress={saveProgress} />}
 
       {/* Toolbar — top center */}
       {!loading && appearancesData && (
