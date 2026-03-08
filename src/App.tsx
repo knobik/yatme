@@ -144,6 +144,11 @@ function App() {
     }
   }, [tools.activeTool])
 
+  // Sync active zone highlighting to renderer
+  useEffect(() => {
+    rendererRef.current?.setActiveZone(tools.selectedZone)
+  }, [tools.selectedZone])
+
   const handleFloorChange = useCallback((delta: number) => {
     if (rendererRef.current) {
       rendererRef.current.setFloor(rendererRef.current.floor + delta)

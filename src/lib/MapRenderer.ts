@@ -13,6 +13,7 @@ import type { FloorViewMode } from './constants'
 import type { AppearanceData } from './appearances'
 import type { OtbmMap, OtbmTile, OtbmItem } from './otbm'
 import type { CopyBuffer } from './CopyBuffer'
+import type { ZoneSelection } from '../hooks/tools/types'
 
 export { type FloorViewMode } from './constants'
 
@@ -209,6 +210,10 @@ export class MapRenderer implements InputHost {
 
   setShowZoneOverlay(enabled: boolean): void {
     this.zoneOverlay.setVisible(enabled)
+  }
+
+  setActiveZone(zone: ZoneSelection | null): void {
+    this.zoneOverlay.setActiveZone(zone)
   }
 
   beginZonePaint(): void {

@@ -2,9 +2,12 @@ import { Container, Graphics } from 'pixi.js'
 import { TILE_SIZE } from './constants'
 import type { OtbmMap } from './otbm'
 import { ZONE_FLAG_DEFS } from '../hooks/tools/types'
+import type { ZoneSelection } from '../hooks/tools/types'
 import { zoneColorHex } from './zoneColors'
 
-const ALPHA = 0.25
+const ALPHA_ACTIVE = 0.35
+const ALPHA_INACTIVE = 0.12
+const ALPHA_NONE = 0.25   // when no zone is selected, all shown equally
 const FLAG_MASK = 0x0001 | 0x0004 | 0x0008 | 0x0010
 
 export class ZoneOverlay {
@@ -15,6 +18,7 @@ export class ZoneOverlay {
   private _dirty = true
   private _painting = false
   private _lastFloorOffset = NaN
+  private _activeZone: ZoneSelection | null = null
 
   constructor() {
     this.container = new Container()
@@ -32,6 +36,15 @@ export class ZoneOverlay {
   }
 
   get visible(): boolean { return this._visible }
+
+  setActiveZone(zone: ZoneSelection | null): void {
+    const changed = zone?.type !== this._activeZone?.type ||
+      (zone?.type === 'flag' && this._activeZone?.type === 'flag' && zone.flag !== this._activeZone.flag) ||
+      (zone?.type === 'zone' && this._activeZone?.type === 'zone' && zone.zoneId !== this._activeZone.zoneId)
+    if (!changed) return
+    this._activeZone = zone
+    this._dirty = true
+  }
 
   markDirty(): void {
     this._dirty = true
@@ -77,6 +90,11 @@ export class ZoneOverlay {
     }
   }
 
+  private _alphaFor(isActive: boolean): number {
+    if (!this._activeZone) return ALPHA_NONE
+    return isActive ? ALPHA_ACTIVE : ALPHA_INACTIVE
+  }
+
   private _drawTileOn(g: Graphics, x: number, y: number, flags: number, zones: number[] | undefined): void {
     const px = x * TILE_SIZE
     const py = y * TILE_SIZE
@@ -84,16 +102,18 @@ export class ZoneOverlay {
     if (flags & FLAG_MASK) {
       for (const def of ZONE_FLAG_DEFS) {
         if ((flags & def.flag) !== 0) {
+          const active = this._activeZone?.type === 'flag' && this._activeZone.flag === def.flag
           g.rect(px, py, TILE_SIZE, TILE_SIZE)
-          g.fill({ color: def.color, alpha: ALPHA })
+          g.fill({ color: def.color, alpha: this._alphaFor(active) })
         }
       }
     }
 
     if (zones && zones.length > 0) {
       for (const zoneId of zones) {
+        const active = this._activeZone?.type === 'zone' && this._activeZone.zoneId === zoneId
         g.rect(px, py, TILE_SIZE, TILE_SIZE)
-        g.fill({ color: zoneColorHex(zoneId), alpha: ALPHA })
+        g.fill({ color: zoneColorHex(zoneId), alpha: this._alphaFor(active) })
       }
     }
   }
