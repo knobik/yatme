@@ -3,6 +3,7 @@ import type { AppearanceData } from './appearances'
 import type { OtbmMap } from './otbm'
 import type { BrushRegistry } from './brushes/BrushRegistry'
 import type { ItemRegistry } from './items'
+import type { MapSidecars } from './sidecars'
 import { MapRenderer } from './MapRenderer'
 import { MapMutator } from './MapMutator'
 
@@ -20,11 +21,13 @@ export function setupEditor(
   mapData: OtbmMap,
   brushRegistry: BrushRegistry | null,
   itemRegistry: ItemRegistry | null,
+  sidecars: MapSidecars | null,
 ): EditorInstances {
   const renderer = new MapRenderer(app, appearances, mapData)
   const mutator = new MapMutator(mapData, appearances)
   mutator.brushRegistry = brushRegistry
   mutator.itemRegistry = itemRegistry
+  mutator.sidecars = sidecars
 
   mutator.onChunksInvalidated = (keys) => {
     renderer.invalidateChunks(keys)

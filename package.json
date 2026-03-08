@@ -21,6 +21,7 @@
     "@tailwindcss/vite": "^4.2.1",
     "clsx": "^2.1.1",
     "express": "^5.2.1",
+    "fflate": "^0.8.2",
     "pixi.js": "^8.16.0",
     "protobufjs": "^8.0.0",
     "react": "^19.2.0",

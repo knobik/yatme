@@ -1,5 +1,6 @@
 import { type OtbmMap, type OtbmTile, type OtbmItem, deepCloneItem } from './otbm'
 import type { AppearanceData } from './appearances'
+import type { MapSidecars } from './sidecars'
 import { chunkKeyForTile } from './ChunkManager'
 import type { GroundBrush } from './brushes/BrushTypes'
 import type { WallBrush } from './brushes/WallTypes'
@@ -66,6 +67,7 @@ export class MapMutator {
   private redoStack: MutationBatch[] = []
   private _brushRegistry: BrushRegistry | null = null
   private _itemRegistry: ItemRegistry | null = null
+  private _sidecars: MapSidecars | null = null
 
   // Current batch being built (between beginBatch/commitBatch)
   private currentBatch: MutationBatch | null = null
@@ -94,6 +96,14 @@ export class MapMutator {
 
   get itemRegistry(): ItemRegistry | null {
     return this._itemRegistry
+  }
+
+  set sidecars(sidecars: MapSidecars | null) {
+    this._sidecars = sidecars
+  }
+
+  get sidecars(): MapSidecars | null {
+    return this._sidecars
   }
 
   // --- Batch management ---

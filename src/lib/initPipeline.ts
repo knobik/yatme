@@ -2,6 +2,7 @@ import { Application } from 'pixi.js'
 import { loadAppearances, type AppearanceData } from './appearances'
 import { loadSpriteCatalog } from './sprites'
 import { parseOtbm, type OtbmMap } from './otbm'
+import { parseSidecars, type MapSidecars } from './sidecars'
 import type { MapStorageProvider } from './storage'
 import { loadItems, type ItemRegistry } from './items'
 import { loadBrushData } from './brushes/BrushLoader'
@@ -23,6 +24,7 @@ export interface InitResult {
   app: Application
   appearances: AppearanceData
   mapData: OtbmMap
+  sidecars: MapSidecars
   registry: ItemRegistry
   brushRegistry: BrushRegistry | null
   tilesets: ResolvedTileset[]
@@ -156,11 +158,34 @@ export async function loadAssets(
 
   // Step 7: Map data (heaviest step)
   progress.setStatus('Loading map data...')
-  const bundle = await provider.loadMap((f) => stepProgress(f * 0.5))
-  stepProgress(0.5)
+  const bundle = await provider.loadMap((f) => stepProgress(f * 0.4))
+  stepProgress(0.4)
   progress.setStatus('Processing map data...')
   await new Promise(r => setTimeout(r, 0))
   const mapData = parseOtbm(bundle.otbm)
+  stepProgress(0.6)
+
+  // Load sidecars if not already in bundle (e.g. StaticFileProvider)
+  const sidecarFiles = [mapData.houseFile, mapData.spawnFile, mapData.npcFile, mapData.zoneFile].filter(Boolean)
+  if (sidecarFiles.length > 0 && bundle.sidecars.size === 0) {
+    progress.setStatus('Loading sidecar files...')
+    const loaded = await provider.loadSidecars(sidecarFiles)
+    for (const [k, v] of loaded) bundle.sidecars.set(k, v)
+  }
+  stepProgress(0.8)
+
+  progress.setStatus('Parsing sidecar data...')
+  const sidecars = parseSidecars(bundle, mapData)
+  const sidecarCounts = [
+    sidecars.houses.length && `${sidecars.houses.length} houses`,
+    sidecars.monsterSpawns.length && `${sidecars.monsterSpawns.length} monster spawns`,
+    sidecars.npcSpawns.length && `${sidecars.npcSpawns.length} NPC spawns`,
+    sidecars.zones.length && `${sidecars.zones.length} zones`,
+  ].filter(Boolean)
+  if (sidecarCounts.length > 0) {
+    console.log(`[Sidecars] Loaded: ${sidecarCounts.join(', ')}`)
+  }
+
   if (signal.destroyed) return null
   nextStep()
 
@@ -169,5 +194,5 @@ export async function loadAssets(
   // Yield so the UI can paint the status update before setupEditor blocks
   await new Promise(r => setTimeout(r, 0))
 
-  return { app, appearances, mapData, registry, brushRegistry, tilesets, mapFilename: bundle.filename }
+  return { app, appearances, mapData, sidecars, registry, brushRegistry, tilesets, mapFilename: bundle.filename }
 }

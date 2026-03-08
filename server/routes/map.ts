@@ -97,5 +97,42 @@ export function createMapRouter(config: ServerConfig): Router {
     }
   )
 
+  // POST /map/sidecars/:name — save a sidecar file
+  router.post('/map/sidecars/:name',
+    express.raw({ type: 'application/octet-stream', limit: '50mb' }),
+    (req, res) => {
+      const name = req.params['name']
+      if (!name || name.includes('..') || name.includes('/') || name.includes('\\')) {
+        res.status(400).json({ error: 'Invalid sidecar name' })
+        return
+      }
+
+      const body = req.body as Buffer
+      if (!body || body.length === 0) {
+        res.status(400).json({ error: 'Empty body' })
+        return
+      }
+
+      const safeName = sanitizeFilename(name)
+      const targetPath = path.join(config.mapDir, safeName)
+
+      if (!path.resolve(targetPath).startsWith(path.resolve(config.mapDir))) {
+        res.status(400).json({ error: 'Invalid sidecar name' })
+        return
+      }
+
+      const tmpPath = targetPath + '.tmp'
+      try {
+        fs.writeFileSync(tmpPath, body)
+        fs.renameSync(tmpPath, targetPath)
+        res.json({ ok: true, bytes: body.length })
+      } catch (err) {
+        try { fs.unlinkSync(tmpPath) } catch { /* ignore */ }
+        console.error('Failed to save sidecar:', err)
+        res.status(500).json({ error: 'Failed to save sidecar' })
+      }
+    }
+  )
+
   return router
 }

@@ -65,6 +65,11 @@ export class ServerStorageProvider implements MapStorageProvider {
     return { otbm, sidecars, filename }
   }
 
+  async loadSidecars(_filenames: string[]): Promise<Map<string, Uint8Array>> {
+    // Sidecars are already loaded during loadMap via X-Map-Sidecars header
+    return new Map()
+  }
+
   async saveMap(bundle: MapBundle): Promise<void> {
     const response = await fetch(`${this.baseUrl}/map`, {
       method: 'POST',
@@ -76,6 +81,18 @@ export class ServerStorageProvider implements MapStorageProvider {
     })
     if (!response.ok) {
       throw new Error(`Failed to save map: ${response.status} ${response.statusText}`)
+    }
+
+    // Save sidecar files
+    for (const [name, data] of bundle.sidecars) {
+      const sidecarRes = await fetch(`${this.baseUrl}/map/sidecars/${encodeURIComponent(name)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: toArrayBuffer(data),
+      })
+      if (!sidecarRes.ok) {
+        console.error(`[Save] Failed to save sidecar ${name}: ${sidecarRes.status}`)
+      }
     }
   }
 }

@@ -3,6 +3,7 @@ import { Application } from 'pixi.js'
 import type { AppearanceData } from './lib/appearances'
 import type { OtbmMap, OtbmTile } from './lib/otbm'
 import { deepCloneItem, serializeOtbm } from './lib/otbm'
+import { serializeSidecars, type MapSidecars } from './lib/sidecars'
 import { StaticFileProvider, ServerStorageProvider, type MapStorageProvider } from './lib/storage'
 import { MapRenderer, type FloorViewMode } from './lib/MapRenderer'
 import { MapMutator } from './lib/MapMutator'
@@ -71,6 +72,7 @@ function App() {
 
   // Phase 7 state
   const [mapData, setMapData] = useState<OtbmMap | null>(null)
+  const [sidecarsData, setSidecarsData] = useState<MapSidecars | null>(null)
   const [rendererReady, setRendererReady] = useState<MapRenderer | null>(null)
   const [mutatorReady, setMutatorReady] = useState<MapMutator | null>(null)
 
@@ -247,14 +249,15 @@ function App() {
     savingRef.current = true
     try {
       const otbm = serializeOtbm(md)
-      await provider.saveMap({ otbm, sidecars: new Map(), filename: mapFilename })
+      const sidecars = sidecarsData ? serializeSidecars(sidecarsData, md) : new Map()
+      await provider.saveMap({ otbm, sidecars, filename: mapFilename })
     } catch (e) {
       console.error('[Save] Failed to save map:', e)
       alert(`Failed to save map: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       savingRef.current = false
     }
-  }, [mapData, mapFilename])
+  }, [mapData, mapFilename, sidecarsData])
 
   const handleGoToPosition = useCallback((x: number, y: number, z: number) => {
     if (!rendererRef.current) return
@@ -282,7 +285,7 @@ function App() {
       }, signal, provider)
       if (!result) return
 
-      const { app, appearances, mapData, registry, brushRegistry, tilesets, mapFilename: filename } = result
+      const { app, appearances, mapData, sidecars, registry, brushRegistry, tilesets, mapFilename: filename } = result
       setMapFilename(filename)
       appInstance = app
       appRef.current = app
@@ -298,7 +301,8 @@ function App() {
       setTilesets(tilesets)
 
       // Build renderer + mutator
-      const { renderer, mutator } = setupEditor(app, appearances, mapData, brushRegistry, registry)
+      setSidecarsData(sidecars)
+      const { renderer, mutator } = setupEditor(app, appearances, mapData, brushRegistry, registry, sidecars)
       rendererRef.current = renderer
       mutatorRef.current = mutator
 
