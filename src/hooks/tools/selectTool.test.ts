@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { createSelectHandlers } from './selectTool'
 import { makeToolContext, makeMockRenderer, makePointerEvent } from '../../test/toolFixtures'
 import { makeMapData, makeTile, makeItem } from '../../test/fixtures'
+import type { SelectedItemInfo } from '../useSelection'
 
 describe('selectTool', () => {
   describe('onDown — plain click', () => {
@@ -130,7 +131,7 @@ describe('selectTool', () => {
 
       // Should select all items in the 2x2 rectangle
       expect(ctx.setSelectedItems).toHaveBeenCalled()
-      const lastCall = (ctx.setSelectedItems as any).mock.calls.at(-1)[0]
+      const lastCall = vi.mocked(ctx.setSelectedItems).mock.calls.at(-1)![0]
       expect(lastCall).toHaveLength(3) // 3 tiles with 1 item each
     })
 
@@ -148,7 +149,7 @@ describe('selectTool', () => {
       onMove({ x: 5, y: 5, z: 7 })
 
       // Should have merged existing + new rectangle items
-      const lastCall = (ctx.setSelectedItems as any).mock.calls.at(-1)[0]
+      const lastCall = vi.mocked(ctx.setSelectedItems).mock.calls.at(-1)![0]
       expect(lastCall.length).toBeGreaterThanOrEqual(1)
       // The existing item should still be present
       expect(lastCall).toContainEqual({ x: 1, y: 1, z: 7, itemIndex: 0 })
@@ -181,7 +182,7 @@ describe('selectTool', () => {
       onUp({ x: 5, y: 5, z: 7 })
 
       // Should select all items on the tile
-      const lastCall = (ctx.setSelectedItems as any).mock.calls.at(-1)[0]
+      const lastCall = vi.mocked(ctx.setSelectedItems).mock.calls.at(-1)![0]
       expect(lastCall).toContainEqual({ x: 5, y: 5, z: 7, itemIndex: 0 })
       expect(lastCall).toContainEqual({ x: 5, y: 5, z: 7, itemIndex: 1 })
     })
@@ -202,9 +203,9 @@ describe('selectTool', () => {
       onDown({ x: 5, y: 5, z: 7 }, makePointerEvent({ ctrlKey: true, shiftKey: true }))
       onUp({ x: 5, y: 5, z: 7 })
 
-      const lastCall = (ctx.setSelectedItems as any).mock.calls.at(-1)[0]
+      const lastCall = vi.mocked(ctx.setSelectedItems).mock.calls.at(-1)![0]
       // All items on this tile should be removed
-      expect(lastCall.filter((s: any) => s.x === 5 && s.y === 5)).toHaveLength(0)
+      expect(lastCall.filter((s: SelectedItemInfo) => s.x === 5 && s.y === 5)).toHaveLength(0)
     })
   })
 
@@ -272,7 +273,7 @@ describe('selectTool', () => {
       })
 
       // Simulate addItem actually adding to destination tile
-      mutator.addItem.mockImplementation((x: number, y: number, z: number, item: any) => {
+      mutator.addItem.mockImplementation((x: number, y: number, z: number, item: { id: number }) => {
         const key = `${x},${y},${z}`
         const tile = map.tiles.get(key)
         if (tile) tile.items.push(item)
@@ -289,7 +290,7 @@ describe('selectTool', () => {
       onUp({ x: 7, y: 5, z: 7 })
 
       // Selection should be rebuilt for the destination tile
-      const lastSetCall = (ctx.setSelectedItems as any).mock.calls.at(-1)[0]
+      const lastSetCall = vi.mocked(ctx.setSelectedItems).mock.calls.at(-1)![0]
       expect(lastSetCall.length).toBeGreaterThan(0)
       expect(lastSetCall[0].x).toBe(7)
       expect(lastSetCall[0].y).toBe(5)

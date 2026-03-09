@@ -133,18 +133,18 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
     return tilesets.filter(t => t.sections.some(s => s.type === activeCategory))
   }, [tilesets, activeCategory])
 
-  // Reset tileset selection when category changes
-  useEffect(() => {
-    if (selectedTileset === 'ALL') return
+  // Derive effective tileset — falls back to 'ALL' when current selection is invalid for the category
+  const effectiveTileset = useMemo(() => {
+    if (selectedTileset === 'ALL') return 'ALL'
     const stillValid = categoryTilesets.some(t => t.name === selectedTileset)
-    if (!stillValid) setSelectedTileset('ALL')
-  }, [categoryTilesets, selectedTileset])
+    return stillValid ? selectedTileset : 'ALL'
+  }, [selectedTileset, categoryTilesets])
 
   // Build entry list based on category + tileset selection
   const currentEntries = useMemo((): ResolvedPaletteEntry[] => {
-    if (selectedTileset === 'ALL' && activeCategory === 'all') return allEntries
+    if (effectiveTileset === 'ALL' && activeCategory === 'all') return allEntries
 
-    if (selectedTileset === 'ALL') {
+    if (effectiveTileset === 'ALL') {
       // Collect entries from all tilesets for the active category
       const seenKeys = new Set<string>()
       const entries: ResolvedPaletteEntry[] = []
@@ -162,7 +162,7 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
       return entries
     }
 
-    const tileset = tilesets.find(t => t.name === selectedTileset)
+    const tileset = tilesets.find(t => t.name === effectiveTileset)
     if (!tileset) return []
 
     if (activeCategory === 'all') {
@@ -174,7 +174,7 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
 
     const section = tileset.sections.find(s => s.type === activeCategory)
     return section?.entries ?? []
-  }, [selectedTileset, activeCategory, tilesets, categoryTilesets, allEntries])
+  }, [effectiveTileset, activeCategory, tilesets, categoryTilesets, allEntries])
 
   // Filter by search
   const filteredEntries = useMemo(() => {
@@ -206,28 +206,48 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
     return section?.entries.length ?? 0
   }, [activeCategory])
 
-  // Reset scroll when filter changes
+  // Reset scroll when filter changes — adjust state during render (React-recommended pattern)
+  const [prevScrollDeps, setPrevScrollDeps] = useState({ effectiveTileset, activeCategory, debouncedSearch })
+  const [scrollResetKey, setScrollResetKey] = useState(0)
+  if (
+    prevScrollDeps.effectiveTileset !== effectiveTileset ||
+    prevScrollDeps.activeCategory !== activeCategory ||
+    prevScrollDeps.debouncedSearch !== debouncedSearch
+  ) {
+    setPrevScrollDeps({ effectiveTileset, activeCategory, debouncedSearch })
+    setScrollTop(0)
+    setScrollResetKey(k => k + 1)
+  }
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0
-    setScrollTop(0)
-  }, [selectedTileset, activeCategory, debouncedSearch])
+  }, [scrollResetKey])
 
   // Virtual scrolling calculations
   const totalRows = Math.ceil(filteredEntries.length / COLS)
   const totalHeight = totalRows * CELL_HEIGHT
 
+  const [viewportHeight, setViewportHeight] = useState(400)
+
   const handleScroll = useCallback(() => {
     if (scrollRef.current) {
       setScrollTop(scrollRef.current.scrollTop)
+      setViewportHeight(scrollRef.current.clientHeight)
     }
   }, [])
 
-  const viewportHeight = scrollRef.current?.clientHeight ?? 400
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    setViewportHeight(el.clientHeight)
+    const observer = new ResizeObserver(() => setViewportHeight(el.clientHeight))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
   const startRow = Math.max(0, Math.floor(scrollTop / CELL_HEIGHT) - BUFFER_ROWS)
   const endRow = Math.min(totalRows, Math.ceil((scrollTop + viewportHeight) / CELL_HEIGHT) + BUFFER_ROWS)
   const visibleEntries = filteredEntries.slice(startRow * COLS, endRow * COLS)
 
-  const selectedLabel = selectedTileset === 'ALL' ? 'All Tilesets' : selectedTileset
+  const selectedLabel = effectiveTileset === 'ALL' ? 'All Tilesets' : effectiveTileset
 
   return (
     <div className="panel absolute left-4 top-4 bottom-4 z-10 flex w-[320px] flex-col pointer-events-auto">
@@ -280,7 +300,7 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
               />
               <div className="tileset-dropdown-list">
                 <button
-                  className={clsx('tileset-option', selectedTileset === 'ALL' && 'active')}
+                  className={clsx('tileset-option', effectiveTileset === 'ALL' && 'active')}
                   onClick={() => { setSelectedTileset('ALL'); setTilesetOpen(false); setTilesetSearch('') }}
                 >
                   All Tilesets
@@ -288,7 +308,7 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
                 {filteredDropdownTilesets.map(t => (
                   <button
                     key={t.name}
-                    className={clsx('tileset-option', selectedTileset === t.name && 'active')}
+                    className={clsx('tileset-option', effectiveTileset === t.name && 'active')}
                     onClick={() => { setSelectedTileset(t.name); setTilesetOpen(false); setTilesetSearch('') }}
                   >
                     {t.name}

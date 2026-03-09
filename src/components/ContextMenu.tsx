@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useRef } from 'react'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useClickOutside } from '../hooks/useClickOutside'
 
@@ -22,11 +22,11 @@ interface ContextMenuProps {
 
 export function ContextMenu({ x, y, groups, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState({ x, y })
 
-  // Reposition if menu overflows viewport edges
-  useEffect(() => {
-    const el = menuRef.current
+  // Clamp menu position to viewport via callback ref — runs synchronously on mount,
+  // avoids setState-in-effect by directly mutating the DOM style.
+  const clampRef = useCallback((el: HTMLDivElement | null) => {
+    menuRef.current = el
     if (!el) return
     const rect = el.getBoundingClientRect()
     let nx = x
@@ -35,7 +35,8 @@ export function ContextMenu({ x, y, groups, onClose }: ContextMenuProps) {
     if (rect.bottom > window.innerHeight) ny = window.innerHeight - rect.height - 4
     if (nx < 0) nx = 4
     if (ny < 0) ny = 4
-    if (nx !== pos.x || ny !== pos.y) setPos({ x: nx, y: ny })
+    el.style.left = `${nx}px`
+    el.style.top = `${ny}px`
   }, [x, y])
 
   useClickOutside([menuRef], onClose)
@@ -45,9 +46,9 @@ export function ContextMenu({ x, y, groups, onClose }: ContextMenuProps) {
 
   return (
     <div
-      ref={menuRef}
+      ref={clampRef}
       className="panel min-w-[200px] py-2 fixed z-100"
-      style={{ left: pos.x, top: pos.y }}
+      style={{ left: x, top: y }}
     >
       {visibleGroups.map((group, gi) => (
         <div key={gi}>

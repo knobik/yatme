@@ -248,7 +248,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [handleFloorChange, handleSave, showPalette, showZonePalette, selectedTilePos, contextMenu, showGoToDialog, showFindItem, showReplaceItems, placingHouseExit])
+  }, [handleFloorChange, handleSave, showPalette, showZonePalette, selectedTilePos, contextMenu, showGoToDialog, showFindItem, showReplaceItems, placingHouseExit, borderizeCurrentSelection, mutatorRef, randomizeCurrentSelection, rendererRef, setContextMenu, setEditorSettings, setPlacingHouseExit, setSelectedTilePos, setShowFindItem, setShowGoToDialog, setShowLights, setShowPalette, setShowReplaceItems, toolsRef])
 
   return { borderizeCurrentSelection, randomizeCurrentSelection }
 }

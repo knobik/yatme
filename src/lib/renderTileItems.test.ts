@@ -49,7 +49,7 @@ function renderAndGetSprites(
 ): { x: number; y: number }[] {
   const t = tile ?? makeTile(5, 5, 7, items)
   mockedGetItemSpriteId.mockReturnValue(1)
-  mockedGetTextureSync.mockReturnValue({ width: textureSize.w, height: textureSize.h } as any)
+  mockedGetTextureSync.mockReturnValue({ width: textureSize.w, height: textureSize.h } as unknown as import('pixi.js').Texture)
 
   const parent = new Container()
   renderTileItems({
@@ -60,7 +60,7 @@ function renderAndGetSprites(
     baseY: 0,
     appearances,
   })
-  return (parent as any).children as { x: number; y: number }[]
+  return (parent as unknown as { children: { x: number; y: number }[] }).children
 }
 
 describe('renderTileItems', () => {

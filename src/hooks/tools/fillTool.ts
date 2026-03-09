@@ -92,7 +92,7 @@ export function createFillHandlers(ctx: ToolContext) {
     ctx.mutator.commitBatch()
   }
 
-  function onMove(_pos: TilePos) {
+  function onMove() {
     // Flood fill is single-click only
   }
 

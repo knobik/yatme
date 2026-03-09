@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { getItemDisplayName, loadItems, type ItemRegistry } from './items'
 import { makeAppearance, makeAppearanceData } from '../test/fixtures'
 import type { AppearanceData } from './appearances'
+import type { AppearanceFlags } from '../proto/appearances'
 
 vi.mock('./fetchWithProgress', () => ({
   fetchTextWithProgress: vi.fn(),
@@ -40,7 +41,8 @@ describe('getItemDisplayName', () => {
   it('falls back to market.name', () => {
     const app = makeAppearance(300)
     app.name = ''
-    app.flags = { market: { name: 'Market Plate Armor', category: 0, tradeAsObjectId: 0, showAsObjectId: 0, restrictToProfession: [], minimumLevel: 0 } } as any
+    app.flags = { market: { name: 'Market Plate Armor', category: 0, tradeAsObjectId: 0, showAsObjectId: 0, restrictToProfession: [], minimumLevel: 0 } } as unknown as AppearanceFlags
+
     appearances.objects.set(300, app)
     const result = getItemDisplayName(300, registry, appearances)
     expect(result).toBe('Market Plate Armor')

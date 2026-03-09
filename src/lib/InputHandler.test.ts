@@ -4,21 +4,21 @@ import { makeMapData, makeTile, makeItem } from '../test/fixtures'
 import { MIME_TIBIA_ITEM, MIME_TIBIA_INSPECTOR } from './dragUtils'
 
 function makeMockCanvas() {
-  const listeners = new Map<string, Function[]>()
+  const listeners = new Map<string, ((...args: unknown[]) => void)[]>()
   return {
-    addEventListener: vi.fn((type: string, fn: Function) => {
+    addEventListener: vi.fn((type: string, fn: (...args: unknown[]) => void) => {
       const list = listeners.get(type) ?? []
       list.push(fn)
       listeners.set(type, list)
     }),
-    removeEventListener: vi.fn((type: string, fn: Function) => {
+    removeEventListener: vi.fn((type: string, fn: (...args: unknown[]) => void) => {
       const list = listeners.get(type) ?? []
       listeners.set(type, list.filter(f => f !== fn))
     }),
     setPointerCapture: vi.fn(),
     releasePointerCapture: vi.fn(),
     getBoundingClientRect: vi.fn(() => ({ left: 0, top: 0, width: 800, height: 600 })),
-    fire(type: string, eventProps: Record<string, any> = {}) {
+    fire(type: string, eventProps: Record<string, unknown> = {}) {
       const fns = listeners.get(type) ?? []
       const evt = { preventDefault: vi.fn(), ...eventProps }
       for (const fn of fns) fn(evt)
@@ -58,7 +58,7 @@ describe('setupMapInput', () => {
       const onCameraChange = vi.fn()
       const onSelectTile = vi.fn()
 
-      setupMapInput(canvas as any, host, onCameraChange, onSelectTile)
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, onCameraChange, onSelectTile)
 
       expect(canvas.addEventListener).toHaveBeenCalledWith('pointerdown', expect.any(Function))
       expect(canvas.addEventListener).toHaveBeenCalledWith('pointermove', expect.any(Function))
@@ -69,7 +69,7 @@ describe('setupMapInput', () => {
     it('removes all listeners on cleanup', () => {
       const canvas = makeMockCanvas()
       const { host } = makeMockHost()
-      const cleanup = setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      const cleanup = setupMapInput(canvas as unknown as HTMLCanvasElement, host, vi.fn(), vi.fn())
 
       cleanup()
 
@@ -86,7 +86,7 @@ describe('setupMapInput', () => {
       const { host } = makeMockHost()
       host.onTilePointerDown = onTilePointerDown
 
-      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, vi.fn(), vi.fn())
       canvas.fire('pointerdown', { button: 0, clientX: 100, clientY: 100, pointerId: 1 })
 
       expect(onTilePointerDown).toHaveBeenCalledWith(
@@ -103,7 +103,7 @@ describe('setupMapInput', () => {
       host.onTilePointerDown = onTilePointerDown
       host.onTilePointerMove = onTilePointerMove
 
-      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, vi.fn(), vi.fn())
       canvas.fire('pointerdown', { button: 0, clientX: 100, clientY: 100, pointerId: 1 })
       canvas.fire('pointermove', { clientX: 101, clientY: 100, pointerId: 1 })
 
@@ -121,7 +121,7 @@ describe('setupMapInput', () => {
       host.onTilePointerDown = onTilePointerDown
       host.onTilePointerUp = onTilePointerUp
 
-      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, vi.fn(), vi.fn())
       canvas.fire('pointerdown', { button: 0, clientX: 100, clientY: 100, pointerId: 1 })
       canvas.fire('pointerup', { clientX: 100, clientY: 100, pointerId: 1 })
 
@@ -138,7 +138,7 @@ describe('setupMapInput', () => {
       const { host, camera } = makeMockHost()
       const onCameraChange = vi.fn()
 
-      setupMapInput(canvas as any, host, onCameraChange, vi.fn())
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, onCameraChange, vi.fn())
       canvas.fire('pointerdown', { button: 1, clientX: 100, clientY: 100, pointerId: 1 })
       canvas.fire('pointermove', { clientX: 120, clientY: 110, pointerId: 1 })
 
@@ -156,7 +156,7 @@ describe('setupMapInput', () => {
       const { host } = makeMockHost()
       host.onTileContextMenu = onTileContextMenu
 
-      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, vi.fn(), vi.fn())
       canvas.fire('pointerdown', { button: 2, clientX: 100, clientY: 100, pointerId: 1 })
       canvas.fire('pointerup', { clientX: 100, clientY: 100, pointerId: 1 }) // no movement = click
 
@@ -176,7 +176,7 @@ describe('setupMapInput', () => {
       const onSelectTile = vi.fn()
 
       // No tool callbacks set → falls through to onSelectTile
-      setupMapInput(canvas as any, host, vi.fn(), onSelectTile)
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, vi.fn(), onSelectTile)
       canvas.fire('pointerdown', { button: 0, clientX: 100, clientY: 100, pointerId: 1 })
       canvas.fire('pointerup', { clientX: 102, clientY: 101, pointerId: 1 }) // < 4px
 
@@ -188,7 +188,7 @@ describe('setupMapInput', () => {
       const { host } = makeMockHost()
       const onSelectTile = vi.fn()
 
-      setupMapInput(canvas as any, host, vi.fn(), onSelectTile)
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, vi.fn(), onSelectTile)
       canvas.fire('pointerdown', { button: 0, clientX: 100, clientY: 100, pointerId: 1 })
       canvas.fire('pointermove', { clientX: 110, clientY: 100, pointerId: 1 }) // 10px drag
       canvas.fire('pointerup', { clientX: 110, clientY: 100, pointerId: 1 })
@@ -203,7 +203,7 @@ describe('setupMapInput', () => {
       const { host, camera } = makeMockHost()
       const onCameraChange = vi.fn()
 
-      setupMapInput(canvas as any, host, onCameraChange, vi.fn())
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, onCameraChange, vi.fn())
       canvas.fire('wheel', { clientX: 400, clientY: 300, deltaY: -100 })
 
       expect(camera.zoomAt).toHaveBeenCalledWith(400, 300, -100)
@@ -218,7 +218,7 @@ describe('setupMapInput', () => {
       const { host } = makeMockHost()
       host.onItemDrop = onItemDrop
 
-      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, vi.fn(), vi.fn())
       canvas.fire('drop', {
         clientX: 100,
         clientY: 100,
@@ -241,7 +241,7 @@ describe('setupMapInput', () => {
       host.onInspectorItemDrop = onInspectorItemDrop
       host.onItemDrop = onItemDrop
 
-      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, vi.fn(), vi.fn())
       const source = { x: 10, y: 20, z: 7, index: 2 }
       canvas.fire('drop', {
         clientX: 100,
@@ -271,7 +271,7 @@ describe('setupMapInput', () => {
       host.onInspectorItemDrop = onInspectorItemDrop
       host.onItemDrop = onItemDrop
 
-      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, vi.fn(), vi.fn())
       canvas.fire('drop', {
         clientX: 100,
         clientY: 100,
@@ -291,7 +291,7 @@ describe('setupMapInput', () => {
       const canvas = makeMockCanvas()
       const { host } = makeMockHost()
 
-      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, vi.fn(), vi.fn())
       const evt = canvas.fire('dragover', {
         clientX: 100,
         clientY: 100,
@@ -301,14 +301,14 @@ describe('setupMapInput', () => {
         },
       })
 
-      expect((evt as any).dataTransfer.dropEffect).toBe('move')
+      expect((evt as { dataTransfer: { dropEffect: string } }).dataTransfer.dropEffect).toBe('move')
     })
 
     it('sets dropEffect to copy for palette drags', () => {
       const canvas = makeMockCanvas()
       const { host } = makeMockHost()
 
-      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, vi.fn(), vi.fn())
       const evt = canvas.fire('dragover', {
         clientX: 100,
         clientY: 100,
@@ -318,7 +318,7 @@ describe('setupMapInput', () => {
         },
       })
 
-      expect((evt as any).dataTransfer.dropEffect).toBe('copy')
+      expect((evt as { dataTransfer: { dropEffect: string } }).dataTransfer.dropEffect).toBe('copy')
     })
 
     it('fires onDragHover with tile position during dragover', () => {
@@ -329,7 +329,7 @@ describe('setupMapInput', () => {
       host.onDragHover = onDragHover
 
       // Act
-      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, vi.fn(), vi.fn())
       canvas.fire('dragover', {
         clientX: 64,
         clientY: 96,
@@ -353,7 +353,7 @@ describe('setupMapInput', () => {
       host.onDragLeave = onDragLeave
 
       // Act
-      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, vi.fn(), vi.fn())
       canvas.fire('dragleave', { relatedTarget: null })
 
       // Assert
@@ -370,7 +370,7 @@ describe('setupMapInput', () => {
       host.onItemDrop = onItemDrop
 
       // Act
-      setupMapInput(canvas as any, host, vi.fn(), vi.fn())
+      setupMapInput(canvas as unknown as HTMLCanvasElement, host, vi.fn(), vi.fn())
       canvas.fire('drop', {
         clientX: 100,
         clientY: 100,

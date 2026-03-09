@@ -37,6 +37,7 @@ export function FindItemDialog({
   const [visibleCount, setVisibleCount] = useState(200)
   const abortRef = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [scrollEl, setScrollEl] = useState<HTMLElement | null>(null)
 
   const handleFind = useCallback(async () => {
     if (!findItemId) return
@@ -131,7 +132,7 @@ export function FindItemDialog({
         </div>
 
         {/* Results list */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3" ref={scrollRef}>
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3" ref={(el) => { scrollRef.current = el; setScrollEl(el) }}>
           {results !== null && results.length > 0 ? (
             <div className="flex flex-col gap-px">
               {results.slice(0, visibleCount).map((r, i) => (
@@ -145,7 +146,7 @@ export function FindItemDialog({
                 </button>
               ))}
               {results.length > visibleCount && (
-                <LoadMoreSentinel root={scrollRef.current} onVisible={() => setVisibleCount(c => c + 200)}>
+                <LoadMoreSentinel root={scrollEl} onVisible={() => setVisibleCount(c => c + 200)}>
                   <div className="flex items-center justify-center gap-3 py-4 text-fg-faint">
                     <div className="h-3 w-3 animate-spin rounded-full border border-border-default border-t-accent" />
                     <span className="text-xs">Loading more…</span>
@@ -173,7 +174,9 @@ export function FindItemDialog({
 function LoadMoreSentinel({ root, onVisible, children }: { root: Element | null; onVisible: () => void; children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
   const callbackRef = useRef(onVisible)
-  callbackRef.current = onVisible
+  useEffect(() => {
+    callbackRef.current = onVisible
+  })
 
   useEffect(() => {
     const el = ref.current

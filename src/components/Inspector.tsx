@@ -59,16 +59,25 @@ export function Inspector({
   const deleteRef = useRef<((index: number) => void) | null>(null)
   const anchorRef = useRef<number | null>(null)
 
-  // Reset editing and anchor when tile changes
-  useEffect(() => {
+  // Reset editing when tile changes — adjust state during render (React-recommended pattern)
+  const [prevTileDeps, setPrevTileDeps] = useState({ tilePos, mapData })
+  if (
+    prevTileDeps.tilePos !== tilePos ||
+    prevTileDeps.mapData !== mapData
+  ) {
+    setPrevTileDeps({ tilePos, mapData })
     setEditingIndex(null)
+  }
+
+  // Reset selection anchor when tile changes (ref write must happen in effect)
+  useEffect(() => {
     if (tilePos) {
       const tile = mapData.tiles.get(`${tilePos.x},${tilePos.y},${tilePos.z}`)
       anchorRef.current = tile && tile.items.length > 0 ? tile.items.length - 1 : null
     } else {
       anchorRef.current = null
     }
-  }, [tilePos?.x, tilePos?.y, tilePos?.z, mapData])
+  }, [tilePos, mapData])
 
   // Derive selected indices for this tile from selectedItems prop
   const selectedItemIndices = useMemo(() => {
@@ -119,13 +128,31 @@ export function Inspector({
     }
   }, [tilePos, selectedItems, onItemSelectionChange])
 
-  // Open property editor on double-click request from outside
-  useEffect(() => {
+  // Open property editor on double-click request from outside — adjust state during render
+  const [prevInitialEditIndex, setPrevInitialEditIndex] = useState(initialEditIndex)
+  if (initialEditIndex !== prevInitialEditIndex) {
+    setPrevInitialEditIndex(initialEditIndex)
     if (initialEditIndex != null && initialEditIndex >= 0) {
       setEditingIndex(initialEditIndex)
+    }
+  }
+  // Notify parent that the edit index was consumed (side effect — must be in effect, not render)
+  useEffect(() => {
+    if (initialEditIndex != null && initialEditIndex >= 0) {
       onEditIndexConsumed?.()
     }
   }, [initialEditIndex, onEditIndexConsumed])
+
+  const handleDelete = useCallback((index: number) => {
+    if (!tilePos) return
+    if (editingIndex === index) setEditingIndex(null)
+    else if (editingIndex !== null && editingIndex > index) setEditingIndex(editingIndex - 1)
+    mutator.removeItem(tilePos.x, tilePos.y, tilePos.z, index)
+  }, [tilePos, editingIndex, mutator])
+
+  useEffect(() => {
+    deleteRef.current = handleDelete
+  })
 
   // Delete hovered item on Delete key (capture phase — runs before App handler)
   useEffect(() => {
@@ -140,7 +167,7 @@ export function Inspector({
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  })
+  }, [])
 
   if (!tilePos) return null
 
@@ -150,13 +177,6 @@ export function Inspector({
   const groundCount = tile
     ? tile.items.filter(it => classifyItem(it.id, appearances) === 'ground').length
     : 0
-
-  const handleDelete = (index: number) => {
-    if (editingIndex === index) setEditingIndex(null)
-    else if (editingIndex !== null && editingIndex > index) setEditingIndex(editingIndex - 1)
-    mutator.removeItem(tilePos.x, tilePos.y, tilePos.z, index)
-  }
-  deleteRef.current = handleDelete
 
   const handleDragStart = (index: number, e: React.DragEvent) => {
     if (!tile) return
@@ -419,7 +439,6 @@ function DeleteIcon() {
 
 function ItemRow({
   item,
-  index: _index,
   isGround,
   isSelected,
   isDragging,

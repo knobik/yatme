@@ -2,6 +2,9 @@
 
 import { vi } from 'vitest'
 import type { ToolContext, TilePos, BrushSelection, BrushShape, EditorTool } from '../hooks/tools/types'
+import type { OtbmMap } from '../lib/otbm'
+import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
+import type { SelectedItemInfo } from '../hooks/useSelection'
 
 export function makeMockMutator(overrides: Record<string, unknown> = {}) {
   return {
@@ -50,16 +53,16 @@ export function makeMockRenderer(overrides: Record<string, unknown> = {}) {
 export interface MakeToolContextOptions {
   mutator?: ReturnType<typeof makeMockMutator>
   renderer?: ReturnType<typeof makeMockRenderer>
-  mapData?: any
+  mapData?: OtbmMap
   selectedBrush?: BrushSelection | null
   brushSize?: number
   brushShape?: BrushShape
-  registry?: any
+  registry?: BrushRegistry | null
   activeDoorType?: number
   activeTool?: EditorTool
   isPasting?: boolean
-  copyBuffer?: any
-  selectedItems?: any[]
+  copyBuffer?: { canPaste: () => boolean; getTiles: () => unknown[] }
+  selectedItems?: SelectedItemInfo[]
   clickToInspect?: boolean
 }
 
@@ -84,12 +87,12 @@ export function makeToolContext(opts: MakeToolContextOptions = {}) {
     selectStartRef: { current: null as TilePos | null },
     isShiftDragRef: { current: false },
     isCtrlDragRef: { current: false },
-    selectedItemsSnapshotRef: { current: [] as any[] },
+    selectedItemsSnapshotRef: { current: [] as SelectedItemInfo[] },
     isDragMovingRef: { current: false },
     dragMoveOriginRef: { current: null as TilePos | null },
     dragMoveLastPosRef: { current: null as TilePos | null },
     hoverPosRef: { current: null as TilePos | null },
-    onRequestEditItemRef: { current: undefined as any },
+    onRequestEditItemRef: { current: undefined as ((x: number, y: number, z: number, idx: number) => void) | undefined },
     clickToInspectRef: { current: opts.clickToInspect ?? false },
     isPastingRef: { current: opts.isPasting ?? false },
     copyBufferRef: { current: opts.copyBuffer ?? { canPaste: () => false, getTiles: () => [] } },

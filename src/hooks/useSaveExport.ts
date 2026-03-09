@@ -101,7 +101,7 @@ export function useSaveExport({
       saveInProgressRef.current = false
       setSaveProgress(null)
     }
-  }, [mapData, mapFilename, sidecarsData])
+  }, [mapData, mapFilename, sidecarsData, storageRef])
 
   const handleExportZones = useCallback(() => {
     triggerDownload(serializeZonesXml(sidecarsData.zones), 'zones.xml', 'application/xml')
@@ -116,7 +116,7 @@ export function useSaveExport({
         return { ...prev, zones: [...prev.zones, ...newZones] }
       })
     }, 'Zones')
-  }, [])
+  }, [setSidecarsData])
 
   const handleExportHouses = useCallback(() => {
     triggerDownload(serializeHousesXml(sidecarsData.houses), 'houses.xml', 'application/xml')
@@ -131,7 +131,7 @@ export function useSaveExport({
         return { ...prev, houses: [...prev.houses, ...newHouses] }
       })
     }, 'Houses')
-  }, [])
+  }, [setSidecarsData])
 
   return {
     saveProgress,

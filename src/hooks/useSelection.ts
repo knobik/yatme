@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { MapRenderer } from '../lib/MapRenderer'
 import type { OtbmMap } from '../lib/otbm'
 
@@ -87,7 +87,9 @@ export function deriveHighlights(
 export function useSelection(renderer: MapRenderer | null, mapData: OtbmMap | null) {
   const [selectedItems, setSelectedItems] = useState<SelectedItemInfo[]>([])
   const selectedItemsRef = useRef(selectedItems)
-  selectedItemsRef.current = selectedItems
+  useEffect(() => {
+    selectedItemsRef.current = selectedItems
+  })
 
   const applyHighlights = (items: SelectedItemInfo[]) => {
     if (!mapData || !renderer) return

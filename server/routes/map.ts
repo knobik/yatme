@@ -5,7 +5,7 @@ import type { ServerConfig } from '../config.ts'
 import { findOtbmFile, discoverSidecars } from '../lib/mapDir.ts'
 
 function sanitizeFilename(name: string): string {
-  return path.basename(name).replace(/[^\w.\-]/g, '_')
+  return path.basename(name).replace(/[^\w.-]/g, '_')
 }
 
 export function createMapRouter(config: ServerConfig): Router {

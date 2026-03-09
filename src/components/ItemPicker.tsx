@@ -58,6 +58,7 @@ export function ItemPicker({ registry, appearances, selectedItemId, onSelect }: 
     stackable: false, rotatable: false, hangable: false,
   })
   const [scrollTop, setScrollTop] = useState(0)
+  const [viewportHeight, setViewportHeight] = useState(300)
   const scrollRef = useRef<HTMLDivElement>(null)
   const nameTimerRef = useRef<number>(0)
 
@@ -122,17 +123,35 @@ export function ItemPicker({ registry, appearances, selectedItemId, onSelect }: 
     }
   }, [mode, debouncedSearch, typeFilter, properties, allItems, registry, appearances])
 
+  // Reset scroll when results change — adjust state during render (React-recommended pattern)
+  const [prevFiltered, setPrevFiltered] = useState(filteredItems)
+  const [scrollResetKey, setScrollResetKey] = useState(0)
+  if (prevFiltered !== filteredItems) {
+    setPrevFiltered(filteredItems)
+    setScrollTop(0)
+    setScrollResetKey(k => k + 1)
+  }
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0
-    setScrollTop(0)
-  }, [filteredItems])
+  }, [scrollResetKey])
 
   const totalRows = Math.ceil(filteredItems.length / COLS)
   const totalHeight = totalRows * CELL_HEIGHT
-  const viewportHeight = scrollRef.current?.clientHeight ?? 300
 
   const handleScroll = useCallback(() => {
-    if (scrollRef.current) setScrollTop(scrollRef.current.scrollTop)
+    if (scrollRef.current) {
+      setScrollTop(scrollRef.current.scrollTop)
+      setViewportHeight(scrollRef.current.clientHeight)
+    }
+  }, [])
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    setViewportHeight(el.clientHeight)
+    const observer = new ResizeObserver(() => setViewportHeight(el.clientHeight))
+    observer.observe(el)
+    return () => observer.disconnect()
   }, [])
 
   const startRow = Math.max(0, Math.floor(scrollTop / CELL_HEIGHT) - BUFFER_ROWS)

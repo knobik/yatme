@@ -3,7 +3,7 @@ import { MapMutator } from './MapMutator'
 import { makeAppearanceData, makeMapData, makeTile, makeItem } from '../test/fixtures'
 
 function setup(tiles: ReturnType<typeof makeTile>[]) {
-  const appearances = makeAppearanceData([[100, { bank: { waypoints: 0 } as any }]])
+  const appearances = makeAppearanceData([[100, { bank: { waypoints: 0 } }]])
   const mapData = makeMapData(tiles)
   const mutator = new MapMutator(mapData, appearances)
   return { mapData, mutator }

@@ -67,7 +67,6 @@ function App() {
   const [showHouseOverlay, setShowHouseOverlay] = useState(initialSettings.showHouseOverlay)
   const [placingHouseExit, setPlacingHouseExit] = useState<number | null>(null)
   const placingHouseExitRef = useRef<number | null>(null)
-  placingHouseExitRef.current = placingHouseExit
 
   const [mapData, setMapData] = useState<OtbmMap | null>(null)
   const [sidecarsData, setSidecarsData] = useState<MapSidecars>(() => emptySidecars())
@@ -85,7 +84,6 @@ function App() {
 
   const paletteRef = useRef<BrushPaletteHandle>(null)
   const editorSettingsRef = useRef(editorSettings)
-  editorSettingsRef.current = editorSettings
 
   const [editItemIndex, setEditItemIndex] = useState<number | null>(null)
 
@@ -95,7 +93,12 @@ function App() {
 
   const tools = useEditorTools(rendererReady, mutatorReady, mapData, brushRegistryState, handleRequestEditItem, editorSettings.clickToInspect, editorSettingsRef)
   const toolsRef = useRef(tools)
-  toolsRef.current = tools
+
+  useEffect(() => {
+    placingHouseExitRef.current = placingHouseExit
+    editorSettingsRef.current = editorSettings
+    toolsRef.current = tools
+  })
 
   // ── Editor Init ────────────────────────────────────────────────────
   const { rendererRef, mutatorRef, storageRef } = useEditorInit(containerRef, {
@@ -206,30 +209,30 @@ function App() {
     if (rendererReady) {
       rendererReady.setHighlights(deriveHighlights(tools.selectedItems, mapData!))
     }
-  }, [tools.selectedItems, rendererReady])
+  }, [tools.selectedItems, rendererReady, mapData])
 
   useEffect(() => {
     rendererRef.current?.setActiveZone(tools.selectedZone)
-  }, [tools.selectedZone])
+  }, [tools.selectedZone, rendererRef])
 
   useEffect(() => {
     rendererRef.current?.setActiveHouse(tools.selectedHouse?.id ?? null)
-  }, [tools.selectedHouse])
+  }, [tools.selectedHouse, rendererRef])
 
   useEffect(() => {
     rendererRef.current?.setShowSelectionBorder(editorSettings.selectionBorder)
-  }, [editorSettings.selectionBorder])
+  }, [editorSettings.selectionBorder, rendererRef])
 
   const handleFloorChange = useCallback((delta: number) => {
     const r = rendererRef.current
     if (!r) return
     r.setFloor(r.floor + delta)
-  }, [])
+  }, [rendererRef])
 
   const handleFloorViewMode = useCallback((mode: FloorViewMode) => {
     rendererRef.current?.setFloorViewMode(mode)
     setEditorSettings(s => { const u = { ...s, floorViewMode: mode }; saveSettings(u); return u })
-  }, [])
+  }, [rendererRef])
 
   const handleToggleTransparentUpper = useCallback(() => {
     if (rendererRef.current) {
@@ -237,13 +240,13 @@ function App() {
       rendererRef.current.setShowTransparentUpper(next)
       setEditorSettings(s => { const u = { ...s, showTransparentUpper: next }; saveSettings(u); return u })
     }
-  }, [])
+  }, [rendererRef])
 
   const handleCloseInspector = useCallback(() => {
     setSelectedTilePos(null)
     rendererRef.current?.deselectTile()
     tools.setSelectedItems([])
-  }, [tools])
+  }, [tools, rendererRef])
 
   const handleItemSelectionChange = useCallback((items: typeof tools.selectedItems) => {
     tools.setSelectedItems(items)
@@ -253,16 +256,16 @@ function App() {
     if (items.length === 1) {
       setSelectedTilePos({ x: items[0].x, y: items[0].y, z: items[0].z })
     }
-  }, [rendererReady, tools])
+  }, [rendererReady, tools, mapData])
 
   const handleClosePalette = useCallback(() => {
     setShowPalette(false)
     setEditorSettings(s => { const u = { ...s, showPalette: false }; saveSettings(u); return u })
   }, [])
 
-  const handleZoomIn = useCallback(() => { rendererRef.current?.zoomIn() }, [])
-  const handleZoomOut = useCallback(() => { rendererRef.current?.zoomOut() }, [])
-  const handleResetZoom = useCallback(() => { rendererRef.current?.resetZoom() }, [])
+  const handleZoomIn = useCallback(() => { rendererRef.current?.zoomIn() }, [rendererRef])
+  const handleZoomOut = useCallback(() => { rendererRef.current?.zoomOut() }, [rendererRef])
+  const handleResetZoom = useCallback(() => { rendererRef.current?.resetZoom() }, [rendererRef])
 
   const handleSettingsChange = useCallback((next: EditorSettings) => {
     setEditorSettings(next)
@@ -280,13 +283,13 @@ function App() {
     setShowHousePalette(next.showHousePalette)
     setShowHouseOverlay(next.showHouseOverlay)
     saveSettings(next)
-  }, [])
+  }, [rendererRef])
 
   const handleGoToPosition = useCallback((x: number, y: number, z: number) => {
     rendererRef.current?.setFloor(z)
     rendererRef.current?.centerOn(x, y)
     rendererRef.current?.pingTile(x, y, z)
-  }, [])
+  }, [rendererRef])
 
   // ── Keyboard Shortcuts ─────────────────────────────────────────────
   const { borderizeCurrentSelection, randomizeCurrentSelection } = useKeyboardShortcuts({

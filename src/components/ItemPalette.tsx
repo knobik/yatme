@@ -139,25 +139,43 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
     return items
   }, [allItems, activeCategory, debouncedSearch])
 
-  // Reset scroll when filter changes
+  // Reset scroll when filter changes — adjust state during render (React-recommended pattern)
+  const [prevScrollDeps, setPrevScrollDeps] = useState({ activeCategory, debouncedSearch })
+  const [scrollResetKey, setScrollResetKey] = useState(0)
+  if (
+    prevScrollDeps.activeCategory !== activeCategory ||
+    prevScrollDeps.debouncedSearch !== debouncedSearch
+  ) {
+    setPrevScrollDeps({ activeCategory, debouncedSearch })
+    setScrollTop(0)
+    setScrollResetKey(k => k + 1)
+  }
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0
-    setScrollTop(0)
-  }, [activeCategory, debouncedSearch])
+  }, [scrollResetKey])
 
   // Virtual scrolling calculations
   const totalRows = Math.ceil(filteredItems.length / COLS)
   const totalHeight = totalRows * CELL_HEIGHT
-  const viewportRef = useRef<HTMLDivElement>(null)
+  const [viewportHeight, setViewportHeight] = useState(400)
 
   const handleScroll = useCallback(() => {
     if (scrollRef.current) {
       setScrollTop(scrollRef.current.scrollTop)
+      setViewportHeight(scrollRef.current.clientHeight)
     }
   }, [])
 
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    setViewportHeight(el.clientHeight)
+    const observer = new ResizeObserver(() => setViewportHeight(el.clientHeight))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
   // Calculate visible range
-  const viewportHeight = scrollRef.current?.clientHeight ?? 400
   const startRow = Math.max(0, Math.floor(scrollTop / CELL_HEIGHT) - BUFFER_ROWS)
   const endRow = Math.min(totalRows, Math.ceil((scrollTop + viewportHeight) / CELL_HEIGHT) + BUFFER_ROWS)
   const visibleItems = filteredItems.slice(startRow * COLS, endRow * COLS)
@@ -210,7 +228,7 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
         className="flex-1 overflow-y-auto overflow-x-hidden min-h-0"
         onScroll={handleScroll}
       >
-        <div style={{ height: totalHeight, position: 'relative' }} ref={viewportRef}>
+        <div style={{ height: totalHeight, position: 'relative' }}>
           <div
             className="item-grid"
             style={{

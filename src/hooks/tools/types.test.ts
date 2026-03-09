@@ -11,6 +11,8 @@ import {
 import { makeGroundBrush, makeWallBrush, makeCarpetBrushWithItems, makeTableBrushWithItems, makeMinimalRegistry } from '../../test/brushFixtures'
 import { makeDoodadBrush } from '../../test/brushFixtures'
 import { makeMockMutator } from '../../test/toolFixtures'
+import type { MapMutator } from '../../lib/MapMutator'
+import type { CopyBuffer } from '../../lib/CopyBuffer'
 
 describe('getTilesInBrush', () => {
   it('size=0 returns single tile', () => {
@@ -128,20 +130,20 @@ describe('applyBrushToTile', () => {
   it('dispatches to mutator.paintGround for ground brush', () => {
     const mutator = makeMockMutator()
     const brush = makeGroundBrush({ name: 'grass' })
-    applyBrushToTile(mutator as any, 5, 5, 7, { type: 'ground', brush }, 0)
+    applyBrushToTile(mutator as unknown as MapMutator, 5, 5, 7, { type: 'ground', brush }, 0)
     expect(mutator.paintGround).toHaveBeenCalledWith(5, 5, 7, brush)
   })
 
   it('dispatches to mutator.paintWall for wall brush', () => {
     const mutator = makeMockMutator()
     const brush = makeWallBrush({ name: 'wall' })
-    applyBrushToTile(mutator as any, 5, 5, 7, { type: 'wall', brush }, 0)
+    applyBrushToTile(mutator as unknown as MapMutator, 5, 5, 7, { type: 'wall', brush }, 0)
     expect(mutator.paintWall).toHaveBeenCalledWith(5, 5, 7, brush)
   })
 
   it('dispatches to mutator.addItem for raw brush with correct item id', () => {
     const mutator = makeMockMutator()
-    applyBrushToTile(mutator as any, 5, 5, 7, { type: 'raw', itemId: 99 }, 0)
+    applyBrushToTile(mutator as unknown as MapMutator, 5, 5, 7, { type: 'raw', itemId: 99 }, 0)
     expect(mutator.addItem).toHaveBeenCalledWith(5, 5, 7, { id: 99 })
   })
 
@@ -151,13 +153,13 @@ describe('applyBrushToTile', () => {
 
     // When Math.random returns 0, random * ceiling (0) < thickness (50), so it paints
     vi.spyOn(Math, 'random').mockReturnValue(0)
-    applyBrushToTile(mutator as any, 5, 5, 7, { type: 'doodad', brush }, 1)
+    applyBrushToTile(mutator as unknown as MapMutator, 5, 5, 7, { type: 'doodad', brush }, 1)
     expect(mutator.paintDoodad).toHaveBeenCalledTimes(1)
 
     // When Math.random returns 0.99, random * ceiling (99) >= thickness (50), so it skips
     mutator.paintDoodad.mockClear()
     vi.spyOn(Math, 'random').mockReturnValue(0.99)
-    applyBrushToTile(mutator as any, 5, 5, 7, { type: 'doodad', brush }, 1)
+    applyBrushToTile(mutator as unknown as MapMutator, 5, 5, 7, { type: 'doodad', brush }, 1)
     expect(mutator.paintDoodad).not.toHaveBeenCalled()
 
     vi.restoreAllMocks()
@@ -200,7 +202,7 @@ describe('getCopyBufferFootprint', () => {
         { dx: 1, dy: 0, dz: 0, items: [] },
         { dx: 0, dy: 1, dz: 0, items: [] },
       ],
-    } as any
+    } as unknown as CopyBuffer
 
     const result = getCopyBufferFootprint(buffer, 10, 20, 7)
     expect(result).toEqual([
@@ -217,7 +219,7 @@ describe('getCopyBufferFootprint', () => {
         { dx: 1, dy: 0, dz: 1, items: [] }, // different floor
         { dx: 0, dy: 1, dz: -1, items: [] }, // different floor
       ],
-    } as any
+    } as unknown as CopyBuffer
 
     const result = getCopyBufferFootprint(buffer, 10, 20, 7)
     expect(result).toEqual([{ x: 10, y: 20, z: 7 }])

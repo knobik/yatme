@@ -1,10 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ServerStorageProvider } from './ServerStorageProvider'
 
+interface MockXHRInstance {
+  open: ReturnType<typeof vi.fn>
+  setRequestHeader: ReturnType<typeof vi.fn>
+  send: ReturnType<typeof vi.fn>
+  status: number
+  statusText: string
+  upload: { addEventListener: ReturnType<typeof vi.fn> }
+  addEventListener: ReturnType<typeof vi.fn>
+}
+
 function installMockXHR(status = 200, statusText = 'OK') {
-  const instances: any[] = []
-  ;(globalThis as any).XMLHttpRequest = function MockXHR(this: any) {
-    const listeners: Record<string, Function[]> = {}
+  const instances: MockXHRInstance[] = []
+  ;(globalThis as Record<string, unknown>).XMLHttpRequest = function MockXHR(this: MockXHRInstance) {
+    const listeners: Record<string, ((...args: unknown[]) => void)[]> = {}
     this.open = vi.fn()
     this.setRequestHeader = vi.fn()
     this.send = vi.fn(() => {
@@ -19,7 +29,7 @@ function installMockXHR(status = 200, statusText = 'OK') {
     this.upload = {
       addEventListener: vi.fn(),
     }
-    this.addEventListener = vi.fn((event: string, handler: Function) => {
+    this.addEventListener = vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       listeners[event] = listeners[event] || []
       listeners[event].push(handler)
     })
@@ -33,14 +43,14 @@ describe('ServerStorageProvider', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks()
-    origXHR = (globalThis as any).XMLHttpRequest
+    origXHR = (globalThis as Record<string, unknown>).XMLHttpRequest as typeof globalThis.XMLHttpRequest | undefined
   })
 
   afterEach(() => {
     if (origXHR !== undefined) {
-      (globalThis as any).XMLHttpRequest = origXHR
+      (globalThis as Record<string, unknown>).XMLHttpRequest = origXHR
     } else {
-      delete (globalThis as any).XMLHttpRequest
+      delete (globalThis as Record<string, unknown>).XMLHttpRequest
     }
   })
 

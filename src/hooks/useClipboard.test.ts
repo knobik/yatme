@@ -7,6 +7,9 @@ import type { SelectedItemInfo } from './useSelection'
 import type { EditorSettings } from '../lib/EditorSettings'
 import { DEFAULT_SETTINGS } from '../lib/EditorSettings'
 
+import type { MapRenderer } from '../lib/MapRenderer'
+import type { MapMutator } from '../lib/MapMutator'
+
 function makeMockRenderer() {
   return {
     floor: 7,
@@ -14,7 +17,7 @@ function makeMockRenderer() {
     updateBrushCursor: vi.fn(),
     clearItemHighlight: vi.fn(),
     updatePastePreview: vi.fn(),
-  } as any
+  } as unknown as MapRenderer
 }
 
 function makeMockMutator() {
@@ -24,7 +27,7 @@ function makeMockMutator() {
     removeItem: vi.fn(),
     setTileItems: vi.fn(),
     borderizeSelection: vi.fn(),
-  } as any
+  } as unknown as MapMutator
 }
 
 describe('useClipboard', () => {
@@ -44,8 +47,8 @@ describe('useClipboard', () => {
       makeTile(5, 5, 7, [makeItem({ id: 10 }), makeItem({ id: 20 })]),
     ])
     selectedItemsRef = { current: [] }
-    setSelectedItems = vi.fn() as any
-    applyHighlights = vi.fn() as any
+    setSelectedItems = vi.fn()
+    applyHighlights = vi.fn()
     hoverPosRef = { current: null }
     settingsRef = { current: { ...DEFAULT_SETTINGS } }
   })

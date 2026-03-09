@@ -88,16 +88,18 @@ export function useEditorTools(
   const selectedHouseRef = useRef<number | null>(selectedHouse?.id ?? null)
   const onRequestEditItemRef = useRef(onRequestEditItem)
   const clickToInspectRef = useRef(clickToInspect)
-  activeToolRef.current = activeTool
-  selectedBrushRef.current = selectedBrush
-  brushSizeRef.current = brushSize
-  brushShapeRef.current = brushShape
-  brushRegistryRef.current = brushRegistry
-  activeDoorTypeRef.current = activeDoorType
-  selectedZoneRef.current = selectedZone
-  selectedHouseRef.current = selectedHouse?.id ?? null
-  onRequestEditItemRef.current = onRequestEditItem
-  clickToInspectRef.current = clickToInspect
+  useEffect(() => {
+    activeToolRef.current = activeTool
+    selectedBrushRef.current = selectedBrush
+    brushSizeRef.current = brushSize
+    brushShapeRef.current = brushShape
+    brushRegistryRef.current = brushRegistry
+    activeDoorTypeRef.current = activeDoorType
+    selectedZoneRef.current = selectedZone
+    selectedHouseRef.current = selectedHouse?.id ?? null
+    onRequestEditItemRef.current = onRequestEditItem
+    clickToInspectRef.current = clickToInspect
+  })
 
   // Drag state refs
   const paintedTilesRef = useRef(new Set<string>())
@@ -222,7 +224,6 @@ export function useEditorTools(
 
       const newSel: SelectedItemInfo = { x: pos.x, y: pos.y, z: pos.z, itemIndex: topIdx }
       selection.setSelectedItems([newSel])
-      selection.selectedItemsRef.current = [newSel]
 
       renderer.onTileClick?.(tile, pos.x, pos.y)
       renderer.setHighlights([{ pos: { x: pos.x, y: pos.y, z: pos.z }, indices: [topIdx] }])
@@ -237,6 +238,7 @@ export function useEditorTools(
       renderer.onTileHover = undefined
       renderer.clearGhostPreview()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [renderer, mutator, mapData, brushRegistry])
 
   // ── Tool-switch side effects ─────────────────────────────────────
@@ -261,12 +263,12 @@ export function useEditorTools(
   useEffect(() => {
     if (activeTool !== 'select') {
       selection.setSelectedItems([])
-      selection.selectedItemsRef.current = []
       renderer?.clearItemHighlight()
     }
     if (clipboard.isPastingRef.current) {
       clipboard.cancelPaste()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTool, renderer])
 
   // ── Undo/redo ────────────────────────────────────────────────────

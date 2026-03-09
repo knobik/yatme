@@ -73,7 +73,9 @@ describe('buildChunkIndex', () => {
   })
 })
 
-function mockContainer(): any {
+import type { Container } from 'pixi.js'
+
+function mockContainer(): Container {
   return {
     isCachedAsTexture: false,
     cacheAsTexture: vi.fn(),
@@ -81,7 +83,7 @@ function mockContainer(): any {
     removeChildren: vi.fn(),
     destroy: vi.fn(),
     destroyed: false,
-  }
+  } as unknown as Container
 }
 
 describe('ChunkCache', () => {

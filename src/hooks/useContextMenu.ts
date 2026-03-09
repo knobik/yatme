@@ -44,10 +44,10 @@ export function useContextMenu(options: UseContextMenuOptions) {
   } = options
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [contextMenuGroups, setContextMenuGroups] = useState<ContextMenuGroup[]>([])
 
-  function buildContextMenuGroups(): ContextMenuGroup[] {
-    if (!contextMenu) return []
-    const { tilePos, tile } = contextMenu
+  function buildContextMenuGroups(menu: ContextMenuState): ContextMenuGroup[] {
+    const { tilePos, tile } = menu
     const renderer = rendererRef.current
     const currentTools = toolsRef.current
 
@@ -279,5 +279,14 @@ export function useContextMenu(options: UseContextMenuOptions) {
     return [clipboardGroup, positionGroup, itemInfoGroup, brushSelectGroup, doorGroup, rotateGroup, teleportGroup]
   }
 
-  return { contextMenuGroups: buildContextMenuGroups(), contextMenu, setContextMenu }
+  const handleSetContextMenu = (menu: ContextMenuState | null) => {
+    setContextMenu(menu)
+    if (menu) {
+      setContextMenuGroups(buildContextMenuGroups(menu))
+    } else {
+      setContextMenuGroups([])
+    }
+  }
+
+  return { contextMenuGroups, contextMenu, setContextMenu: handleSetContextMenu }
 }

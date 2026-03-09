@@ -64,7 +64,7 @@ function makeFillContext(overrides: Partial<{
     executePasteAt: vi.fn(),
     cancelPaste: vi.fn(),
     activeToolRef: { current: 'fill' },
-    renderer: {} as any,
+    renderer: {} as unknown as ToolContext['renderer'],
   } as unknown as ToolContext
 
   return { ctx, mutator }

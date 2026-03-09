@@ -29,8 +29,10 @@ export function useToolAutoToggle(
   const paletteBeforeRef = useRef<boolean | null>(null)
   const showOverlayRef = useRef(overlay.show)
   const showPaletteRef = useRef(palette.show)
-  showOverlayRef.current = overlay.show
-  showPaletteRef.current = palette.show
+  useEffect(() => {
+    showOverlayRef.current = overlay.show
+    showPaletteRef.current = palette.show
+  })
 
   useEffect(() => {
     if (activeTool === toolName) {
