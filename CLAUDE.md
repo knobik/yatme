@@ -117,7 +117,7 @@ All CSS variables and base classes: `src/styles/theme.css`
 
 ## Code Style
 
-- Don't copy code — if you need to write it twice, extract it into a shared utility or hook.
+- Don't copy code — if you need to write it twice, extract it into a shared utility, hook, or component.
 
 ## Documentation Conventions
 
