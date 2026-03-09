@@ -18,7 +18,8 @@ RUN npm run build
 # Production image
 FROM base AS production
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm install tsx lzma-native sharp
+RUN npm ci --omit=dev && \
+    rm -rf node_modules/@img/sharp-libvips-linux-x64 node_modules/@img/sharp-linux-x64
 COPY server/ server/
 COPY tsconfig.server.json ./
 COPY scripts/ scripts/
