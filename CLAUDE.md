@@ -115,6 +115,10 @@ All CSS variables and base classes: `src/styles/theme.css`
 
 - All tools, views, and map operations must have entries in the **hamburger menu** (`src/components/Toolbar.tsx` -> `menuSections`) — not just keyboard shortcuts or context menu items.
 
+## Code Style
+
+- Don't copy code — if you need to write it twice, extract it into a shared utility or hook.
+
 ## Documentation Conventions
 
 - When writing diagrams in Markdown files, always use Mermaid syntax (```mermaid code blocks).
