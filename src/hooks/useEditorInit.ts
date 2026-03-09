@@ -99,8 +99,9 @@ export function useEditorInit(
     let appInstance: Application | null = null
 
     async function init() {
+      const mapFile = import.meta.env.VITE_MAP_FILE as string | undefined
       const provider: MapStorageProvider = import.meta.env.VITE_STORAGE === 'static'
-        ? new StaticFileProvider()
+        ? new StaticFileProvider(mapFile)
         : new ServerStorageProvider()
       storageRef.current = provider
 

@@ -1,6 +1,6 @@
 import type { MapRenderer } from '../../lib/MapRenderer'
 import type { MapMutator } from '../../lib/MapMutator'
-import type { OtbmMap } from '../../lib/otbm'
+import { type OtbmMap, MAP_MAX_WIDTH, MAP_MAX_HEIGHT } from '../../lib/otbm'
 import type { BrushRegistry } from '../../lib/brushes/BrushRegistry'
 import type { GroundBrush } from '../../lib/brushes/BrushTypes'
 import type { WallBrush } from '../../lib/brushes/WallTypes'
@@ -222,8 +222,11 @@ export function getTilesInBrush(cx: number, cy: number, size: number, shape: Bru
   const tiles: { x: number; y: number }[] = []
   for (let dy = -size; dy <= size; dy++) {
     for (let dx = -size; dx <= size; dx++) {
+      const tx = cx + dx
+      const ty = cy + dy
+      if (tx < 0 || tx > MAP_MAX_WIDTH || ty < 0 || ty > MAP_MAX_HEIGHT) continue
       if (shape === 'square' || Math.sqrt(dx * dx + dy * dy) < size + 0.005) {
-        tiles.push({ x: cx + dx, y: cy + dy })
+        tiles.push({ x: tx, y: ty })
       }
     }
   }
@@ -234,9 +237,11 @@ export function getCopyBufferFootprint(buffer: CopyBuffer, targetX: number, targ
   const result: TilePos[] = []
   for (const t of buffer.getTiles()) {
     const z = targetZ + t.dz
-    if (z === targetZ) {
-      result.push({ x: targetX + t.dx, y: targetY + t.dy, z })
-    }
+    if (z !== targetZ) continue
+    const x = targetX + t.dx
+    const y = targetY + t.dy
+    if (x < 0 || x > MAP_MAX_WIDTH || y < 0 || y > MAP_MAX_HEIGHT) continue
+    result.push({ x, y, z })
   }
   return result
 }

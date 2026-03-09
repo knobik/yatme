@@ -1,8 +1,8 @@
 import { Application } from 'pixi.js'
 import { loadAppearances, type AppearanceData } from './appearances'
 import { loadSpriteCatalog } from './sprites'
-import { parseOtbm, type OtbmMap } from './otbm'
-import { parseSidecars, type MapSidecars } from './sidecars'
+import { parseOtbm, createEmptyMap, type OtbmMap } from './otbm'
+import { parseSidecars, emptySidecars, type MapSidecars } from './sidecars'
 import type { MapStorageProvider } from './storage'
 import { loadItems, type ItemRegistry } from './items'
 import { loadBrushData } from './brushes/BrushLoader'
@@ -160,30 +160,41 @@ export async function loadAssets(
   progress.setStatus('Loading map data...')
   const bundle = await provider.loadMap((f) => stepProgress(f * 0.4))
   stepProgress(0.4)
-  progress.setStatus('Processing map data...')
-  await new Promise(r => setTimeout(r, 0))
-  const mapData = parseOtbm(bundle.otbm)
-  stepProgress(0.6)
 
-  // Load sidecars if not already in bundle (e.g. StaticFileProvider)
-  const sidecarFiles = [mapData.houseFile, mapData.spawnFile, mapData.npcFile, mapData.zoneFile].filter(Boolean)
-  if (sidecarFiles.length > 0 && bundle.sidecars.size === 0) {
-    progress.setStatus('Loading sidecar files...')
-    const loaded = await provider.loadSidecars(sidecarFiles)
-    for (const [k, v] of loaded) bundle.sidecars.set(k, v)
-  }
-  stepProgress(0.8)
+  let mapData: OtbmMap
+  let sidecars: MapSidecars
 
-  progress.setStatus('Parsing sidecar data...')
-  const sidecars = parseSidecars(bundle, mapData)
-  const sidecarCounts = [
-    sidecars.houses.length && `${sidecars.houses.length} houses`,
-    sidecars.monsterSpawns.length && `${sidecars.monsterSpawns.length} monster spawns`,
-    sidecars.npcSpawns.length && `${sidecars.npcSpawns.length} NPC spawns`,
-    sidecars.zones.length && `${sidecars.zones.length} zones`,
-  ].filter(Boolean)
-  if (sidecarCounts.length > 0) {
-    console.log(`[Sidecars] Loaded: ${sidecarCounts.join(', ')}`)
+  if (bundle.otbm.length > 0) {
+    progress.setStatus('Processing map data...')
+    await new Promise(r => setTimeout(r, 0))
+    mapData = parseOtbm(bundle.otbm)
+    stepProgress(0.6)
+
+    // Load sidecars if not already in bundle (e.g. StaticFileProvider)
+    const sidecarFiles = [mapData.houseFile, mapData.spawnFile, mapData.npcFile, mapData.zoneFile].filter(Boolean)
+    if (sidecarFiles.length > 0 && bundle.sidecars.size === 0) {
+      progress.setStatus('Loading sidecar files...')
+      const loaded = await provider.loadSidecars(sidecarFiles)
+      for (const [k, v] of loaded) bundle.sidecars.set(k, v)
+    }
+    stepProgress(0.8)
+
+    progress.setStatus('Parsing sidecar data...')
+    sidecars = parseSidecars(bundle, mapData)
+    const sidecarCounts = [
+      sidecars.houses.length && `${sidecars.houses.length} houses`,
+      sidecars.monsterSpawns.length && `${sidecars.monsterSpawns.length} monster spawns`,
+      sidecars.npcSpawns.length && `${sidecars.npcSpawns.length} NPC spawns`,
+      sidecars.zones.length && `${sidecars.zones.length} zones`,
+    ].filter(Boolean)
+    if (sidecarCounts.length > 0) {
+      console.log(`[Sidecars] Loaded: ${sidecarCounts.join(', ')}`)
+    }
+  } else {
+    progress.setStatus('Creating empty map...')
+    mapData = createEmptyMap()
+    sidecars = emptySidecars()
+    stepProgress(1)
   }
 
   if (signal.destroyed) return null

@@ -5,6 +5,7 @@ import { TileRenderer } from './TileRenderer'
 import { SelectionOverlay } from './SelectionOverlay'
 import { ZoneOverlay } from './ZoneOverlay'
 import { HouseOverlay } from './HouseOverlay'
+import { BoundaryOverlay } from './BoundaryOverlay'
 import { FloorManager } from './FloorManager'
 import { LightEngine } from './LightEngine'
 import { setupMapInput, type InputHost } from './InputHandler'
@@ -32,6 +33,7 @@ export class MapRenderer implements InputHost {
   private selection: SelectionOverlay
   private zoneOverlay: ZoneOverlay
   private houseOverlay: HouseOverlay
+  private boundaryOverlay: BoundaryOverlay
   private floorManager: FloorManager
   private chunkManager: ChunkManager
   private lightEngine: LightEngine
@@ -75,6 +77,7 @@ export class MapRenderer implements InputHost {
     this.selection = new SelectionOverlay()
     this.zoneOverlay = new ZoneOverlay()
     this.houseOverlay = new HouseOverlay()
+    this.boundaryOverlay = new BoundaryOverlay()
 
     // Chunk manager
     const { index, animatedKeys } = buildChunkIndex(mapData.tiles, appearances)
@@ -93,6 +96,9 @@ export class MapRenderer implements InputHost {
     this.mapContainer = new Container()
     this.app.stage.addChild(this.mapContainer)
 
+    // Boundary overlay (hatch pattern on out-of-bounds tiles)
+    this.mapContainer.addChild(this.boundaryOverlay.container)
+
     // Zone overlay (between tile layers and selection overlay)
     this.mapContainer.addChild(this.zoneOverlay.container)
 
@@ -109,6 +115,7 @@ export class MapRenderer implements InputHost {
     // Floor manager
     this.floorManager = new FloorManager(
       this.mapContainer,
+      this.boundaryOverlay.container,
       this.zoneOverlay.container,
       this.houseOverlay.container,
       this.selection.container,
@@ -437,6 +444,9 @@ export class MapRenderer implements InputHost {
 
     this.lightEngine.update(this.camera, this.chunkManager.index, this.appearances, visibleFloors)
 
+    this.boundaryOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
+    this.boundaryOverlay.update(this.camera)
+
     this.selection.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
     this.selection.updatePing()
 
@@ -461,6 +471,7 @@ export class MapRenderer implements InputHost {
     this.lightEngine.destroy()
     this.houseOverlay.destroy()
     this.zoneOverlay.destroy()
+    this.boundaryOverlay.destroy()
     this.selection.destroy()
     this.floorManager.destroy()
     this.mapContainer.destroy({ children: true })

@@ -1,5 +1,5 @@
 import type { OtbmMap, OtbmItem } from './otbm'
-import { deepCloneItem } from './otbm'
+import { deepCloneItem, isPositionValid } from './otbm'
 import type { MapMutator } from './MapMutator'
 import type { SelectedItemInfo } from '../hooks/useSelection'
 
@@ -142,6 +142,8 @@ export class CopyBuffer {
       const tx = targetX + t.dx
       const ty = targetY + t.dy
       const tz = targetZ + t.dz
+
+      if (!isPositionValid(tx, ty, tz)) continue
 
       if (mergePaste) {
         mutator.mergePasteItems(tx, ty, tz, t.items)

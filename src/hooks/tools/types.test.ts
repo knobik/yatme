@@ -22,33 +22,42 @@ describe('getTilesInBrush', () => {
   })
 
   it('size=1 square returns 9 tiles', () => {
-    const tiles = getTilesInBrush(0, 0, 1, 'square')
+    const tiles = getTilesInBrush(100, 100, 1, 'square')
     expect(tiles).toHaveLength(9)
-    expect(tiles).toContainEqual({ x: -1, y: -1 })
-    expect(tiles).toContainEqual({ x: 0, y: 0 })
-    expect(tiles).toContainEqual({ x: 1, y: 1 })
+    expect(tiles).toContainEqual({ x: 99, y: 99 })
+    expect(tiles).toContainEqual({ x: 100, y: 100 })
+    expect(tiles).toContainEqual({ x: 101, y: 101 })
   })
 
   it('size=2 square returns 25 tiles', () => {
-    const tiles = getTilesInBrush(0, 0, 2, 'square')
+    const tiles = getTilesInBrush(100, 100, 2, 'square')
     expect(tiles).toHaveLength(25)
   })
 
   it('size=1 circle excludes corners', () => {
-    const tiles = getTilesInBrush(0, 0, 1, 'circle')
+    const tiles = getTilesInBrush(100, 100, 1, 'circle')
     // Corners are at distance sqrt(2) ≈ 1.414 which is >= 1.005, so excluded
-    expect(tiles).not.toContainEqual({ x: -1, y: -1 })
-    expect(tiles).not.toContainEqual({ x: 1, y: 1 })
+    expect(tiles).not.toContainEqual({ x: 99, y: 99 })
+    expect(tiles).not.toContainEqual({ x: 101, y: 101 })
     // Center and cardinal directions included
-    expect(tiles).toContainEqual({ x: 0, y: 0 })
-    expect(tiles).toContainEqual({ x: 1, y: 0 })
-    expect(tiles).toContainEqual({ x: 0, y: 1 })
+    expect(tiles).toContainEqual({ x: 100, y: 100 })
+    expect(tiles).toContainEqual({ x: 101, y: 100 })
+    expect(tiles).toContainEqual({ x: 100, y: 101 })
   })
 
   it('circle is smaller than square for same size', () => {
-    const square = getTilesInBrush(0, 0, 2, 'square')
-    const circle = getTilesInBrush(0, 0, 2, 'circle')
+    const square = getTilesInBrush(100, 100, 2, 'square')
+    const circle = getTilesInBrush(100, 100, 2, 'circle')
     expect(circle.length).toBeLessThan(square.length)
+  })
+
+  it('clips tiles outside map bounds', () => {
+    // Brush at (0,0) with size=1 should clip negative coordinates
+    const tiles = getTilesInBrush(0, 0, 1, 'square')
+    expect(tiles).toHaveLength(4) // only (0,0), (1,0), (0,1), (1,1)
+    expect(tiles).not.toContainEqual({ x: -1, y: -1 })
+    expect(tiles).toContainEqual({ x: 0, y: 0 })
+    expect(tiles).toContainEqual({ x: 1, y: 1 })
   })
 })
 

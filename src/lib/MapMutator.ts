@@ -1,4 +1,4 @@
-import { type OtbmMap, type OtbmTile, type OtbmItem, deepCloneItem } from './otbm'
+import { type OtbmMap, type OtbmTile, type OtbmItem, deepCloneItem, isPositionValid } from './otbm'
 import type { AppearanceData } from './appearances'
 import type { MapSidecars } from './sidecars'
 import { chunkKeyForTile } from './ChunkManager'
@@ -145,7 +145,8 @@ export class MapMutator {
 
   // --- Tile access ---
 
-  getOrCreateTile(x: number, y: number, z: number): OtbmTile {
+  getOrCreateTile(x: number, y: number, z: number): OtbmTile | undefined {
+    if (!isPositionValid(x, y, z)) return undefined
     const key = tileKey(x, y, z)
     let tile = this.mapData.tiles.get(key)
     if (!tile) {
@@ -165,6 +166,7 @@ export class MapMutator {
   addItem(x: number, y: number, z: number, item: OtbmItem): void {
     this.autoBatch('Place item', () => {
       const tile = this.getOrCreateTile(x, y, z)
+      if (!tile) return
       const layer = classifyItem(item.id, this.appearances)
 
       // Ground replacement: only one ground item per tile
@@ -224,6 +226,7 @@ export class MapMutator {
   setTileItems(x: number, y: number, z: number, items: OtbmItem[]): void {
     this.autoBatch('Set tile items', () => {
       const tile = this.getOrCreateTile(x, y, z)
+      if (!tile) return
       const oldItems = deepCloneItems(tile.items)
       tile.items = items
       this.recordAction({ type: 'setTileItems', x, y, z, oldItems, newItems: deepCloneItems(items) })
@@ -235,6 +238,7 @@ export class MapMutator {
   mergePasteItems(x: number, y: number, z: number, pasteItems: OtbmItem[]): void {
     this.autoBatch('Paste', () => {
       const tile = this.getOrCreateTile(x, y, z)
+      if (!tile) return
       const oldItems = deepCloneItems(tile.items)
 
       // Classify each pasted item once
@@ -458,6 +462,7 @@ export class MapMutator {
   setTileHouseId(x: number, y: number, z: number, houseId: number): void {
     this.autoBatch('Set house ID', () => {
       const tile = this.getOrCreateTile(x, y, z)
+      if (!tile) return
       const oldHouseId = tile.houseId
       if (oldHouseId === houseId) return
       tile.houseId = houseId
@@ -497,6 +502,7 @@ export class MapMutator {
     const registry = this._brushRegistry!
     this.autoBatch('Paint ground', () => {
       const tile = this.getOrCreateTile(x, y, z)
+      if (!tile) return
 
       const oldItems = deepCloneItems(tile.items)
 
@@ -566,6 +572,7 @@ export class MapMutator {
     const registry = this._brushRegistry!
     this.autoBatch('Paint wall', () => {
       const tile = this.getOrCreateTile(x, y, z)
+      if (!tile) return
 
       const oldItems = deepCloneItems(tile.items)
 
@@ -730,6 +737,7 @@ export class MapMutator {
     const registry = this._brushRegistry!
     this.autoBatch('Paint carpet', () => {
       const tile = this.getOrCreateTile(x, y, z)
+      if (!tile) return
 
       const oldItems = deepCloneItems(tile.items)
 
@@ -806,6 +814,7 @@ export class MapMutator {
     const registry = this._brushRegistry!
     this.autoBatch('Paint table', () => {
       const tile = this.getOrCreateTile(x, y, z)
+      if (!tile) return
 
       const oldItems = deepCloneItems(tile.items)
 
@@ -959,6 +968,7 @@ export class MapMutator {
     itemId: number,
   ): void {
     const tile = this.getOrCreateTile(x, y, z)
+    if (!tile) return
     const oldItems = deepCloneItems(tile.items)
 
     const layer = classifyItem(itemId, this.appearances)
@@ -983,6 +993,7 @@ export class MapMutator {
       const tz = z + compTile.dz
 
       const tile = this.getOrCreateTile(tx, ty, tz)
+      if (!tile) continue
       const oldItems = deepCloneItems(tile.items)
 
       for (const itemId of compTile.itemIds) {

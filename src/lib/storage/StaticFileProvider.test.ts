@@ -29,20 +29,30 @@ describe('StaticFileProvider', () => {
       expect(bundle.sidecars.size).toBe(0)
     })
 
-    it('extracts filename from default URL', async () => {
-      mockFetch.mockResolvedValue(new ArrayBuffer(0))
-
+    it('returns empty map bundle when no URL is provided', async () => {
       const provider = new StaticFileProvider()
       const bundle = await provider.loadMap()
 
-      expect(bundle.filename).toBe('canary.otbm')
+      expect(mockFetch).not.toHaveBeenCalled()
+      expect(bundle.filename).toBe('untitled.otbm')
+      expect(bundle.otbm.length).toBe(0)
+      expect(bundle.sidecars.size).toBe(0)
+    })
+
+    it('calls onProgress(1) when no URL is provided', async () => {
+      const onProgress = vi.fn()
+
+      const provider = new StaticFileProvider()
+      await provider.loadMap(onProgress)
+
+      expect(onProgress).toHaveBeenCalledWith(1)
     })
 
     it('passes onProgress to fetchWithProgress', async () => {
       mockFetch.mockResolvedValue(new ArrayBuffer(0))
       const onProgress = vi.fn()
 
-      const provider = new StaticFileProvider()
+      const provider = new StaticFileProvider('/maps/canary.otbm')
       await provider.loadMap(onProgress)
 
       expect(mockFetch).toHaveBeenCalledWith('/maps/canary.otbm', onProgress)

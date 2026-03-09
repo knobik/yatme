@@ -376,7 +376,7 @@ describe('parseOtbm', () => {
 
 function makeEmptyMap(overrides: Partial<OtbmMap> = {}): OtbmMap {
   return {
-    version: 2,
+    version: 4,
     width: 256,
     height: 256,
     majorItems: 0,
@@ -394,11 +394,34 @@ function makeEmptyMap(overrides: Partial<OtbmMap> = {}): OtbmMap {
   }
 }
 
+function assertBytesEqual(a: Uint8Array, b: Uint8Array, label: string) {
+  if (a.length === b.length && a.every((byte, i) => byte === b[i])) return
+
+  writeFileSync(`/tmp/${label}-first.otbm`, a)
+  writeFileSync(`/tmp/${label}-second.otbm`, b)
+
+  const minLen = Math.min(a.length, b.length)
+  for (let i = 0; i < minLen; i++) {
+    if (a[i] !== b[i]) {
+      const ctx = 16
+      const start = Math.max(0, i - ctx)
+      const aSlice = Array.from(a.slice(start, i + ctx)).map(v => v.toString(16).padStart(2, '0')).join(' ')
+      const bSlice = Array.from(b.slice(start, i + ctx)).map(v => v.toString(16).padStart(2, '0')).join(' ')
+      expect.unreachable(
+        `First byte diff at offset ${i} (0x${i.toString(16)})\n` +
+        `  First  (${a.length} bytes):  ${aSlice}\n` +
+        `  Second (${b.length} bytes): ${bSlice}`
+      )
+    }
+  }
+  expect.unreachable(`Size mismatch: ${a.length} vs ${b.length} bytes`)
+}
+
 describe('serializeOtbm', () => {
   it('round-trips a minimal empty map', async () => {
-    const map = makeEmptyMap({ version: 2, width: 512, height: 1024 })
+    const map = makeEmptyMap({ width: 512, height: 1024 })
     const result = parseOtbm(await serializeOtbm(map))
-    expect(result.version).toBe(2)
+    expect(result.version).toBe(4)
     expect(result.width).toBe(512)
     expect(result.height).toBe(1024)
     expect(result.tiles.size).toBe(0)
@@ -409,12 +432,15 @@ describe('serializeOtbm', () => {
   it('round-trips map description, spawnFile, houseFile', async () => {
     const map = makeEmptyMap({
       description: 'My test map',
-      rawDescriptions: ['My test map'],
+      rawDescriptions: ['My test map', 'Second description'],
       spawnFile: 'spawn.xml',
       houseFile: 'house.xml',
     })
     const result = parseOtbm(await serializeOtbm(map))
-    expect(result.description).toBe('My test map')
+    // Serializer replaces first description with editor stamp
+    expect(result.rawDescriptions[0]).toBe('Saved with YATME')
+    // Subsequent descriptions are preserved
+    expect(result.rawDescriptions[1]).toBe('Second description')
     expect(result.spawnFile).toBe('spawn.xml')
     expect(result.houseFile).toBe('house.xml')
   })
@@ -643,67 +669,15 @@ describe('serializeOtbm', () => {
     expect(items[3].id).toBe(400)
   })
 
-  it('produces byte-identical output for habitats.otbm', async () => {
-    const filePath = resolve(__dirname, '../../vendor/canary/data-otservbr-global/world/quest/ferumbras_ascendant/habitats.otbm')
+  it('parse-serialize is idempotent for habitats.otbm', async () => {
+    const filePath = resolve(__dirname, '__fixtures__/habitats.otbm')
     const original = new Uint8Array(readFileSync(filePath))
-    const map = parseOtbm(original)
-    const serialized = await serializeOtbm(map)
+    const first = await serializeOtbm(parseOtbm(original))
+    const second = await serializeOtbm(parseOtbm(first))
 
-    if (serialized.length !== original.length || !serialized.every((b, i) => b === original[i])) {
-      // Write to /tmp for manual inspection on failure
-      writeFileSync('/tmp/habitats-original.otbm', original)
-      writeFileSync('/tmp/habitats-serialized.otbm', serialized)
-
-      // Find and report first difference
-      const minLen = Math.min(original.length, serialized.length)
-      for (let i = 0; i < minLen; i++) {
-        if (original[i] !== serialized[i]) {
-          const ctx = 16
-          const start = Math.max(0, i - ctx)
-          const origSlice = Array.from(original.slice(start, i + ctx)).map(b => b.toString(16).padStart(2, '0')).join(' ')
-          const serSlice = Array.from(serialized.slice(start, i + ctx)).map(b => b.toString(16).padStart(2, '0')).join(' ')
-          expect.unreachable(
-            `First byte diff at offset ${i} (0x${i.toString(16)})\n` +
-            `  Original (${original.length} bytes):   ${origSlice}\n` +
-            `  Serialized (${serialized.length} bytes): ${serSlice}`
-          )
-        }
-      }
-      expect.unreachable(
-        `Size mismatch: original ${original.length} bytes, serialized ${serialized.length} bytes`
-      )
-    }
+    assertBytesEqual(first, second, 'habitats')
   })
 
-  it('produces byte-identical output for canary.otbm', async () => {
-    const filePath = resolve(__dirname, '../../vendor/canary/data-canary/world/canary.otbm')
-    const original = new Uint8Array(readFileSync(filePath))
-    const map = parseOtbm(original)
-    const serialized = await serializeOtbm(map)
-
-    if (serialized.length !== original.length || !serialized.every((b, i) => b === original[i])) {
-      writeFileSync('/tmp/canary-original.otbm', original)
-      writeFileSync('/tmp/canary-serialized.otbm', serialized)
-
-      const minLen = Math.min(original.length, serialized.length)
-      for (let i = 0; i < minLen; i++) {
-        if (original[i] !== serialized[i]) {
-          const ctx = 16
-          const start = Math.max(0, i - ctx)
-          const origSlice = Array.from(original.slice(start, i + ctx)).map(b => b.toString(16).padStart(2, '0')).join(' ')
-          const serSlice = Array.from(serialized.slice(start, i + ctx)).map(b => b.toString(16).padStart(2, '0')).join(' ')
-          expect.unreachable(
-            `First byte diff at offset ${i} (0x${i.toString(16)})\n` +
-            `  Original (${original.length} bytes):   ${origSlice}\n` +
-            `  Serialized (${serialized.length} bytes): ${serSlice}`
-          )
-        }
-      }
-      expect.unreachable(
-        `Size mismatch: original ${original.length} bytes, serialized ${serialized.length} bytes`
-      )
-    }
-  }, 60000)
 
   it('calls onProgress during serialization', async () => {
     const map = makeEmptyMap()

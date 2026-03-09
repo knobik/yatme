@@ -5,13 +5,17 @@ import { triggerDownload } from '../triggerDownload'
 
 export class StaticFileProvider implements MapStorageProvider {
   readonly canSave = true
-  private url: string
+  private url: string | undefined
 
-  constructor(url = '/maps/canary.otbm') {
+  constructor(url?: string) {
     this.url = url
   }
 
   async loadMap(onProgress?: (fraction: number) => void): Promise<MapBundle> {
+    if (!this.url) {
+      onProgress?.(1)
+      return { otbm: new Uint8Array(), sidecars: new Map(), filename: 'untitled.otbm' }
+    }
     const buffer = await fetchWithProgress(this.url, onProgress)
     const filename = this.url.split('/').pop() ?? 'map.otbm'
     return {
@@ -22,6 +26,7 @@ export class StaticFileProvider implements MapStorageProvider {
   }
 
   async loadSidecars(filenames: string[]): Promise<Map<string, Uint8Array>> {
+    if (!this.url) return new Map()
     const basePath = this.url.substring(0, this.url.lastIndexOf('/') + 1)
     const result = new Map<string, Uint8Array>()
     await Promise.all(filenames.map(async (name) => {

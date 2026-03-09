@@ -46,6 +46,20 @@ const OTBM_ATTR_EXT_SPAWN_NPC_FILE = 23
 const OTBM_ATTR_EXT_ZONE_FILE = 24
 const OTBM_ATTR_ATTRIBUTE_MAP = 128
 
+// ── Map bounds (RME convention) ─────────────────────────────────────
+
+export const MAP_MAX_WIDTH = 65000
+export const MAP_MAX_HEIGHT = 65000
+export const MAP_MIN_LAYER = 0
+export const MAP_MAX_LAYER = 15
+
+/** Check whether a tile coordinate is within the valid map range. */
+export function isPositionValid(x: number, y: number, z: number): boolean {
+  return x >= 0 && x <= MAP_MAX_WIDTH
+    && y >= 0 && y <= MAP_MAX_HEIGHT
+    && z >= MAP_MIN_LAYER && z <= MAP_MAX_LAYER
+}
+
 // ── Data types ──────────────────────────────────────────────────────
 
 export interface OtbmMap {
@@ -67,6 +81,25 @@ export interface OtbmMap {
   /** Original tile area grouping for byte-identical serialization.
    *  Each entry is [baseX, baseY, baseZ, ...tileKeys] */
   _areaSequence?: Array<{ baseX: number; baseY: number; baseZ: number; tileKeys: string[] }>
+}
+
+export function createEmptyMap(): OtbmMap {
+  return {
+    version: 4,
+    width: 65535,
+    height: 65535,
+    majorItems: 4,
+    minorItems: 4,
+    description: '',
+    rawDescriptions: [],
+    spawnFile: '',
+    npcFile: '',
+    houseFile: '',
+    zoneFile: '',
+    tiles: new Map(),
+    towns: [],
+    waypoints: [],
+  }
 }
 
 export interface OtbmTile {
@@ -858,18 +891,23 @@ export async function serializeOtbm(
   // Root node (type 0)
   // Clamp to MAP_OTBM_5 (version 4) minimum, matching RME behavior.
   // Our serializer already writes v5 format (OTBM_ATTR_COUNT, not inline counts).
+  // RME hardcodes majorItems=4, minorItems=4 (both deprecated fields).
   const saveVersion = Math.max(map.version, 4)
   writer.startNode(0)
   writer.writeU32(saveVersion)
   writer.writeU16(map.width)
   writer.writeU16(map.height)
-  writer.writeU32(map.majorItems)
-  writer.writeU32(map.minorItems)
+  writer.writeU32(4)
+  writer.writeU32(4)
 
   // MAP_DATA node
   writer.startNode(OTBM_MAP_DATA)
 
-  for (const desc of map.rawDescriptions) {
+  // Replace first description with our editor stamp (like RME does),
+  // preserving any subsequent description entries.
+  const descriptions = [...map.rawDescriptions]
+  descriptions[0] = 'Saved with YATME'
+  for (const desc of descriptions) {
     writer.writeU8(OTBM_ATTR_DESCRIPTION)
     writer.writeString(desc)
   }

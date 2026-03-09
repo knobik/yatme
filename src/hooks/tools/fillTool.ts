@@ -1,6 +1,7 @@
 import type { ToolContext, TilePos } from './types'
 import { resolveBrush } from './types'
 import type { GroundBrush } from '../../lib/brushes/BrushTypes'
+import { MAP_MAX_WIDTH, MAP_MAX_HEIGHT } from '../../lib/otbm'
 
 const MAX_FILL_TILES = 4096
 const MAX_FILL_RADIUS = 64
@@ -71,6 +72,7 @@ export function createFillHandlers(ctx: ToolContext) {
       for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
         const nx = cur.x + dx
         const ny = cur.y + dy
+        if (nx < 0 || nx > MAP_MAX_WIDTH || ny < 0 || ny > MAP_MAX_HEIGHT) continue
         const nk = `${nx},${ny}`
         if (!visited.has(nk)) {
           visited.add(nk)
