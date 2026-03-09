@@ -17,5 +17,4 @@ dist
 # Tibia data (large binaries)
 vendor/
 coverage/
-maps/
 tibia/

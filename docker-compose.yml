@@ -1,3 +1,5 @@
+# This file is for local development only.
+# For production/self-hosting setup, see the README.
 services:
   editor:
     build: .
