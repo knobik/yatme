@@ -619,7 +619,7 @@ function App() {
           className="panel absolute bottom-4 z-10 flex h-[48px] items-center gap-6 px-5 pointer-events-auto select-none transition-[left] duration-[180ms] ease-out"
           style={{ left: computeLeftOffset(showPalette, !!selectedTilePos, showFindItem, showReplaceItems) }}
         >
-          <HudField label="POS" value={`${camera.x}, ${camera.y}`} />
+          <HudField label="POS" value={tools.cursorPos ? `${tools.cursorPos.x}, ${tools.cursorPos.y}, ${tools.cursorPos.z}` : '—'} />
           <div className="h-[16px] w-px shrink-0 bg-border-subtle" />
           <HudField label="ZOOM" value={`${camera.zoom.toFixed(2)}x`} />
           {mapInfo && (

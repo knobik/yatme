@@ -133,11 +133,20 @@ export class MapRenderer implements InputHost {
       },
     )
 
-    // Center on first town
+    // Initial camera position priority:
+    // 1. First town's temple position (most maps have at least one town)
+    // 2. Map center (width/2, height/2) at floor 7 — for OTBM maps without towns
+    // 3. 1024/1024 at floor 7 — fallback for brand-new empty maps
     if (mapData.towns.length > 0) {
       const town = mapData.towns[0]
       this.camera.setFloor(town.templeZ)
       this.camera.centerOn(town.templeX, town.templeY)
+    } else if (mapData.tiles.size > 0) {
+      this.camera.setFloor(7)
+      this.camera.centerOn(Math.floor(mapData.width / 2), Math.floor(mapData.height / 2))
+    } else {
+      this.camera.setFloor(7)
+      this.camera.centerOn(1024, 1024)
     }
 
     this._boundUpdate = () => this.update()

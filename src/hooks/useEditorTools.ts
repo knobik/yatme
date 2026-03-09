@@ -110,6 +110,7 @@ export function useEditorTools(
   const dragMoveOriginRef = useRef<TilePos | null>(null)
   const dragMoveLastPosRef = useRef<TilePos | null>(null)
   const hoverPosRef = useRef<TilePos | null>(null)
+  const [cursorPos, setCursorPos] = useState<TilePos | null>(null)
 
   // ── Compose sub-hooks ────────────────────────────────────────────
   const selection = useSelection(renderer, mapData)
@@ -204,7 +205,13 @@ export function useEditorTools(
       }
     }
 
-    renderer.onTileHover = hover.onHover
+    renderer.onTileHover = (pos) => {
+      const prev = hoverPosRef.current
+      hover.onHover(pos)
+      if (!prev || prev.x !== pos.x || prev.y !== pos.y || prev.z !== pos.z) {
+        setCursorPos(pos)
+      }
+    }
 
     renderer.onTileDoubleClick = (pos) => {
       if (activeToolRef.current !== 'select') return
@@ -296,5 +303,6 @@ export function useEditorTools(
     setSelectedZone,
     selectedHouse,
     setSelectedHouse,
+    cursorPos,
   }
 }

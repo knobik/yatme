@@ -26,7 +26,7 @@ OTBM map file -> appearances.dat (protobuf) -> catalog-content.json -> sprite sh
 Key: Server ID = Client ID in v15.00+ (no `items.otb` mapping needed).
 
 ### Init Flow (`src/lib/initPipeline.ts` -> `src/lib/setupEditor.ts`)
-`loadAssets()` orchestrates startup: PixiJS app init -> sprite catalog -> appearances -> items.xml -> brush/material XML -> tilesets -> OTBM map parse. Returns `InitResult` consumed by `setupEditor()` which creates the `MapRenderer` and `MapMutator`.
+`loadAssets()` orchestrates startup: PixiJS app init -> sprite catalog -> appearances -> items.xml -> brush/material XML -> tilesets -> OTBM map parse. Returns `InitResult` consumed by `setupEditor()` which creates the `MapRenderer` and `MapMutator`. Initial camera position: first town's temple → map center (width/2, height/2) for loaded OTBM without towns → 1024/1024/7 for new empty maps.
 
 ### Core Classes (`src/lib/`)
 - **MapRenderer** — PixiJS rendering engine. Manages Camera, ChunkManager, FloorManager, TileRenderer, SelectionOverlay, LightEngine. Handles multi-floor rendering with diagonal offset (RME-style).
