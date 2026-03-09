@@ -7,7 +7,9 @@ import type { AppearanceData } from '../lib/appearances'
 import { getItemDisplayName } from '../lib/items'
 import { parsePositionString } from '../lib/position'
 import { useEscapeKey } from '../hooks/useEscapeKey'
-import { PlusIcon, TrashIcon } from '@phosphor-icons/react'
+import { ItemSprite } from './ItemSprite'
+import { ItemSearchSelect } from './ItemSearchSelect'
+import { PlusIcon, TrashIcon, XIcon } from '@phosphor-icons/react'
 
 interface AttrEntry {
   key: string
@@ -52,7 +54,7 @@ export function ItemPropertiesModal({
   onCancel,
 }: ItemPropertiesModalProps) {
   const showAdvanced = mapVersion >= 5
-  const [activeTab, setActiveTab] = useState<'simple' | 'advanced'>('simple')
+  const [activeTab, setActiveTab] = useState<'simple' | 'advanced' | 'contents'>('simple')
   const modalRef = useRef<HTMLDivElement>(null)
 
   // Derive item info early so we can use it for default count/charges
@@ -80,6 +82,13 @@ export function ItemPropertiesModal({
     }
     return entries
   })
+
+  // Container detection — items.xml first, fallback to appearance flags
+  const isContainer = itemInfo?.itemType === 'container' || itemInfo?.itemType === 'depot' || itemInfo?.itemType === 'trashholder' || !!flags?.container
+  const containerSize = itemInfo?.containerSize ?? (isContainer ? 20 : 0)
+  const [containerItems, setContainerItems] = useState<OtbmItem[]>(() =>
+    item.items ? item.items.map(i => ({ ...i })) : []
+  )
 
   // Separate state for teleport destination and count/charges (not part of attribute map).
   // RME convention: stackable items use item.count as "count", charged items use item.count
@@ -199,6 +208,11 @@ export function ItemPropertiesModal({
       result.teleportDestination = undefined
     }
 
+    // Container items
+    if (isContainer) {
+      result.items = containerItems.length > 0 ? containerItems.map(i => ({ ...i })) : undefined
+    }
+
     onApply(result)
   }
 
@@ -235,27 +249,98 @@ export function ItemPropertiesModal({
           </div>
         </div>
 
-        {/* Tab bar — Advanced tab only for v6+ (OTBM 1.1.0) */}
-        {showAdvanced && (
+        {/* Tab bar */}
+        {(showAdvanced || isContainer) && (
           <div className="section-tabs px-6">
             <button
               className={clsx('section-tab', activeTab === 'simple' && 'active')}
               onClick={() => setActiveTab('simple')}
             >
-              Simple
+              Properties
             </button>
-            <button
-              className={clsx('section-tab', activeTab === 'advanced' && 'active')}
-              onClick={() => setActiveTab('advanced')}
-            >
-              Advanced
-            </button>
+            {isContainer && (
+              <button
+                className={clsx('section-tab', activeTab === 'contents' && 'active')}
+                onClick={() => setActiveTab('contents')}
+              >
+                Contents ({containerItems.length}/{containerSize})
+              </button>
+            )}
+            {showAdvanced && (
+              <button
+                className={clsx('section-tab', activeTab === 'advanced' && 'active')}
+                onClick={() => setActiveTab('advanced')}
+              >
+                Attributes
+              </button>
+            )}
           </div>
         )}
 
         {/* Tab content */}
         <div className="max-h-[400px] overflow-y-auto">
-          {activeTab === 'simple' ? (
+          {activeTab === 'contents' ? (
+            <div className="flex flex-col gap-3 p-4">
+              {/* Container slots grid — 6 columns like RME */}
+              <div className="grid grid-cols-6 gap-1">
+                {Array.from({ length: containerSize }, (_, i) => {
+                  const slotItem = containerItems[i]
+                  return (
+                    <div
+                      key={i}
+                      className={clsx(
+                        'group/slot relative flex aspect-square items-center justify-center rounded-sm border',
+                        slotItem
+                          ? 'border-border-subtle bg-bg-raised hover:border-accent cursor-pointer'
+                          : 'border-border-subtle/50 bg-bg-sunken',
+                      )}
+                      title={slotItem ? `${getItemDisplayName(slotItem.id, registry, appearances)} (id: ${slotItem.id})` : `Empty slot ${i + 1}`}
+                    >
+                      {slotItem ? (
+                        <>
+                          <ItemSprite itemId={slotItem.id} appearances={appearances} size={32} />
+                          {/* Remove button on hover */}
+                          <button
+                            className="container-slot-remove hidden group-hover/slot:flex"
+                            onClick={() => {
+                              setContainerItems(prev => prev.filter((_, idx) => idx !== i))
+                            }}
+                            title="Remove item"
+                          >
+                            <XIcon size={10} weight="bold" />
+                          </button>
+                          {/* Count badge */}
+                          {slotItem.count != null && slotItem.count > 1 && (
+                            <span className="absolute bottom-0 right-0.5 font-mono text-[10px] font-bold text-fg drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
+                              {slotItem.count}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-fg-faint/30">{i + 1}</span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Add item search */}
+              {containerItems.length < containerSize && (
+                <ItemSearchSelect
+                  registry={registry}
+                  appearances={appearances}
+                  onSelect={(id) => setContainerItems(prev => [...prev, { id }])}
+                  placeholder="Add item — search by name or ID..."
+                />
+              )}
+
+              {containerItems.length === 0 && (
+                <div className="py-2 text-center font-mono text-sm text-fg-faint">
+                  Container is empty
+                </div>
+              )}
+            </div>
+          ) : activeTab === 'simple' ? (
             <div className="item-properties">
               {itemFlags.length > 0 && (
                 <div className="flex flex-wrap gap-2 px-4 pb-3">
@@ -443,3 +528,4 @@ function getItemFlags(flags: Record<string, unknown>): string[] {
   }
   return result
 }
+

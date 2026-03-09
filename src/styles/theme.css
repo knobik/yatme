@@ -295,6 +295,31 @@
   color: var(--color-accent-fg);
 }
 
+/* Container slot remove — compact overlay badge */
+.container-slot-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-danger);
+  cursor: pointer;
+  transition: all 100ms var(--ease-out);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.container-slot-remove:hover {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: var(--color-fg);
+}
+
 /* ── Inspector inline property editor ────────────────────────────── */
 
 .item-properties {

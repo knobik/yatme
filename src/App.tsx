@@ -352,6 +352,9 @@ function App() {
     item.customAttributes = props.customAttributes && props.customAttributes.size > 0
       ? new Map([...props.customAttributes].map(([k, v]) => [k, { ...v }]))
       : undefined
+    item.items = props.items && props.items.length > 0
+      ? props.items.map(i => ({ ...i }))
+      : undefined
 
     mutatorReady.setTileItems(x, y, z, items)
     setEditingItem(null)
