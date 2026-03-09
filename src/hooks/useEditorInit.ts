@@ -133,6 +133,7 @@ export function useEditorInit(
       // Build renderer + mutator
       setSidecarsData(sidecars)
       const { renderer, mutator } = setupEditor(app, appearances, mapData, brushRegistry, registry, sidecars)
+      renderer.setCreatureDb(creatureDb)
       rendererRef.current = renderer
       mutatorRef.current = mutator
 

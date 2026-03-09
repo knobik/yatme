@@ -2,7 +2,7 @@ import { useRef, useEffect } from 'react'
 import { getTextureSync, preloadSheets } from '../lib/TextureManager'
 import type { AppearanceData } from '../lib/appearances'
 import type { CreatureOutfit } from '../lib/creatures'
-import { getSpriteIndex, getItemPreviewSpriteId } from '../lib/SpriteResolver'
+import { resolveCreatureSpriteId } from '../lib/creatureSprites'
 import { drawSpriteToCanvas } from '../lib/canvasUtils'
 
 interface CreatureSpriteProps {
@@ -61,32 +61,6 @@ export function CreatureSprite({ outfit, appearances, size = 32 }: CreatureSprit
       }}
     />
   )
-}
-
-/** Resolve the sprite ID for a creature outfit preview. */
-function resolveCreatureSpriteId(outfit: CreatureOutfit, appearances: AppearanceData): number | null {
-  if (outfit.looktype > 0) {
-    const appearance = appearances.outfits.get(outfit.looktype)
-    if (!appearance) return null
-
-    const info = appearance.frameGroup?.[0]?.spriteInfo
-    if (!info || info.spriteId.length === 0) return null
-
-    // Outfits use patternWidth for directions: typically N=0, E=1, S=2, W=3
-    // We want south-facing (index 2) for preview if available
-    const pw = Math.max(1, info.patternWidth)
-    const southPattern = pw >= 3 ? 2 : 0
-
-    return getSpriteIndex(info, southPattern, 0)
-  }
-
-  if (outfit.lookitem > 0) {
-    const appearance = appearances.objects.get(outfit.lookitem)
-    if (!appearance) return null
-    return getItemPreviewSpriteId(appearance)
-  }
-
-  return null
 }
 
 function drawPlaceholder(canvas: HTMLCanvasElement, size: number): void {

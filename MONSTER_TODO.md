@@ -1,11 +1,11 @@
 # Monster System TODO
 
-> **Progress: 4/16 tasks complete (25%)**
+> **Progress: 6/16 tasks complete (38%)**
 >
 > | Section                      | Done | Total |
 > |------------------------------|------|-------|
 > | Creature Database & Palette  | 4    | 4     |
-> | Creature Rendering on Map    | 0    | 2     |
+> | Creature Rendering on Map    | 2    | 2     |
 > | Spawn Area Tool              | 0    | 3     |
 > | Placement Validation         | 0    | 3     |
 > | NPC Support                  | 0    | 3     |
@@ -18,8 +18,8 @@
 - [x] Validate creature names against the database when placing
 
 ## Creature Rendering on Map
-- [ ] Render creature outfit sprites on their tiles (using looktype from creature database) instead of just colored dots
-- [ ] Show creature facing direction visually on the sprite
+- [x] Render creature outfit sprites on their tiles (using looktype from creature database) instead of just colored dots
+- [x] Show creature facing direction visually on the sprite
 
 ## Spawn Area Tool
 - [ ] Add explicit spawn area creation brush (separate from placing individual creatures)

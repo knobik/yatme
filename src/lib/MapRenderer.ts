@@ -17,6 +17,7 @@ import type { AppearanceData } from './appearances'
 import type { OtbmMap, OtbmTile, OtbmItem } from './otbm'
 import type { CopyBuffer } from './CopyBuffer'
 import type { ZoneSelection } from '../hooks/tools/types'
+import type { CreatureDatabase } from './creatures'
 import type { SpawnPoint } from './sidecars'
 
 export { type FloorViewMode } from './constants'
@@ -302,6 +303,11 @@ export class MapRenderer implements InputHost {
 
   setSpawns(spawns: SpawnPoint[]): void {
     this.spawnOverlay.setSpawns(spawns)
+  }
+
+  /** Provide creature database so spawn overlay can render outfit sprites. */
+  setCreatureDb(creatureDb: CreatureDatabase): void {
+    this.spawnOverlay.setDependencies(this.appearances, creatureDb)
   }
 
   get spawnIndex() { return this.spawnOverlay.index }
