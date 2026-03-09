@@ -1,8 +1,8 @@
 import { useRef, useEffect } from 'react'
-import type { Texture } from 'pixi.js'
 import { getTextureSync, preloadSheets } from '../lib/TextureManager'
 import type { AppearanceData } from '../lib/appearances'
 import { getItemPreviewSpriteId } from '../lib/SpriteResolver'
+import { drawSpriteToCanvas } from '../lib/canvasUtils'
 
 interface ItemSpriteProps {
   itemId: number
@@ -27,7 +27,7 @@ export function ItemSprite({ itemId, appearances, size = 32, count }: ItemSprite
 
     const texture = getTextureSync(spriteId)
     if (texture) {
-      drawTexture(canvas, texture, size)
+      drawSpriteToCanvas(canvas, texture, size, 'bottom-right')
       return
     }
 
@@ -35,7 +35,7 @@ export function ItemSprite({ itemId, appearances, size = 32, count }: ItemSprite
     preloadSheets([spriteId]).then(() => {
       const tex = getTextureSync(spriteId)
       if (tex && canvasRef.current) {
-        drawTexture(canvasRef.current, tex, size)
+        drawSpriteToCanvas(canvasRef.current, tex, size, 'bottom-right')
       }
     })
   }, [itemId, appearances, size, count])
@@ -53,29 +53,4 @@ export function ItemSprite({ itemId, appearances, size = 32, count }: ItemSprite
       }}
     />
   )
-}
-
-function drawTexture(canvas: HTMLCanvasElement, texture: Texture, size: number): void {
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-
-  ctx.clearRect(0, 0, size, size)
-
-  // Get the source image from the PixiJS texture
-  const source = texture.source?.resource
-  if (!source) return
-
-  const frame = texture.frame
-  const sw = frame.width
-  const sh = frame.height
-
-  // Scale to fit, anchored at bottom-right (matching Tibia's item rendering)
-  const scale = Math.min(size / sw, size / sh)
-  const dw = sw * scale
-  const dh = sh * scale
-  const dx = size - dw
-  const dy = size - dh
-
-  ctx.imageSmoothingEnabled = false
-  ctx.drawImage(source, frame.x, frame.y, sw, sh, dx, dy, dw, dh)
 }

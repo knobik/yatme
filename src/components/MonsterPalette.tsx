@@ -1,11 +1,17 @@
-import { useState } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import clsx from 'clsx'
 import type { MapSidecars, SpawnPoint } from '../lib/sidecars'
 import type { MonsterSelection } from '../hooks/tools/types'
+import type { CreatureDatabase, CreatureInfo } from '../lib/creatures'
+import type { AppearanceData } from '../lib/appearances'
+import { getCreatureList, isValidCreature } from '../lib/creatures'
+import { useDebounce } from '../hooks/useDebounce'
+import { CreatureSprite } from './CreatureSprite'
 import { spawnColorCSS } from '../lib/spawnColors'
 import {
-  XIcon, PlusIcon, DownloadSimpleIcon, UploadSimpleIcon,
+  XIcon, DownloadSimpleIcon, UploadSimpleIcon,
   NavigationArrowIcon, TrashIcon, CaretDownIcon, CaretRightIcon,
+  MagnifyingGlassIcon, WarningIcon, PlusIcon,
 } from '@phosphor-icons/react'
 
 const DIRECTIONS = [
@@ -15,8 +21,13 @@ const DIRECTIONS = [
   { value: 3, label: 'W' },
 ] as const
 
+const CREATURE_ROW_HEIGHT = 36
+const OVERSCAN = 10
+
 interface MonsterPaletteProps {
   sidecars: MapSidecars
+  creatureDb: CreatureDatabase | null
+  appearances: AppearanceData
   selectedMonster: MonsterSelection | null
   onMonsterSelect: (monster: MonsterSelection) => void
   activeSpawnIdx: number | null
@@ -33,6 +44,8 @@ interface MonsterPaletteProps {
 
 export function MonsterPalette({
   sidecars,
+  creatureDb,
+  appearances,
   selectedMonster,
   onMonsterSelect,
   activeSpawnIdx,
@@ -46,22 +59,49 @@ export function MonsterPalette({
   onClose,
   className,
 }: MonsterPaletteProps) {
-  const [monsterName, setMonsterName] = useState(selectedMonster?.name ?? '')
+  const [searchQuery, setSearchQuery] = useState('')
   const [spawnTime, setSpawnTime] = useState(selectedMonster?.spawnTime ?? 60)
   const [direction, setDirection] = useState(selectedMonster?.direction ?? 2)
   const [expandedSpawns, setExpandedSpawns] = useState<Set<number>>(new Set())
+  const [scrollTop, setScrollTop] = useState(0)
+  const [viewportHeight, setViewportHeight] = useState(300)
+  const listContainerRef = useRef<HTMLDivElement>(null)
 
   const spawns = sidecars.monsterSpawns
 
-  const handleApplyMonster = () => {
-    const name = monsterName.trim()
-    if (!name) return
-    onMonsterSelect({ name, spawnTime, direction })
-  }
+  const debouncedQuery = useDebounce(searchQuery, 150)
 
-  const handleNameKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleApplyMonster()
-  }
+  // Track container height via ResizeObserver (not during render)
+  useEffect(() => {
+    const el = listContainerRef.current
+    if (!el) return
+    setViewportHeight(el.clientHeight)
+    const observer = new ResizeObserver(() => setViewportHeight(el.clientHeight))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  const filteredCreatures = useMemo(() => {
+    if (!creatureDb) return []
+    const all = getCreatureList(creatureDb)
+    if (!debouncedQuery.trim()) return all
+    const q = debouncedQuery.toLowerCase()
+    return all.filter(c => c.name.toLowerCase().includes(q))
+  }, [creatureDb, debouncedQuery])
+
+  const handleCreatureClick = useCallback((creature: CreatureInfo) => {
+    onMonsterSelect({ name: creature.name, spawnTime, direction })
+  }, [onMonsterSelect, spawnTime, direction])
+
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(e.currentTarget.scrollTop)
+  }, [])
+
+  // Virtual scroll calculations
+  const totalHeight = filteredCreatures.length * CREATURE_ROW_HEIGHT
+  const startIdx = Math.max(0, Math.floor(scrollTop / CREATURE_ROW_HEIGHT) - OVERSCAN)
+  const endIdx = Math.min(filteredCreatures.length, Math.ceil((scrollTop + viewportHeight) / CREATURE_ROW_HEIGHT) + OVERSCAN)
+  const visibleCreatures = filteredCreatures.slice(startIdx, endIdx)
 
   const toggleExpanded = (idx: number) => {
     setExpandedSpawns(prev => {
@@ -72,9 +112,8 @@ export function MonsterPalette({
     })
   }
 
-  const handleDeleteCreature = (spawnIdx: number, creatureIdx: number) => {
-    onDeleteCreature?.(spawnIdx, creatureIdx)
-  }
+  // Check if selected monster is valid
+  const selectedValid = selectedMonster && creatureDb ? isValidCreature(creatureDb, selectedMonster.name) : true
 
   return (
     <div className={clsx(
@@ -108,25 +147,20 @@ export function MonsterPalette({
 
       <div className="mx-6 h-px bg-border-subtle" />
 
-      {/* Monster config */}
+      {/* Search + spawn config */}
       <div className="shrink-0 px-5 pt-4 pb-3 flex flex-col gap-3">
-        <div className="flex items-center gap-2">
+        {/* Search input */}
+        <div className="relative">
+          <MagnifyingGlassIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-faint" />
           <input
-            className="flex-1 rounded-sm bg-bg-raised px-3 py-[5px] font-ui text-sm text-fg outline-none placeholder:text-fg-faint border border-border-subtle focus:border-accent"
-            placeholder="Monster name..."
-            value={monsterName}
-            onChange={e => setMonsterName(e.target.value)}
-            onKeyDown={handleNameKeyDown}
+            className="w-full rounded-sm bg-bg-raised pl-8 pr-3 py-[5px] font-ui text-sm text-fg outline-none placeholder:text-fg-faint border border-border-subtle focus:border-accent"
+            placeholder="Search creatures..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
           />
-          <button
-            className="btn border-accent bg-accent text-fg-inverse hover:border-accent-hover hover:bg-accent-hover shrink-0"
-            onClick={handleApplyMonster}
-            disabled={!monsterName.trim()}
-          >
-            Set
-          </button>
         </div>
 
+        {/* Spawn config: time + direction */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <span className="label text-xs">TIME</span>
@@ -159,10 +193,16 @@ export function MonsterPalette({
           </div>
         </div>
 
+        {/* Active selection indicator */}
         {selectedMonster && (
           <div className="flex items-center gap-2 rounded-sm bg-bg-raised px-3 py-[5px]">
+            {!selectedValid && (
+              <WarningIcon size={14} className="text-danger shrink-0" />
+            )}
             <span className="font-ui text-xs text-fg-faint">Active:</span>
-            <span className="font-mono text-sm text-accent">{selectedMonster.name}</span>
+            <span className={clsx('font-mono text-sm truncate', selectedValid ? 'text-accent' : 'text-danger')}>
+              {selectedMonster.name}
+            </span>
             <span className="font-mono text-xs text-fg-faint">
               ({selectedMonster.spawnTime}s, {DIRECTIONS.find(d => d.value === selectedMonster.direction)?.label ?? '?'})
             </span>
@@ -172,15 +212,68 @@ export function MonsterPalette({
 
       <div className="mx-5 h-px bg-border-subtle" />
 
-      {/* Spawn list */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3">
-        {spawns.length === 0 ? (
-          <div className="find-empty-state">
-            <PlusIcon size={24} className="text-fg-disabled" />
-            <span>No spawn areas yet. Start painting to auto-create.</span>
+      {/* Creature list (virtual scrolled) */}
+      <div
+        ref={listContainerRef}
+        className="flex-1 min-h-0 overflow-y-auto"
+        onScroll={handleScroll}
+      >
+        {filteredCreatures.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-8 text-fg-faint font-ui text-xs">
+            <MagnifyingGlassIcon size={20} />
+            <span>{creatureDb ? 'No creatures found' : 'Loading creatures...'}</span>
           </div>
         ) : (
-          <div className="flex flex-col gap-px pt-1">
+          <div style={{ height: totalHeight, position: 'relative' }}>
+            {visibleCreatures.map((creature, i) => {
+              const idx = startIdx + i
+              const isSelected = selectedMonster?.name.toLowerCase() === creature.name.toLowerCase()
+              return (
+                <div
+                  key={creature.name}
+                  className={clsx(
+                    'flex items-center gap-2 px-3 cursor-pointer transition-colors duration-75 hover:bg-panel-hover',
+                    isSelected && 'bg-accent-subtle',
+                  )}
+                  style={{
+                    position: 'absolute',
+                    top: idx * CREATURE_ROW_HEIGHT,
+                    left: 0,
+                    right: 0,
+                    height: CREATURE_ROW_HEIGHT,
+                  }}
+                  onClick={() => handleCreatureClick(creature)}
+                >
+                  <CreatureSprite outfit={creature.outfit} appearances={appearances} size={28} />
+                  <span className="font-ui text-xs text-fg truncate flex-1">{creature.name}</span>
+                  <span className={clsx(
+                    'font-mono text-[10px] px-1 rounded-sm',
+                    creature.type === 'npc' ? 'text-info bg-info/10' : 'text-fg-faint bg-bg-raised',
+                  )}>
+                    {creature.type === 'npc' ? 'NPC' : 'MON'}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="mx-5 h-px bg-border-subtle" />
+
+      {/* Spawn list */}
+      <div className="min-h-[120px] max-h-[40%] overflow-y-auto px-3 pb-3">
+        <div className="flex items-center px-3 py-2">
+          <span className="label text-xs tracking-wide">SPAWN AREAS</span>
+          <span className="ml-auto font-mono text-xs text-fg-faint">{spawns.length}</span>
+        </div>
+        {spawns.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-4 text-fg-faint font-ui text-xs">
+            <PlusIcon size={18} />
+            <span>No spawn areas yet</span>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-px">
             {spawns.map((spawn, idx) => {
               const isActive = activeSpawnIdx === idx
               const isExpanded = expandedSpawns.has(idx)
@@ -257,25 +350,29 @@ export function MonsterPalette({
                   {/* Creature list (expanded) */}
                   {isExpanded && spawn.creatures.length > 0 && (
                     <div className="flex flex-col gap-px pb-1 pl-[42px] pr-3">
-                      {spawn.creatures.map((creature, ci) => (
-                        <div
-                          key={`${creature.name}-${creature.x}-${creature.y}-${ci}`}
-                          className="group/creature flex items-center gap-2 rounded-sm px-2 py-[3px] hover:bg-bg-raised"
-                        >
-                          <span className="font-ui text-xs text-fg truncate flex-1">{creature.name}</span>
-                          <span className="font-mono text-xs text-fg-faint">
-                            ({creature.x - spawn.centerX},{creature.y - spawn.centerY})
-                          </span>
-                          <span className="font-mono text-xs text-fg-faint">{creature.spawnTime}s</span>
-                          <button
-                            className="item-action-btn danger !w-[16px] !h-[16px] opacity-0 group-hover/creature:opacity-100"
-                            onClick={(e) => { e.stopPropagation(); handleDeleteCreature(idx, ci) }}
-                            title="Remove creature"
+                      {spawn.creatures.map((creature, ci) => {
+                        const notInDb = creatureDb ? !isValidCreature(creatureDb, creature.name) : false
+                        return (
+                          <div
+                            key={`${creature.name}-${creature.x}-${creature.y}-${ci}`}
+                            className="group/creature flex items-center gap-2 rounded-sm px-2 py-[3px] hover:bg-bg-raised"
                           >
-                            <XIcon size={8} weight="bold" />
-                          </button>
-                        </div>
-                      ))}
+                            {notInDb && <WarningIcon size={10} className="text-danger shrink-0" />}
+                            <span className="font-ui text-xs text-fg truncate flex-1">{creature.name}</span>
+                            <span className="font-mono text-xs text-fg-faint">
+                              ({creature.x - spawn.centerX},{creature.y - spawn.centerY})
+                            </span>
+                            <span className="font-mono text-xs text-fg-faint">{creature.spawnTime}s</span>
+                            <button
+                              className="item-action-btn danger !w-[16px] !h-[16px] opacity-0 group-hover/creature:opacity-100"
+                              onClick={(e) => { e.stopPropagation(); onDeleteCreature?.(idx, ci) }}
+                              title="Remove creature"
+                            >
+                              <XIcon size={8} weight="bold" />
+                            </button>
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
                 </div>

@@ -133,6 +133,10 @@ All CSS variables and base classes: `src/styles/theme.css`
 
 - Don't copy code — if you need to write it twice, extract it into a shared utility, hook, or component.
 
+## Progress Tracking
+
+- **`monster_todo.md`** — Active TODO list for the monster/spawn system overhaul. When completing tasks from this file, update the checkboxes (`[ ]` → `[x]`) and the progress summary table at the top (counts and percentage).
+
 ## Documentation Conventions
 
 - When writing diagrams in Markdown files, always use Mermaid syntax (```mermaid code blocks).
