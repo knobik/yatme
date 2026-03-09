@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import type { AppearanceData } from './lib/appearances'
 import type { OtbmMap } from './lib/otbm'
 import type { MapRenderer, FloorViewMode } from './lib/MapRenderer'
@@ -7,6 +7,9 @@ import type { ItemRegistry } from './lib/items'
 import { useEditorTools, deriveHighlights } from './hooks/useEditorTools'
 import type { BrushRegistry } from './lib/brushes/BrushRegistry'
 import { Inspector } from './components/Inspector'
+import { ItemPropertiesModal } from './components/ItemPropertiesModal'
+import type { OtbmItem } from './lib/otbm'
+import { deepCloneItem } from './lib/otbm'
 import { BrushPalette, type BrushPaletteHandle } from './components/BrushPalette'
 import type { ResolvedTileset } from './lib/tilesets/TilesetTypes'
 import { Toolbar } from './components/Toolbar'
@@ -15,6 +18,7 @@ import { GoToPositionDialog } from './components/GoToPositionDialog'
 import { FindItemDialog } from './components/FindItemDialog'
 import { ReplaceItemsDialog } from './components/ReplaceItemsDialog'
 import { SettingsModal } from './components/SettingsModal'
+import { MapPropertiesModal, type MapPropertiesPatch } from './components/MapPropertiesModal'
 import { SaveToast } from './components/SaveToast'
 import { loadSettings, saveSettings, type EditorSettings } from './lib/EditorSettings'
 import { findEntryInTilesets } from './lib/tilesets/TilesetLoader'
@@ -77,6 +81,7 @@ function App() {
   const [showFindItem, setShowFindItem] = useState(false)
   const [showReplaceItems, setShowReplaceItems] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [showMapProperties, setShowMapProperties] = useState(false)
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(initialSettings)
   const [brushRegistryState, setBrushRegistryState] = useState<BrushRegistry | null>(null)
   const [tilesets, setTilesets] = useState<ResolvedTileset[]>([])
@@ -85,10 +90,10 @@ function App() {
   const paletteRef = useRef<BrushPaletteHandle>(null)
   const editorSettingsRef = useRef(editorSettings)
 
-  const [editItemIndex, setEditItemIndex] = useState<number | null>(null)
+  const [editingItem, setEditingItem] = useState<{ x: number; y: number; z: number; index: number } | null>(null)
 
-  const handleRequestEditItem = useCallback((_x: number, _y: number, _z: number, itemIndex: number) => {
-    setEditItemIndex(itemIndex)
+  const handleRequestEditItem = useCallback((x: number, y: number, z: number, itemIndex: number) => {
+    setEditingItem({ x, y, z, index: itemIndex })
   }, [])
 
   const tools = useEditorTools(rendererReady, mutatorReady, mapData, brushRegistryState, handleRequestEditItem, editorSettings.clickToInspect, editorSettingsRef)
@@ -183,7 +188,7 @@ function App() {
 
   const { contextMenuGroups, contextMenu, setContextMenu } = useContextMenu({
     toolsRef, mutatorReady, brushRegistryState, itemRegistry, appearancesData,
-    rendererRef, handleSelectAsRaw, handleSelectAsBrush, setSelectedTilePos, setEditItemIndex,
+    rendererRef, handleSelectAsRaw, handleSelectAsBrush, setSelectedTilePos, setEditingItem,
   })
 
   // ── Save / Export / Import ─────────────────────────────────────────
@@ -285,6 +290,22 @@ function App() {
     saveSettings(next)
   }, [rendererRef])
 
+  const handleMapPropertiesApply = useCallback((patch: MapPropertiesPatch) => {
+    setMapData(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        description: patch.description,
+        rawDescriptions: patch.description ? [patch.description] : [],
+        width: patch.width,
+        height: patch.height,
+        version: patch.version,
+        spawnFile: patch.spawnFile,
+        houseFile: patch.houseFile,
+      }
+    })
+  }, [])
+
   const handleGoToPosition = useCallback((x: number, y: number, z: number) => {
     rendererRef.current?.setFloor(z)
     rendererRef.current?.centerOn(x, y)
@@ -306,6 +327,42 @@ function App() {
     contextMenu, setContextMenu,
     placingHouseExit, setPlacingHouseExit,
   })
+
+  // ── Item Properties Modal ──────────────────────────────────────────
+  const handleApplyProperties = useCallback((props: Partial<OtbmItem>) => {
+    if (!editingItem || !mapData || !mutatorReady) return
+    const { x, y, z, index } = editingItem
+    const tile = mapData.tiles.get(`${x},${y},${z}`)
+    if (!tile || !tile.items[index]) return
+
+    const items = [...tile.items]
+    const item = deepCloneItem(items[index])
+    items[index] = item
+
+    item.actionId = props.actionId ?? undefined
+    item.uniqueId = props.uniqueId ?? undefined
+    item.count = props.count ?? undefined
+    item.charges = props.charges ?? undefined
+    item.duration = props.duration ?? undefined
+    item.depotId = props.depotId ?? undefined
+    item.houseDoorId = props.houseDoorId ?? undefined
+    item.text = props.text || undefined
+    item.description = props.description || undefined
+    item.teleportDestination = props.teleportDestination ? { ...props.teleportDestination } : undefined
+    item.customAttributes = props.customAttributes && props.customAttributes.size > 0
+      ? new Map([...props.customAttributes].map(([k, v]) => [k, { ...v }]))
+      : undefined
+
+    mutatorReady.setTileItems(x, y, z, items)
+    setEditingItem(null)
+  }, [editingItem, mapData, mutatorReady])
+
+  // Derive the item being edited (for the properties modal)
+  const editingItemData = useMemo(() => {
+    if (!editingItem || !mapData) return null
+    const tile = mapData.tiles.get(`${editingItem.x},${editingItem.y},${editingItem.z}`)
+    return tile?.items[editingItem.index] ?? null
+  }, [editingItem, mapData])
 
   // Derive house name for the currently inspected tile
   const inspectedHouseName = (() => {
@@ -361,6 +418,8 @@ function App() {
           onFindItem={() => { setShowFindItem(true); setShowReplaceItems(false) }}
           onReplaceItems={() => { setShowReplaceItems(true); setShowFindItem(false) }}
           onOpenSettings={() => setShowSettingsModal(true)}
+          onOpenMapProperties={() => setShowMapProperties(true)}
+          hasMap={!!mapData}
           showPalette={showPalette}
           onTogglePalette={() => {
             setShowPalette(prev => {
@@ -495,6 +554,15 @@ function App() {
         />
       )}
 
+      {/* Map properties modal */}
+      {showMapProperties && mapData && (
+        <MapPropertiesModal
+          map={mapData}
+          onApply={handleMapPropertiesApply}
+          onClose={() => setShowMapProperties(false)}
+        />
+      )}
+
       {/* Brush palette — left side */}
       {!loading && showPalette && itemRegistry && appearancesData && (
         <BrushPalette
@@ -618,11 +686,22 @@ function App() {
           selectedItems={tools.selectedItems}
           onItemSelectionChange={handleItemSelectionChange}
           offset={showPalette}
-          initialEditIndex={editItemIndex}
-          onEditIndexConsumed={() => setEditItemIndex(null)}
+          onEditItem={handleRequestEditItem}
           onDragToMap={(itemId) => { if (rendererRef.current) rendererRef.current.dragPreviewItemId = itemId }}
           onDragToMapEnd={() => { if (rendererRef.current) { rendererRef.current.dragPreviewItemId = null; rendererRef.current.clearGhostPreview() } }}
           houseName={inspectedHouseName}
+        />
+      )}
+
+      {/* Item Properties modal */}
+      {editingItemData && mapData && itemRegistry && appearancesData && (
+        <ItemPropertiesModal
+          item={editingItemData}
+          appearances={appearancesData}
+          registry={itemRegistry}
+          mapVersion={mapData.version}
+          onApply={handleApplyProperties}
+          onCancel={() => setEditingItem(null)}
         />
       )}
 

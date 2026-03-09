@@ -225,7 +225,6 @@ export function useEditorTools(
       const newSel: SelectedItemInfo = { x: pos.x, y: pos.y, z: pos.z, itemIndex: topIdx }
       selection.setSelectedItems([newSel])
 
-      renderer.onTileClick?.(tile, pos.x, pos.y)
       renderer.setHighlights([{ pos: { x: pos.x, y: pos.y, z: pos.z }, indices: [topIdx] }])
       onRequestEditItemRef.current?.(pos.x, pos.y, pos.z, topIdx)
     }

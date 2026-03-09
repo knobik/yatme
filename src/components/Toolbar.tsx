@@ -44,6 +44,8 @@ interface ToolbarProps {
   showLights: boolean
   onToggleLights: () => void
   onOpenSettings: () => void
+  onOpenMapProperties: () => void
+  hasMap: boolean
   onZoomIn: () => void
   onZoomOut: () => void
   onResetZoom: () => void
@@ -126,6 +128,8 @@ export function Toolbar({
   onFindItem,
   onReplaceItems,
   onOpenSettings,
+  onOpenMapProperties,
+  hasMap,
   showPalette,
   onTogglePalette,
   onZoomIn,
@@ -199,6 +203,8 @@ export function Toolbar({
         'separator',
         { label: 'Borderize Selection', shortcut: 'Ctrl+B', disabled: !hasSelection, onClick: onBorderizeSelection },
         { label: 'Randomize Selection', shortcut: 'Ctrl+Shift+R', disabled: !hasSelection, onClick: onRandomizeSelection },
+        'separator',
+        { label: 'Map Properties...', disabled: !hasMap, onClick: onOpenMapProperties },
       ],
     },
     {

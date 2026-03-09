@@ -26,7 +26,7 @@ export interface UseContextMenuOptions {
   handleSelectAsRaw: (itemId: number) => void
   handleSelectAsBrush: (itemId: number) => void
   setSelectedTilePos: (pos: { x: number; y: number; z: number }) => void
-  setEditItemIndex: (index: number | null) => void
+  setEditingItem: (item: { x: number; y: number; z: number; index: number } | null) => void
 }
 
 export function useContextMenu(options: UseContextMenuOptions) {
@@ -40,7 +40,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
     handleSelectAsRaw,
     handleSelectAsBrush,
     setSelectedTilePos,
-    setEditItemIndex,
+    setEditingItem,
   } = options
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
@@ -116,8 +116,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
                 ? [{
                     label: 'Properties',
                     onClick: () => {
-                      setSelectedTilePos({ x: tilePos.x, y: tilePos.y, z: tilePos.z })
-                      setEditItemIndex(tile.items!.length - 1)
+                      setEditingItem({ x: tilePos.x, y: tilePos.y, z: tilePos.z, index: tile.items!.length - 1 })
                     },
                   }]
                 : []),

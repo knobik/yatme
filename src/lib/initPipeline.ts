@@ -1,7 +1,7 @@
 import { Application } from 'pixi.js'
 import { loadAppearances, type AppearanceData } from './appearances'
 import { loadSpriteCatalog } from './sprites'
-import { parseOtbm, createEmptyMap, type OtbmMap } from './otbm'
+import { parseOtbm, createEmptyMap, createItemNeedsCount, type OtbmMap } from './otbm'
 import { parseSidecars, emptySidecars, type MapSidecars } from './sidecars'
 import type { MapStorageProvider } from './storage'
 import { loadItems, type ItemRegistry } from './items'
@@ -167,7 +167,7 @@ export async function loadAssets(
   if (bundle.otbm.length > 0) {
     progress.setStatus('Processing map data...')
     await new Promise(r => setTimeout(r, 0))
-    mapData = parseOtbm(bundle.otbm)
+    mapData = parseOtbm(bundle.otbm, createItemNeedsCount(appearances))
     stepProgress(0.6)
 
     // Load sidecars if not already in bundle (e.g. StaticFileProvider)

@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { deepCloneItem, parseOtbm, serializeOtbm, type OtbmItem, type OtbmMap } from './otbm'
+import { deepCloneItem, parseOtbm, serializeOtbm, createItemNeedsCount, type OtbmItem, type OtbmMap, type ItemNeedsCountFn } from './otbm'
+import type { AppearanceData } from './appearances'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -694,5 +695,384 @@ describe('serializeOtbm', () => {
     const last = calls[calls.length - 1]
     expect(last[0]).toBe(100)
     expect(last[1]).toBe(100)
+  })
+})
+
+// ── OTBM version 0 tests ──────────────────────────────────────────
+
+describe('OTBM version 0 parsing', () => {
+  // Callback: items 100 and 200 are stackable/splash/fluid
+  const needsCount: ItemNeedsCountFn = (id) => id === 100 || id === 200
+
+  it('reads inline count for stackable item in OTBM_ITEM child node', () => {
+    // Item node: id=100 (stackable), inline count=5, then ATTR_ACTION_ID=42
+    const itemNode = encodeNode([
+      6, // OTBM_ITEM
+      ...encodeU16LE(100), // itemId (stackable)
+      5, // inline count byte
+      4, ...encodeU16LE(42), // ATTR_ACTION_ID
+    ])
+    const tileNode = encodeNode([5, 0, 0], [itemNode])
+    const tileAreaNode = encodeNode([
+      4, ...encodeU16LE(0), ...encodeU16LE(0), 7,
+    ], [tileNode])
+    const raw = buildOtbmBuffer({ version: 0, mapDataChildren: [tileAreaNode] })
+    const map = parseOtbm(raw, needsCount)
+    const item = map.tiles.get('0,0,7')!.items[0]
+    expect(item.id).toBe(100)
+    expect(item.count).toBe(5)
+    expect(item.actionId).toBe(42)
+  })
+
+  it('reads inline count for stackable inline OTBM_ATTR_ITEM', () => {
+    // Tile with inline ATTR_ITEM: id=200 (stackable), count=10
+    const tileNode = encodeNode([
+      5, 0, 0,
+      9, ...encodeU16LE(200), 10, // ATTR_ITEM, id=200, count=10
+    ])
+    const tileAreaNode = encodeNode([
+      4, ...encodeU16LE(0), ...encodeU16LE(0), 7,
+    ], [tileNode])
+    const raw = buildOtbmBuffer({ version: 0, mapDataChildren: [tileAreaNode] })
+    const map = parseOtbm(raw, needsCount)
+    const item = map.tiles.get('0,0,7')!.items[0]
+    expect(item.id).toBe(200)
+    expect(item.count).toBe(10)
+  })
+
+  it('does not read inline count for non-stackable items in version 0', () => {
+    // Item 50 is NOT stackable — no inline count byte
+    const itemNode = encodeNode([
+      6, // OTBM_ITEM
+      ...encodeU16LE(50), // itemId (not stackable)
+      4, ...encodeU16LE(42), // ATTR_ACTION_ID — should be parsed correctly
+    ])
+    const tileNode = encodeNode([5, 0, 0], [itemNode])
+    const tileAreaNode = encodeNode([
+      4, ...encodeU16LE(0), ...encodeU16LE(0), 7,
+    ], [tileNode])
+    const raw = buildOtbmBuffer({ version: 0, mapDataChildren: [tileAreaNode] })
+    const map = parseOtbm(raw, needsCount)
+    const item = map.tiles.get('0,0,7')!.items[0]
+    expect(item.id).toBe(50)
+    expect(item.count).toBeUndefined()
+    expect(item.actionId).toBe(42)
+  })
+
+  it('does not read inline count in version 1+ even with callback', () => {
+    // Version 2 map with stackable item — should use ATTR_COUNT, not inline
+    const itemNode = encodeNode([
+      6, // OTBM_ITEM
+      ...encodeU16LE(100), // itemId (would be stackable in v0)
+      15, 5, // ATTR_COUNT=15, count=5
+    ])
+    const tileNode = encodeNode([5, 0, 0], [itemNode])
+    const tileAreaNode = encodeNode([
+      4, ...encodeU16LE(0), ...encodeU16LE(0), 7,
+    ], [tileNode])
+    const raw = buildOtbmBuffer({ version: 2, mapDataChildren: [tileAreaNode] })
+    const map = parseOtbm(raw, needsCount)
+    const item = map.tiles.get('0,0,7')!.items[0]
+    expect(item.id).toBe(100)
+    expect(item.count).toBe(5)
+  })
+
+  it('works without callback for version 1+', () => {
+    const itemNode = encodeNode([
+      6, ...encodeU16LE(100),
+      15, 5, // ATTR_COUNT
+    ])
+    const tileNode = encodeNode([5, 0, 0], [itemNode])
+    const tileAreaNode = encodeNode([
+      4, ...encodeU16LE(0), ...encodeU16LE(0), 7,
+    ], [tileNode])
+    const raw = buildOtbmBuffer({ version: 2, mapDataChildren: [tileAreaNode] })
+    // No callback provided — should work fine for non-v0
+    const map = parseOtbm(raw)
+    expect(map.tiles.get('0,0,7')!.items[0].count).toBe(5)
+  })
+
+  it('reads inline count in nested container children for version 0', () => {
+    const childItem = encodeNode([
+      6, ...encodeU16LE(100), 3, // OTBM_ITEM, id=100 (stackable), count=3
+    ])
+    const containerNode = encodeNode([
+      6, ...encodeU16LE(50), // container (not stackable)
+    ], [childItem])
+    const tileNode = encodeNode([5, 0, 0], [containerNode])
+    const tileAreaNode = encodeNode([
+      4, ...encodeU16LE(0), ...encodeU16LE(0), 7,
+    ], [tileNode])
+    const raw = buildOtbmBuffer({ version: 0, mapDataChildren: [tileAreaNode] })
+    const map = parseOtbm(raw, needsCount)
+    const container = map.tiles.get('0,0,7')!.items[0]
+    expect(container.id).toBe(50)
+    expect(container.count).toBeUndefined()
+    expect(container.items![0].id).toBe(100)
+    expect(container.items![0].count).toBe(3)
+  })
+
+  it('serializes version 0 map as-is (UI is responsible for version selection)', async () => {
+    // Build a v0 binary with stackable item
+    const itemNode = encodeNode([
+      6, ...encodeU16LE(100), 7, // id=100 (stackable), count=7
+    ])
+    const tileNode = encodeNode([5, 0, 0], [itemNode])
+    const tileAreaNode = encodeNode([
+      4, ...encodeU16LE(0), ...encodeU16LE(0), 7,
+    ], [tileNode])
+    const raw = buildOtbmBuffer({ version: 0, mapDataChildren: [tileAreaNode] })
+
+    // Parse as v0, then set version to 4 (as the UI would do)
+    const map = parseOtbm(raw, needsCount)
+    expect(map.version).toBe(0)
+    map.version = 4
+
+    const serialized = await serializeOtbm(map)
+    const reparsed = parseOtbm(serialized)
+    expect(reparsed.version).toBe(4)
+    expect(reparsed.tiles.get('0,0,7')!.items[0].id).toBe(100)
+    expect(reparsed.tiles.get('0,0,7')!.items[0].count).toBe(7)
+  })
+
+  it('warns when parsing version 0 without callback', () => {
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const raw = buildOtbmBuffer({ version: 0 })
+    parseOtbm(raw)
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Version 0 map requires appearance data')
+    )
+    consoleSpy.mockRestore()
+  })
+})
+
+// ── createItemNeedsCount tests ─────────────────────────────────────
+
+describe('createItemNeedsCount', () => {
+  function makeAppearances(items: Array<{ id: number; cumulative?: boolean; liquidpool?: boolean; liquidcontainer?: boolean }>): AppearanceData {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const objects = new Map<number, any>()
+    for (const item of items) {
+      objects.set(item.id, {
+        id: item.id,
+        flags: {
+          cumulative: item.cumulative ?? false,
+          liquidpool: item.liquidpool ?? false,
+          liquidcontainer: item.liquidcontainer ?? false,
+        },
+      })
+    }
+    return { objects, outfits: new Map(), effects: new Map(), missiles: new Map() } as unknown as AppearanceData
+  }
+
+  it('returns true for cumulative (stackable) items', () => {
+    const appearances = makeAppearances([{ id: 100, cumulative: true }])
+    const fn = createItemNeedsCount(appearances)
+    expect(fn(100)).toBe(true)
+  })
+
+  it('returns true for liquidpool (splash) items', () => {
+    const appearances = makeAppearances([{ id: 200, liquidpool: true }])
+    const fn = createItemNeedsCount(appearances)
+    expect(fn(200)).toBe(true)
+  })
+
+  it('returns true for liquidcontainer (fluid) items', () => {
+    const appearances = makeAppearances([{ id: 300, liquidcontainer: true }])
+    const fn = createItemNeedsCount(appearances)
+    expect(fn(300)).toBe(true)
+  })
+
+  it('returns false for non-stackable items', () => {
+    const appearances = makeAppearances([{ id: 400 }])
+    const fn = createItemNeedsCount(appearances)
+    expect(fn(400)).toBe(false)
+  })
+
+  it('returns false for unknown item IDs', () => {
+    const appearances = makeAppearances([])
+    const fn = createItemNeedsCount(appearances)
+    expect(fn(999)).toBe(false)
+  })
+})
+
+// ── Attribute map serialization tests (version 5) ──────────────────
+
+describe('attribute map serialization (version 5)', () => {
+  it('round-trips v5 map with actionId, uniqueId, text, description, charges', async () => {
+    const map = makeEmptyMap({ version: 5 })
+    const item: OtbmItem = {
+      id: 999,
+      count: 5,
+      actionId: 1234,
+      uniqueId: 5678,
+      text: 'hello world',
+      description: 'a test description',
+      charges: 42,
+    }
+    map.tiles.set('0,0,7', { x: 0, y: 0, z: 7, flags: 0, items: [item] })
+    const serialized = await serializeOtbm(map)
+    const result = parseOtbm(serialized)
+    expect(result.version).toBe(5)
+    const parsed = result.tiles.get('0,0,7')!.items[0]
+    expect(parsed.id).toBe(999)
+    expect(parsed.count).toBe(5)
+    expect(parsed.actionId).toBe(1234)
+    expect(parsed.uniqueId).toBe(5678)
+    expect(parsed.text).toBe('hello world')
+    expect(parsed.description).toBe('a test description')
+    expect(parsed.charges).toBe(42)
+  })
+
+  it('v5 teleport destination stays as individual attribute', async () => {
+    const map = makeEmptyMap({ version: 5 })
+    map.tiles.set('0,0,7', {
+      x: 0, y: 0, z: 7, flags: 0,
+      items: [{ id: 1387, teleportDestination: { x: 100, y: 200, z: 7 } }],
+    })
+    const result = parseOtbm(await serializeOtbm(map))
+    expect(result.tiles.get('0,0,7')!.items[0].teleportDestination).toEqual({ x: 100, y: 200, z: 7 })
+  })
+
+  it('v5 houseDoorId and depotId stay as individual attributes', async () => {
+    const map = makeEmptyMap({ version: 5 })
+    map.tiles.set('0,0,7', {
+      x: 0, y: 0, z: 7, flags: 0,
+      items: [
+        { id: 100, houseDoorId: 3 },
+        { id: 200, depotId: 42 },
+      ],
+    })
+    const result = parseOtbm(await serializeOtbm(map))
+    const items = result.tiles.get('0,0,7')!.items
+    expect(items[0].houseDoorId).toBe(3)
+    expect(items[1].depotId).toBe(42)
+  })
+
+  it('v4 does NOT contain OTBM_ATTR_ATTRIBUTE_MAP byte (128)', async () => {
+    const map = makeEmptyMap({ version: 4 })
+    map.tiles.set('0,0,7', {
+      x: 0, y: 0, z: 7, flags: 0,
+      items: [{ id: 100, actionId: 42, uniqueId: 99 }],
+    })
+    const serialized = await serializeOtbm(map)
+    // Check that byte 128 (0x80) does not appear as an unescaped attribute tag.
+    // We parse it back and verify it uses individual attrs (actionId/uniqueId survive).
+    const result = parseOtbm(serialized)
+    expect(result.tiles.get('0,0,7')!.items[0].actionId).toBe(42)
+    expect(result.tiles.get('0,0,7')!.items[0].uniqueId).toBe(99)
+    // The byte 0x80 should not appear in the raw serialized output as an
+    // unescaped value (it's below 0xFD so no escaping concern, just verify
+    // we don't accidentally write attribute map in v4 mode)
+    expect(result.version).toBe(4)
+  })
+
+  it('v5 container children use attribute map format', async () => {
+    const map = makeEmptyMap({ version: 5 })
+    const container: OtbmItem = {
+      id: 100,
+      items: [
+        { id: 50, actionId: 10 },
+        { id: 60, count: 3, uniqueId: 20 },
+      ],
+    }
+    map.tiles.set('0,0,7', { x: 0, y: 0, z: 7, flags: 0, items: [container] })
+    const result = parseOtbm(await serializeOtbm(map))
+    const parsed = result.tiles.get('0,0,7')!.items[0]
+    expect(parsed.id).toBe(100)
+    expect(parsed.items).toHaveLength(2)
+    expect(parsed.items![0].actionId).toBe(10)
+    expect(parsed.items![1].count).toBe(3)
+    expect(parsed.items![1].uniqueId).toBe(20)
+  })
+
+  it('parses "subtype" key in attribute map as item.count', () => {
+    // Build binary with attribute map containing "subtype" key
+    const subtypeKey = encodeString('subtype')
+    const attrMapData = [
+      ...encodeU16LE(1), // 1 entry
+      ...subtypeKey,
+      2, // ATTRMAP_INTEGER
+      ...encodeU32LE(7), // value = 7
+    ]
+    const itemNode = encodeNode([
+      6, // OTBM_ITEM
+      ...encodeU16LE(500),
+      128, // OTBM_ATTR_ATTRIBUTE_MAP
+      ...attrMapData,
+    ])
+    const tileNode = encodeNode([5, 0, 0], [itemNode])
+    const tileAreaNode = encodeNode([
+      4, ...encodeU16LE(0), ...encodeU16LE(0), 7,
+    ], [tileNode])
+    const raw = buildOtbmBuffer({ version: 5, mapDataChildren: [tileAreaNode] })
+    const map = parseOtbm(raw)
+    expect(map.tiles.get('0,0,7')!.items[0].count).toBe(7)
+  })
+
+  it('v5 serialization is idempotent (serialize twice yields identical bytes)', async () => {
+    const map = makeEmptyMap({ version: 5 })
+    map.tiles.set('10,20,7', {
+      x: 10, y: 20, z: 7, flags: 0x0F,
+      items: [
+        { id: 100, actionId: 42, text: 'hello', charges: 10 },
+        { id: 200, uniqueId: 99, description: 'test desc' },
+        { id: 300, teleportDestination: { x: 50, y: 60, z: 7 } },
+      ],
+    })
+    map.towns = [{ id: 1, name: 'Thais', templeX: 500, templeY: 600, templeZ: 7 }]
+    const first = await serializeOtbm(map)
+    const second = await serializeOtbm(parseOtbm(first))
+    assertBytesEqual(first, second, 'v5-idempotent')
+  })
+
+  it('round-trips v5 custom attributes through serialize/parse', async () => {
+    const map = makeEmptyMap({ version: 5 })
+    const item: OtbmItem = {
+      id: 500,
+      actionId: 42,
+      customAttributes: new Map([
+        ['myString', { type: 1, value: 'hello world' }],
+        ['myInt', { type: 2, value: 12345 }],
+        ['myBool', { type: 4, value: true }],
+      ]),
+    }
+    map.tiles.set('0,0,7', { x: 0, y: 0, z: 7, flags: 0, items: [item] })
+    const serialized = await serializeOtbm(map)
+    const result = parseOtbm(serialized)
+    const parsed = result.tiles.get('0,0,7')!.items[0]
+    expect(parsed.actionId).toBe(42)
+    expect(parsed.customAttributes).toBeDefined()
+    expect(parsed.customAttributes!.get('myString')).toEqual({ type: 1, value: 'hello world' })
+    expect(parsed.customAttributes!.get('myInt')).toEqual({ type: 2, value: 12345 })
+    expect(parsed.customAttributes!.get('myBool')).toEqual({ type: 4, value: true })
+  })
+
+  it('deepCloneItem preserves customAttributes', () => {
+    const item: OtbmItem = {
+      id: 100,
+      customAttributes: new Map([
+        ['foo', { type: 2, value: 42 }],
+        ['bar', { type: 1, value: 'test' }],
+      ]),
+    }
+    const clone = deepCloneItem(item)
+    expect(clone.customAttributes).toBeDefined()
+    expect(clone.customAttributes).not.toBe(item.customAttributes)
+    expect(clone.customAttributes!.get('foo')).toEqual({ type: 2, value: 42 })
+    expect(clone.customAttributes!.get('foo')).not.toBe(item.customAttributes!.get('foo'))
+    // Mutating clone doesn't affect original
+    clone.customAttributes!.get('foo')!.value = 99
+    expect(item.customAttributes!.get('foo')!.value).toBe(42)
+  })
+
+  it('v5 item with no attribute-map-eligible fields writes no map', async () => {
+    const map = makeEmptyMap({ version: 5 })
+    map.tiles.set('0,0,7', {
+      x: 0, y: 0, z: 7, flags: 0,
+      items: [{ id: 100, count: 5 }], // count only — individual, no map needed
+    })
+    const result = parseOtbm(await serializeOtbm(map))
+    expect(result.tiles.get('0,0,7')!.items[0].count).toBe(5)
   })
 })

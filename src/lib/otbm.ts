@@ -1,6 +1,11 @@
 // ── OTBM binary map parser ──────────────────────────────────────────
 
 import { yieldToMain } from './yieldToMain'
+import type { AppearanceData } from './appearances'
+
+// Shared encoder/decoder instances (avoid allocating per call)
+const textEncoder = new TextEncoder()
+const textDecoder = new TextDecoder()
 
 // Special bytes in the binary tree encoding
 const NODE_START = 0xfe
@@ -135,6 +140,8 @@ export interface OtbmItem {
   sleeperGuid?: number
   sleepStart?: number
   items?: OtbmItem[]
+  /** Arbitrary key-value attributes from OTBM v5 attribute map (unknown keys only) */
+  customAttributes?: Map<string, { type: number; value: string | number | boolean }>
 }
 
 export function deepCloneItem(item: OtbmItem): OtbmItem {
@@ -155,6 +162,11 @@ export function deepCloneItem(item: OtbmItem): OtbmItem {
   if (item.sleeperGuid != null) clone.sleeperGuid = item.sleeperGuid
   if (item.sleepStart != null) clone.sleepStart = item.sleepStart
   if (item.items && item.items.length > 0) clone.items = item.items.map(deepCloneItem)
+  if (item.customAttributes && item.customAttributes.size > 0) {
+    clone.customAttributes = new Map(
+      [...item.customAttributes].map(([k, v]) => [k, { ...v }])
+    )
+  }
   return clone
 }
 
@@ -171,6 +183,27 @@ export interface OtbmWaypoint {
   x: number
   y: number
   z: number
+}
+
+// ── Version 0 item count callback ──────────────────────────────────
+
+/**
+ * For OTBM version 0, stackable/splash/fluid items have an inline u8 count
+ * byte after their ID. This callback returns true for such items.
+ */
+export type ItemNeedsCountFn = (id: number) => boolean
+
+/**
+ * Create an ItemNeedsCountFn from loaded appearance data.
+ * Maps to RME's `type.stackable || type.isSplash() || type.isFluidContainer()`.
+ */
+export function createItemNeedsCount(appearances: AppearanceData): ItemNeedsCountFn {
+  return (id: number): boolean => {
+    const appearance = appearances.objects.get(id)
+    if (!appearance?.flags) return false
+    const flags = appearance.flags
+    return !!(flags.cumulative || flags.liquidpool || flags.liquidcontainer)
+  }
 }
 
 // ── Binary tree node ────────────────────────────────────────────────
@@ -219,7 +252,7 @@ class BinaryNode {
     const len = this.readU16()
     const bytes = new Uint8Array(this.data.buffer, this.data.byteOffset + this.cursor, len)
     this.cursor += len
-    return new TextDecoder().decode(bytes)
+    return textDecoder.decode(bytes)
   }
 
   // Attribute map strings use u32 length prefix
@@ -227,7 +260,7 @@ class BinaryNode {
     const len = this.readU32()
     const bytes = new Uint8Array(this.data.buffer, this.data.byteOffset + this.cursor, len)
     this.cursor += len
-    return new TextDecoder().decode(bytes)
+    return textDecoder.decode(bytes)
   }
 
   skip(n: number): void {
@@ -361,6 +394,9 @@ function parseAttributeMap(node: BinaryNode, item: OtbmItem): void {
       case 'charges':
         item.charges = readAttrMapValue(node, valueType) as number
         break
+      case 'subtype':
+        item.count = readAttrMapValue(node, valueType) as number
+        break
       case 'duration':
         item.duration = readAttrMapValue(node, valueType) as number
         break
@@ -370,19 +406,21 @@ function parseAttributeMap(node: BinaryNode, item: OtbmItem): void {
       case 'doorId':
         item.houseDoorId = readAttrMapValue(node, valueType) as number
         break
-      default:
-        // Skip unknown keys
-        skipAttrMapValue(node, valueType)
+      default: {
+        const value = readAttrMapValue(node, valueType)
+        if (!item.customAttributes) item.customAttributes = new Map()
+        item.customAttributes.set(key, { type: valueType, value })
         break
+      }
     }
   }
 }
 
-const ATTRMAP_STRING = 1
-const ATTRMAP_INTEGER = 2
-const ATTRMAP_FLOAT = 3
-const ATTRMAP_BOOLEAN = 4
-const ATTRMAP_DOUBLE = 5
+export const ATTRMAP_STRING = 1
+export const ATTRMAP_INTEGER = 2
+export const ATTRMAP_FLOAT = 3
+export const ATTRMAP_BOOLEAN = 4
+export const ATTRMAP_DOUBLE = 5
 
 function readAttrMapValue(node: BinaryNode, valueType: number): string | number | boolean {
   switch (valueType) {
@@ -402,38 +440,16 @@ function readAttrMapValue(node: BinaryNode, valueType: number): string | number 
   }
 }
 
-function skipAttrMapValue(node: BinaryNode, valueType: number): void {
-  switch (valueType) {
-    case ATTRMAP_STRING: {
-      const len = node.readU32()
-      node.skip(len)
-      break
-    }
-    case ATTRMAP_INTEGER:
-    case ATTRMAP_FLOAT:
-      node.skip(4)
-      break
-    case ATTRMAP_BOOLEAN:
-      node.skip(1)
-      break
-    case ATTRMAP_DOUBLE:
-      node.skip(8)
-      break
-    default:
-      throw new Error(`Unknown attribute map value type: ${valueType}`)
-  }
-}
-
 // ── Item node parser ────────────────────────────────────────────────
 
-function parseItem(node: BinaryNode, otbmVersion: number): OtbmItem {
+function parseItem(node: BinaryNode, otbmVersion: number, itemNeedsCount?: ItemNeedsCountFn): OtbmItem {
   const id = node.readU16()
   const item: OtbmItem = { id }
 
   // MAP_OTBM_1 (version 0): stackable/splash/fluid items have inline u8 count
-  // We can't know item type here, so for version 0 we'd need item type info.
-  // In practice, canary maps are version 2+ so this isn't needed.
-  // If needed, the caller would have to pass item type flags.
+  if (otbmVersion === 0 && itemNeedsCount?.(id)) {
+    item.count = node.readU8()
+  }
 
   parseItemAttributes(node, item)
 
@@ -443,7 +459,7 @@ function parseItem(node: BinaryNode, otbmVersion: number): OtbmItem {
     for (const child of node.children) {
       const childType = child.readU8()
       if (childType === OTBM_ITEM) {
-        item.items.push(parseItem(child, otbmVersion))
+        item.items.push(parseItem(child, otbmVersion, itemNeedsCount))
       }
     }
   }
@@ -460,6 +476,7 @@ function parseTile(
   baseY: number,
   baseZ: number,
   otbmVersion: number,
+  itemNeedsCount?: ItemNeedsCountFn,
 ): OtbmTile {
   const xOff = node.readU8()
   const yOff = node.readU8()
@@ -485,9 +502,13 @@ function parseTile(
         tile.flags = node.readU32()
         break
       case OTBM_ATTR_ITEM: {
-        // Simple inline item (just an id, no extra attributes)
         const itemId = node.readU16()
-        tile.items.push({ id: itemId })
+        const inlineItem: OtbmItem = { id: itemId }
+        // Version 0: inline count for stackable/splash/fluid
+        if (otbmVersion === 0 && itemNeedsCount?.(itemId)) {
+          inlineItem.count = node.readU8()
+        }
+        tile.items.push(inlineItem)
         inlineCount++
         break
       }
@@ -504,7 +525,7 @@ function parseTile(
   for (const child of node.children) {
     const childType = child.readU8()
     if (childType === OTBM_ITEM) {
-      tile.items.push(parseItem(child, otbmVersion))
+      tile.items.push(parseItem(child, otbmVersion, itemNeedsCount))
     } else if (childType === OTBM_TILE_ZONE) {
       const zoneCount = child.readU16()
       const zones: number[] = []
@@ -522,16 +543,18 @@ function parseTile(
 
 /**
  * Synchronous parse — used when no progress reporting is needed.
+ * For OTBM version 0 maps, pass an `itemNeedsCount` callback (from
+ * `createItemNeedsCount()`) so inline count bytes are read correctly.
  */
-export function parseOtbm(raw: Uint8Array): OtbmMap {
+export function parseOtbm(raw: Uint8Array, itemNeedsCount?: ItemNeedsCountFn): OtbmMap {
   if (raw[4] !== NODE_START) {
     throw new Error(`Expected NODE_START at byte 4, got 0x${raw[4].toString(16)}`)
   }
   const { node: root } = buildTree(raw, 5)
-  return parseOtbmFromTree(root)
+  return parseOtbmFromTree(root, itemNeedsCount)
 }
 
-function parseOtbmFromTree(root: BinaryNode): OtbmMap {
+function parseOtbmFromTree(root: BinaryNode, itemNeedsCount?: ItemNeedsCountFn): OtbmMap {
   const rootType = root.readU8()
   if (rootType !== 0) {
     throw new Error(`Unexpected root node type: ${rootType}`)
@@ -570,8 +593,12 @@ function parseOtbmFromTree(root: BinaryNode): OtbmMap {
     throw new Error(`Expected OTBM_MAP_DATA (2), got ${mapDataType}`)
   }
 
+  if (version === 0 && !itemNeedsCount) {
+    console.warn('[OTBM] Version 0 map requires appearance data for correct parsing. Stackable/splash/fluid item counts may be incorrect.')
+  }
+
   parseMapDataAttributes(mapDataNode, map)
-  processChildren(mapDataNode, map, version)
+  processChildren(mapDataNode, map, version, itemNeedsCount)
   return map
 }
 
@@ -603,7 +630,7 @@ function parseMapDataAttributes(node: BinaryNode, map: OtbmMap): void {
   }
 }
 
-function processChildren(mapDataNode: BinaryNode, map: OtbmMap, version: number): void {
+function processChildren(mapDataNode: BinaryNode, map: OtbmMap, version: number, itemNeedsCount?: ItemNeedsCountFn): void {
   for (const child of mapDataNode.children) {
     const nodeType = child.readU8()
 
@@ -617,7 +644,7 @@ function processChildren(mapDataNode: BinaryNode, map: OtbmMap, version: number)
         for (const tileNode of child.children) {
           const tileType = tileNode.readU8()
           if (tileType === OTBM_TILE || tileType === OTBM_HOUSETILE) {
-            const tile = parseTile(tileNode, tileType, baseX, baseY, baseZ, version)
+            const tile = parseTile(tileNode, tileType, baseX, baseY, baseZ, version, itemNeedsCount)
             const key = `${tile.x},${tile.y},${tile.z}`
             map.tiles.set(key, tile)
             areaEntry.tileKeys.push(key)
@@ -720,8 +747,16 @@ class BinaryWriter {
   }
 
   writeString(s: string): void {
-    const bytes = new TextEncoder().encode(s)
+    const bytes = textEncoder.encode(s)
     this.writeU16(bytes.length)
+    for (let i = 0; i < bytes.length; i++) {
+      this.writeEscaped(bytes[i])
+    }
+  }
+
+  writeLongString(s: string): void {
+    const bytes = textEncoder.encode(s)
+    this.writeU32(bytes.length)
     for (let i = 0; i < bytes.length; i++) {
       this.writeEscaped(bytes[i])
     }
@@ -743,47 +778,114 @@ class BinaryWriter {
 
 // ── Serializer ──────────────────────────────────────────────────────
 
-function serializeItem(writer: BinaryWriter, item: OtbmItem): void {
+/** Returns true if version uses attribute map format (v3 = MAP_OTBM_4, v5+ = MAP_OTBM_6+). */
+function usesAttributeMap(version: number): boolean {
+  return version === 3 || version >= 5
+}
+
+/**
+ * Serialize attribute map entries for an item.
+ * Only writes OTBM_ATTR_ATTRIBUTE_MAP if there are entries to write.
+ */
+function serializeAttributeMap(writer: BinaryWriter, item: OtbmItem): void {
+  // Collect entries: [key, type, value]
+  const entries: Array<{ key: string; type: number; value: string | number | boolean }> = []
+
+  if (item.actionId != null) entries.push({ key: 'aid', type: ATTRMAP_INTEGER, value: item.actionId })
+  if (item.uniqueId != null) entries.push({ key: 'uid', type: ATTRMAP_INTEGER, value: item.uniqueId })
+  if (item.text != null) entries.push({ key: 'text', type: ATTRMAP_STRING, value: item.text })
+  if (item.description != null) entries.push({ key: 'desc', type: ATTRMAP_STRING, value: item.description })
+  if (item.charges != null) entries.push({ key: 'charges', type: ATTRMAP_INTEGER, value: item.charges })
+
+  // Include custom attributes from the attribute map
+  if (item.customAttributes) {
+    for (const [key, { type, value }] of item.customAttributes) {
+      entries.push({ key, type, value })
+    }
+  }
+
+  if (entries.length === 0) return
+
+  writer.writeU8(OTBM_ATTR_ATTRIBUTE_MAP)
+  writer.writeU16(entries.length)
+  for (const entry of entries) {
+    writer.writeString(entry.key)
+    writer.writeU8(entry.type)
+    if (entry.type === ATTRMAP_STRING) {
+      writer.writeLongString(entry.value as string)
+    } else if (entry.type === ATTRMAP_BOOLEAN) {
+      writer.writeU8((entry.value as boolean) ? 1 : 0)
+    } else {
+      writer.writeU32(entry.value as number)
+    }
+  }
+}
+
+function serializeItem(writer: BinaryWriter, item: OtbmItem, saveVersion: number): void {
   writer.startNode(OTBM_ITEM)
   writer.writeU16(item.id)
 
-  if (item.count != null) {
-    writer.writeU8(OTBM_ATTR_COUNT)
-    writer.writeU8(item.count)
-  }
-  if (item.charges != null) {
-    writer.writeU8(OTBM_ATTR_CHARGES)
-    writer.writeU16(item.charges)
-  }
-  if (item.actionId != null) {
-    writer.writeU8(OTBM_ATTR_ACTION_ID)
-    writer.writeU16(item.actionId)
-  }
-  if (item.uniqueId != null) {
-    writer.writeU8(OTBM_ATTR_UNIQUE_ID)
-    writer.writeU16(item.uniqueId)
-  }
-  if (item.text != null) {
-    writer.writeU8(OTBM_ATTR_TEXT)
-    writer.writeString(item.text)
-  }
-  if (item.description != null) {
-    writer.writeU8(OTBM_ATTR_DESC)
-    writer.writeString(item.description)
-  }
-  if (item.teleportDestination != null) {
-    writer.writeU8(OTBM_ATTR_TELE_DEST)
-    writer.writeU16(item.teleportDestination.x)
-    writer.writeU16(item.teleportDestination.y)
-    writer.writeU8(item.teleportDestination.z)
-  }
-  if (item.depotId != null) {
-    writer.writeU8(OTBM_ATTR_DEPOT_ID)
-    writer.writeU16(item.depotId)
-  }
-  if (item.houseDoorId != null) {
-    writer.writeU8(OTBM_ATTR_HOUSEDOORID)
-    writer.writeU8(item.houseDoorId)
+  if (usesAttributeMap(saveVersion)) {
+    // Attribute map mode: count is always individual, rest goes in map
+    if (item.count != null) {
+      writer.writeU8(OTBM_ATTR_COUNT)
+      writer.writeU8(item.count)
+    }
+    serializeAttributeMap(writer, item)
+    if (item.teleportDestination != null) {
+      writer.writeU8(OTBM_ATTR_TELE_DEST)
+      writer.writeU16(item.teleportDestination.x)
+      writer.writeU16(item.teleportDestination.y)
+      writer.writeU8(item.teleportDestination.z)
+    }
+    if (item.depotId != null) {
+      writer.writeU8(OTBM_ATTR_DEPOT_ID)
+      writer.writeU16(item.depotId)
+    }
+    if (item.houseDoorId != null) {
+      writer.writeU8(OTBM_ATTR_HOUSEDOORID)
+      writer.writeU8(item.houseDoorId)
+    }
+  } else {
+    // Individual attributes mode (version 4)
+    if (item.count != null) {
+      writer.writeU8(OTBM_ATTR_COUNT)
+      writer.writeU8(item.count)
+    }
+    if (item.charges != null) {
+      writer.writeU8(OTBM_ATTR_CHARGES)
+      writer.writeU16(item.charges)
+    }
+    if (item.actionId != null) {
+      writer.writeU8(OTBM_ATTR_ACTION_ID)
+      writer.writeU16(item.actionId)
+    }
+    if (item.uniqueId != null) {
+      writer.writeU8(OTBM_ATTR_UNIQUE_ID)
+      writer.writeU16(item.uniqueId)
+    }
+    if (item.text != null) {
+      writer.writeU8(OTBM_ATTR_TEXT)
+      writer.writeString(item.text)
+    }
+    if (item.description != null) {
+      writer.writeU8(OTBM_ATTR_DESC)
+      writer.writeString(item.description)
+    }
+    if (item.teleportDestination != null) {
+      writer.writeU8(OTBM_ATTR_TELE_DEST)
+      writer.writeU16(item.teleportDestination.x)
+      writer.writeU16(item.teleportDestination.y)
+      writer.writeU8(item.teleportDestination.z)
+    }
+    if (item.depotId != null) {
+      writer.writeU8(OTBM_ATTR_DEPOT_ID)
+      writer.writeU16(item.depotId)
+    }
+    if (item.houseDoorId != null) {
+      writer.writeU8(OTBM_ATTR_HOUSEDOORID)
+      writer.writeU8(item.houseDoorId)
+    }
   }
   // NOTE: duration, decayingState, writtenDate, writtenBy, sleeperGuid,
   // sleepStart are runtime attributes from Canary's iomapserialize (server
@@ -795,14 +897,14 @@ function serializeItem(writer: BinaryWriter, item: OtbmItem): void {
 
   if (item.items) {
     for (const child of item.items) {
-      serializeItem(writer, child)
+      serializeItem(writer, child, saveVersion)
     }
   }
 
   writer.endNode()
 }
 
-function serializeTile(writer: BinaryWriter, tile: OtbmTile): void {
+function serializeTile(writer: BinaryWriter, tile: OtbmTile, saveVersion: number): void {
   const nodeType = tile.houseId != null ? OTBM_HOUSETILE : OTBM_TILE
   writer.startNode(nodeType)
 
@@ -827,7 +929,7 @@ function serializeTile(writer: BinaryWriter, tile: OtbmTile): void {
     writer.writeU16(tile.items[i].id)
   }
   for (let i = inlineCount; i < tile.items.length; i++) {
-    serializeItem(writer, tile.items[i])
+    serializeItem(writer, tile.items[i], saveVersion)
   }
 
   if (tile.zones && tile.zones.length > 0) {
@@ -861,7 +963,8 @@ function computeInlineCount(items: OtbmItem[]): number {
     item.teleportDestination != null ||
     item.depotId != null ||
     item.houseDoorId != null ||
-    (item.items != null && item.items.length > 0)
+    (item.items != null && item.items.length > 0) ||
+    (item.customAttributes != null && item.customAttributes.size > 0)
   ) {
     return 0
   }
@@ -889,16 +992,14 @@ export async function serializeOtbm(
   writer.writeRawByte(0)
 
   // Root node (type 0)
-  // Clamp to MAP_OTBM_5 (version 4) minimum, matching RME behavior.
-  // Our serializer already writes v5 format (OTBM_ATTR_COUNT, not inline counts).
-  // RME hardcodes majorItems=4, minorItems=4 (both deprecated fields).
-  const saveVersion = Math.max(map.version, 4)
+  // The UI only allows version 4+ to be selected.
+  const saveVersion = map.version
   writer.startNode(0)
   writer.writeU32(saveVersion)
   writer.writeU16(map.width)
   writer.writeU16(map.height)
-  writer.writeU32(4)
-  writer.writeU32(4)
+  writer.writeU32(4) // majorVersionItems (deprecated, hardcoded like RME)
+  writer.writeU32(4) // minorVersionItems (deprecated, hardcoded like RME)
 
   // MAP_DATA node
   writer.startNode(OTBM_MAP_DATA)
@@ -941,7 +1042,7 @@ export async function serializeOtbm(
       for (const key of area.tileKeys) {
         const tile = map.tiles.get(key)
         if (tile) {
-          serializeTile(writer, tile)
+          serializeTile(writer, tile, saveVersion)
           tileCount++
           if (tileCount % YIELD_EVERY === 0) {
             onProgress?.(tileCount, totalTiles)
@@ -975,7 +1076,7 @@ export async function serializeOtbm(
         areaOpen = true
       }
 
-      serializeTile(writer, tile)
+      serializeTile(writer, tile, saveVersion)
       tileCount++
       if (tileCount % YIELD_EVERY === 0) {
         onProgress?.(tileCount, totalTiles)
