@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import {
   type EditorSettings,
-  saveSettings,
+  DEFAULT_SETTINGS,
   exportSettings,
   importSettings,
 } from '../lib/EditorSettings'
@@ -26,7 +26,6 @@ export function SettingsModal({ settings, onChange, onClose }: SettingsModalProp
 
   function update(patch: Partial<EditorSettings>) {
     const next = { ...settings, ...patch }
-    saveSettings(next)
     onChange(next)
   }
 
@@ -40,10 +39,7 @@ export function SettingsModal({ settings, onChange, onClose }: SettingsModalProp
     const reader = new FileReader()
     reader.onload = () => {
       const result = importSettings(reader.result as string)
-      if (result) {
-        saveSettings(result)
-        onChange(result)
-      }
+      if (result) onChange(result)
     }
     reader.readAsText(file)
     // Reset so the same file can be re-imported
@@ -123,6 +119,9 @@ export function SettingsModal({ settings, onChange, onClose }: SettingsModalProp
           <div className="flex gap-3">
             <button type="button" className="btn" onClick={handleImport}>Import...</button>
             <button type="button" className="btn" onClick={() => exportSettings(settings)}>Export</button>
+            <button type="button" className="btn border-danger/40 text-danger hover:border-danger hover:bg-danger/10" onClick={() => {
+              onChange({ ...DEFAULT_SETTINGS })
+            }}>Reset to Defaults</button>
             <input
               ref={fileInputRef}
               type="file"

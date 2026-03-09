@@ -17,6 +17,7 @@ interface HousePaletteProps {
   onExportHouses?: () => void
   onImportHouses?: () => void
   onClose: () => void
+  className?: string
 }
 
 export function HousePalette({
@@ -31,6 +32,7 @@ export function HousePalette({
   onExportHouses,
   onImportHouses,
   onClose,
+  className,
 }: HousePaletteProps) {
   const [newHouseName, setNewHouseName] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -102,7 +104,7 @@ export function HousePalette({
   const towns = mapData?.towns ?? []
 
   return (
-    <div className="panel absolute top-4 right-[68px] bottom-4 z-10 flex w-[280px] flex-col pointer-events-auto select-none">
+    <div className={clsx("panel absolute top-4 right-[68px] bottom-4 z-10 flex w-[280px] flex-col pointer-events-auto select-none", className)}>
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4">
         <span className="label text-lg tracking-wide">HOUSES</span>

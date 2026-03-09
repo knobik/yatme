@@ -270,8 +270,15 @@ function App() {
     if (r) {
       r.setShowLights(next.showLights)
       r.setShowSelectionBorder(next.selectionBorder)
+      r.setShowZoneOverlay(next.showZoneOverlay)
+      r.setShowHouseOverlay(next.showHouseOverlay)
     }
+    setShowPalette(next.showPalette)
     setShowLights(next.showLights)
+    setShowZonePalette(next.showZonePalette)
+    setShowZoneOverlay(next.showZoneOverlay)
+    setShowHousePalette(next.showHousePalette)
+    setShowHouseOverlay(next.showHouseOverlay)
     saveSettings(next)
   }, [])
 
@@ -545,6 +552,7 @@ function App() {
       {/* House palette — right side */}
       {!loading && showHousePalette && (
         <HousePalette
+          className={showZonePalette ? 'right-[336px]' : undefined}
           sidecars={sidecarsData}
           onSidecarsChange={setSidecarsData}
           mapData={mapData}
