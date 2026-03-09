@@ -1,4 +1,4 @@
-# Tibia Map Editor
+# YATME — Yet Another Tibia Map Editor
 
 Browser-based Tibia map editor for Tibia 15.00+. Built with React 19, PixiJS 8, TypeScript, and Vite.
 
