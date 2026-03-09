@@ -13,6 +13,8 @@ interface ItemSearchSelectProps {
   appearances: AppearanceData
   onSelect: (itemId: number) => void
   placeholder?: string
+  /** Optional predicate to filter which items appear in results. */
+  filter?: (id: number, appearance: NonNullable<ReturnType<AppearanceData['objects']['get']>>) => boolean
 }
 
 export function ItemSearchSelect({
@@ -20,6 +22,7 @@ export function ItemSearchSelect({
   appearances,
   onSelect,
   placeholder,
+  filter,
 }: ItemSearchSelectProps) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -36,11 +39,12 @@ export function ItemSearchSelect({
       const appearance = appearances.objects.get(id)
       const info = appearance?.frameGroup?.[0]?.spriteInfo
       if (!info || info.spriteId.length === 0 || info.spriteId[0] === 0) continue
+      if (filter && appearance && !filter(id, appearance)) continue
       items.push({ id, name: getItemDisplayName(id, registry, appearances) })
     }
     items.sort((a, b) => a.id - b.id)
     return items
-  }, [appearances, registry])
+  }, [appearances, registry, filter])
 
   const results = useMemo(() => {
     const q = query.trim()

@@ -9,7 +9,7 @@ import type { BrushRegistry } from './lib/brushes/BrushRegistry'
 import { Inspector } from './components/Inspector'
 import { ItemPropertiesModal } from './components/ItemPropertiesModal'
 import type { OtbmItem } from './lib/otbm'
-import { deepCloneItem } from './lib/otbm'
+import { applyItemProperties } from './lib/otbm'
 import { BrushPalette, type BrushPaletteHandle } from './components/BrushPalette'
 import type { ResolvedTileset } from './lib/tilesets/TilesetTypes'
 import { Toolbar } from './components/Toolbar'
@@ -336,25 +336,7 @@ function App() {
     if (!tile || !tile.items[index]) return
 
     const items = [...tile.items]
-    const item = deepCloneItem(items[index])
-    items[index] = item
-
-    item.actionId = props.actionId ?? undefined
-    item.uniqueId = props.uniqueId ?? undefined
-    item.count = props.count ?? undefined
-    item.charges = props.charges ?? undefined
-    item.duration = props.duration ?? undefined
-    item.depotId = props.depotId ?? undefined
-    item.houseDoorId = props.houseDoorId ?? undefined
-    item.text = props.text || undefined
-    item.description = props.description || undefined
-    item.teleportDestination = props.teleportDestination ? { ...props.teleportDestination } : undefined
-    item.customAttributes = props.customAttributes && props.customAttributes.size > 0
-      ? new Map([...props.customAttributes].map(([k, v]) => [k, { ...v }]))
-      : undefined
-    item.items = props.items && props.items.length > 0
-      ? props.items.map(i => ({ ...i }))
-      : undefined
+    items[index] = applyItemProperties(items[index], props)
 
     mutatorReady.setTileItems(x, y, z, items)
     setEditingItem(null)

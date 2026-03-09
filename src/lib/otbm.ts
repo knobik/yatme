@@ -144,6 +144,11 @@ export interface OtbmItem {
   customAttributes?: Map<string, { type: number; value: string | number | boolean }>
 }
 
+/** Apply partial properties onto an item, returning a new deep-cloned result. */
+export function applyItemProperties(item: OtbmItem, props: Partial<OtbmItem>): OtbmItem {
+  return deepCloneItem({ ...item, ...props } as OtbmItem)
+}
+
 export function deepCloneItem(item: OtbmItem): OtbmItem {
   const clone: OtbmItem = { id: item.id }
   if (item.count != null) clone.count = item.count

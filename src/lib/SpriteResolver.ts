@@ -32,6 +32,55 @@ export function getSpriteIndex(
   return info.spriteId[index] ?? info.spriteId[0] ?? 0
 }
 
+// Pre-allocated pattern objects to avoid allocations in the tile render hot-path.
+const CUMULATIVE_PATTERNS: ReadonlyArray<Readonly<{ x: number; y: number }>> = [
+  { x: 0, y: 0 }, // count <= 0
+  { x: 0, y: 0 }, // count 1
+  { x: 1, y: 0 }, // count 2
+  { x: 2, y: 0 }, // count 3
+  { x: 3, y: 0 }, // count 4
+  { x: 0, y: 1 }, // count 5-9
+  { x: 1, y: 1 }, // count 10-24
+  { x: 2, y: 1 }, // count 25-49
+  { x: 3, y: 1 }, // count 50+
+]
+
+/** Resolve pattern offsets from item count (stackable piles, liquid colors). */
+function getCountPattern(
+  flags: Appearance['flags'],
+  count: number,
+  pw: number,
+  ph: number,
+): Readonly<{ x: number; y: number }> | null {
+  if (flags?.cumulative && pw === 4 && ph === 2) {
+    if (count <= 0) return CUMULATIVE_PATTERNS[0]
+    if (count < 5) return CUMULATIVE_PATTERNS[count]
+    if (count < 10) return CUMULATIVE_PATTERNS[5]
+    if (count < 25) return CUMULATIVE_PATTERNS[6]
+    if (count < 50) return CUMULATIVE_PATTERNS[7]
+    return CUMULATIVE_PATTERNS[8]
+  }
+  if (flags?.liquidcontainer || flags?.liquidpool) {
+    return { x: (count % 4) % pw, y: Math.floor(count / 4) % ph }
+  }
+  return null
+}
+
+/** Resolve sprite ID for UI previews (no tile context needed). Uses count for stackable/liquid items. */
+export function getItemPreviewSpriteId(appearance: Appearance, count?: number): number | null {
+  const info = appearance.frameGroup?.[0]?.spriteInfo
+  if (!info || info.spriteId.length === 0) return null
+
+  const pw = Math.max(1, info.patternWidth)
+  const ph = Math.max(1, info.patternHeight)
+
+  const pattern = count != null ? getCountPattern(appearance.flags, count, pw, ph) : null
+  if (pattern) {
+    return getSpriteIndex(info, pattern.x, pattern.y)
+  }
+  return info.spriteId[0] ?? 0
+}
+
 export function getItemSpriteId(
   appearance: Appearance,
   item: OtbmItem,
@@ -51,30 +100,13 @@ export function getItemSpriteId(
   let yPattern = 0
   let zPattern = 0
 
-  if (flags?.cumulative && pw === 4 && ph === 2) {
-    // Stackable items: pattern based on count
-    const count = item.count ?? 1
-    if (count <= 0) {
-      xPattern = 0; yPattern = 0
-    } else if (count < 5) {
-      xPattern = count - 1; yPattern = 0
-    } else if (count < 10) {
-      xPattern = 0; yPattern = 1
-    } else if (count < 25) {
-      xPattern = 1; yPattern = 1
-    } else if (count < 50) {
-      xPattern = 2; yPattern = 1
-    } else {
-      xPattern = 3; yPattern = 1
-    }
+  const countPattern = getCountPattern(flags, item.count ?? 1, pw, ph)
+  if (countPattern) {
+    xPattern = countPattern.x
+    yPattern = countPattern.y
   } else if (flags?.hang) {
     // Hangable items: pattern based on hook direction
     xPattern = 0
-  } else if (flags?.liquidcontainer || flags?.liquidpool) {
-    // Fluid items: pattern based on fluid type (stored in count)
-    const color = item.count ?? 0
-    xPattern = (color % 4) % pw
-    yPattern = Math.floor(color / 4) % ph
   } else {
     // Regular items: pattern based on tile position
     xPattern = tile.x % pw

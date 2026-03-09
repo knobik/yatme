@@ -1,7 +1,7 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import clsx from 'clsx'
 import type { OtbmItem } from '../lib/otbm'
-import { ATTRMAP_STRING, ATTRMAP_INTEGER, ATTRMAP_FLOAT, ATTRMAP_BOOLEAN } from '../lib/otbm'
+import { ATTRMAP_STRING, ATTRMAP_INTEGER, ATTRMAP_FLOAT, ATTRMAP_BOOLEAN, applyItemProperties } from '../lib/otbm'
 import type { ItemRegistry } from '../lib/items'
 import type { AppearanceData } from '../lib/appearances'
 import { getItemDisplayName } from '../lib/items'
@@ -9,7 +9,11 @@ import { parsePositionString } from '../lib/position'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { ItemSprite } from './ItemSprite'
 import { ItemSearchSelect } from './ItemSearchSelect'
-import { PlusIcon, TrashIcon, XIcon } from '@phosphor-icons/react'
+import { PlusIcon, TrashIcon } from '@phosphor-icons/react'
+
+/** Only show pickupable items in container contents search. */
+const pickupableFilter = (_id: number, appearance: { flags?: { take?: boolean } }) =>
+  appearance.flags?.take === true
 
 interface AttrEntry {
   key: string
@@ -89,6 +93,9 @@ export function ItemPropertiesModal({
   const [containerItems, setContainerItems] = useState<OtbmItem[]>(() =>
     item.items ? item.items.map(i => ({ ...i })) : []
   )
+  const [editingSlot, setEditingSlot] = useState<number | null>(null)
+  const dragIndexRef = useRef<number | null>(null)
+  const [dragging, setDragging] = useState(false)
 
   // Separate state for teleport destination and count/charges (not part of attribute map).
   // RME convention: stackable items use item.count as "count", charged items use item.count
@@ -99,7 +106,23 @@ export function ItemPropertiesModal({
   const [destY, setDestY] = useState(item.teleportDestination ? String(item.teleportDestination.y) : '')
   const [destZ, setDestZ] = useState(item.teleportDestination ? String(item.teleportDestination.z) : '')
 
-  useEscapeKey(onCancel)
+  useEscapeKey(onCancel, editingSlot === null)
+
+  // Live reorder: move items out of the way as the dragged item passes over
+  const handleDragOver = useCallback((targetIndex: number) => {
+    const fromIndex = dragIndexRef.current
+    if (fromIndex === null || fromIndex === targetIndex) return
+    // Only allow dragging onto filled slots or the slot right after the last item
+    if (targetIndex > containerItems.length) return
+    setContainerItems(prev => {
+      const updated = [...prev]
+      const [moved] = updated.splice(fromIndex, 1)
+      const insertAt = Math.min(targetIndex, updated.length)
+      updated.splice(insertAt, 0, moved)
+      return updated
+    })
+    dragIndexRef.current = targetIndex
+  }, [containerItems.length])
 
   // Focus trap — click outside closes
   const handleScrimClick = (e: React.MouseEvent) => {
@@ -285,29 +308,50 @@ export function ItemPropertiesModal({
               <div className="grid grid-cols-6 gap-1">
                 {Array.from({ length: containerSize }, (_, i) => {
                   const slotItem = containerItems[i]
+                  const isDragSource = dragging && dragIndexRef.current === i
                   return (
                     <div
                       key={i}
                       className={clsx(
                         'group/slot relative flex aspect-square items-center justify-center rounded-sm border',
-                        slotItem
+                        isDragSource && 'opacity-40 border-accent!',
+                        slotItem && !isDragSource
                           ? 'border-border-subtle bg-bg-raised hover:border-accent cursor-pointer'
-                          : 'border-border-subtle/50 bg-bg-sunken',
+                          : !isDragSource && 'border-border-subtle/50 bg-bg-sunken',
                       )}
                       title={slotItem ? `${getItemDisplayName(slotItem.id, registry, appearances)} (id: ${slotItem.id})` : `Empty slot ${i + 1}`}
+                      onClick={slotItem && !dragging ? () => setEditingSlot(i) : undefined}
+                      draggable={!!slotItem}
+                      onDragStart={slotItem ? (e) => {
+                        dragIndexRef.current = i
+                        setDragging(true)
+                        e.dataTransfer.effectAllowed = 'move'
+                      } : undefined}
+                      onDragEnd={() => {
+                        dragIndexRef.current = null
+                        setDragging(false)
+                      }}
+                      onDragOver={(e) => {
+                        if (dragIndexRef.current === null) return
+                        e.preventDefault()
+                        e.dataTransfer.dropEffect = 'move'
+                        handleDragOver(i)
+                      }}
+                      onDrop={(e) => e.preventDefault()}
                     >
                       {slotItem ? (
                         <>
-                          <ItemSprite itemId={slotItem.id} appearances={appearances} size={32} />
+                          <ItemSprite itemId={slotItem.id} appearances={appearances} size={32} count={slotItem.count} />
                           {/* Remove button on hover */}
                           <button
                             className="container-slot-remove hidden group-hover/slot:flex"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation()
                               setContainerItems(prev => prev.filter((_, idx) => idx !== i))
                             }}
                             title="Remove item"
                           >
-                            <XIcon size={10} weight="bold" />
+                            <TrashIcon size={10} weight="bold" />
                           </button>
                           {/* Count badge */}
                           {slotItem.count != null && slotItem.count > 1 && (
@@ -331,6 +375,7 @@ export function ItemPropertiesModal({
                   appearances={appearances}
                   onSelect={(id) => setContainerItems(prev => [...prev, { id }])}
                   placeholder="Add item — search by name or ID..."
+                  filter={pickupableFilter}
                 />
               )}
 
@@ -477,6 +522,25 @@ export function ItemPropertiesModal({
           </button>
         </div>
       </div>
+
+      {/* Nested item properties modal for container contents */}
+      {editingSlot !== null && containerItems[editingSlot] && (
+        <ItemPropertiesModal
+          item={containerItems[editingSlot]}
+          appearances={appearances}
+          registry={registry}
+          mapVersion={mapVersion}
+          onApply={(props) => {
+            setContainerItems(prev => {
+              const updated = [...prev]
+              updated[editingSlot] = applyItemProperties(updated[editingSlot], props)
+              return updated
+            })
+            setEditingSlot(null)
+          }}
+          onCancel={() => setEditingSlot(null)}
+        />
+      )}
     </div>
   )
 }

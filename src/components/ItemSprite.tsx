@@ -2,14 +2,17 @@ import { useRef, useEffect } from 'react'
 import type { Texture } from 'pixi.js'
 import { getTextureSync, preloadSheets } from '../lib/TextureManager'
 import type { AppearanceData } from '../lib/appearances'
+import { getItemPreviewSpriteId } from '../lib/SpriteResolver'
 
 interface ItemSpriteProps {
   itemId: number
   appearances: AppearanceData
   size?: number
+  /** Count/charges — affects sprite pattern for stackable and liquid items */
+  count?: number
 }
 
-export function ItemSprite({ itemId, appearances, size = 32 }: ItemSpriteProps) {
+export function ItemSprite({ itemId, appearances, size = 32, count }: ItemSpriteProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -17,11 +20,10 @@ export function ItemSprite({ itemId, appearances, size = 32 }: ItemSpriteProps) 
     if (!canvas) return
 
     const appearance = appearances.objects.get(itemId)
-    const info = appearance?.frameGroup?.[0]?.spriteInfo
-    if (!info || info.spriteId.length === 0) return
+    if (!appearance) return
 
-    const spriteId = info.spriteId[0]
-    if (spriteId === 0) return
+    const spriteId = getItemPreviewSpriteId(appearance, count)
+    if (!spriteId) return
 
     const texture = getTextureSync(spriteId)
     if (texture) {
@@ -36,7 +38,7 @@ export function ItemSprite({ itemId, appearances, size = 32 }: ItemSpriteProps) 
         drawTexture(canvasRef.current, tex, size)
       }
     })
-  }, [itemId, appearances, size])
+  }, [itemId, appearances, size, count])
 
   return (
     <canvas
