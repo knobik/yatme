@@ -2,6 +2,7 @@ import { useState } from 'react'
 import clsx from 'clsx'
 import type { MapSidecars, HouseData } from '../lib/sidecars'
 import type { OtbmMap } from '../lib/otbm'
+import { useTileCounts } from '../hooks/useTileCounts'
 import { houseColorCSS } from '../lib/houseColors'
 import { XIcon, PlusIcon, DownloadSimpleIcon, UploadSimpleIcon, NavigationArrowIcon, DoorIcon } from '@phosphor-icons/react'
 
@@ -89,14 +90,11 @@ export function HousePalette({
   }
 
 
-  const getTileCount = (houseId: number): number => {
-    if (!mapData) return 0
-    let count = 0
-    for (const tile of mapData.tiles.values()) {
-      if (tile.houseId === houseId) count++
-    }
-    return count
-  }
+  const houseTileCounts = useTileCounts(
+    mapData,
+    tile => tile.houseId != null ? [tile.houseId] : [],
+    [sidecars],
+  )
 
   const isHouseSelected = (houseId: number) =>
     selectedHouse?.id === houseId
@@ -206,7 +204,7 @@ export function HousePalette({
                 </div>
                 {/* Details row — tiles, town, actions */}
                 <div className="flex items-center gap-2 px-3 pb-[6px] pl-[30px]">
-                  <span className="font-mono text-xs text-fg-faint">{getTileCount(house.id)} tiles</span>
+                  <span className="font-mono text-xs text-fg-faint">{houseTileCounts.get(house.id) ?? 0} tiles</span>
                   <span className="text-fg-faint text-xs">|</span>
                   {editTownId === house.id ? (
                     <select

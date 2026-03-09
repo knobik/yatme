@@ -2,6 +2,7 @@ import { useState } from 'react'
 import clsx from 'clsx'
 import type { MapSidecars, ZoneData } from '../lib/sidecars'
 import type { OtbmMap } from '../lib/otbm'
+import { useTileCounts } from '../hooks/useTileCounts'
 import type { ZoneSelection } from '../hooks/tools/types'
 import { zoneColorCSS } from '../lib/zoneColors'
 import { XIcon, PlusIcon, DownloadSimpleIcon, UploadSimpleIcon } from '@phosphor-icons/react'
@@ -66,14 +67,11 @@ export function ZonePalette({
     setEditingId(null)
   }
 
-  const getTileCount = (zoneId: number): number => {
-    if (!mapData) return 0
-    let count = 0
-    for (const tile of mapData.tiles.values()) {
-      if (tile.zones?.includes(zoneId)) count++
-    }
-    return count
-  }
+  const zoneTileCounts = useTileCounts(
+    mapData,
+    tile => tile.zones ?? [],
+    [sidecars],
+  )
 
   const isZoneSelected = (zoneId: number) =>
     selectedZone?.type === 'zone' && selectedZone.zoneId === zoneId
@@ -174,7 +172,7 @@ export function ZonePalette({
                     {zone.name}
                   </span>
                 )}
-                <span className="font-mono text-xs text-fg-faint">{getTileCount(zone.id)} tiles</span>
+                <span className="font-mono text-xs text-fg-faint">{zoneTileCounts.get(zone.id) ?? 0} tiles</span>
                 <span className="font-mono text-xs text-fg-faint">#{zone.id}</span>
                 <button
                   className="item-action-btn danger !w-[22px] !h-[22px] opacity-0 group-hover:opacity-100"
