@@ -72,6 +72,7 @@
   /* Colors — semantic */
   --color-danger: #c44040;
   --color-danger-subtle: rgba(196, 64, 64, 0.12);
+  --color-danger-fg: #e86363;
   --color-success: #4a9e6a;
   --color-success-subtle: rgba(74, 158, 106, 0.12);
   --color-info: #5b9fd4;

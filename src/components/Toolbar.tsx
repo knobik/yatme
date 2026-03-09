@@ -73,6 +73,7 @@ interface ToolbarProps {
   onToggleHouseOverlay: () => void
   onExportHouses: () => void
   onImportHouses: () => void
+  onOpenEditTowns: () => void
 }
 
 const BRUSH_SIZES = [
@@ -161,6 +162,7 @@ export function Toolbar({
   onToggleHouseOverlay,
   onExportHouses,
   onImportHouses,
+  onOpenEditTowns,
 }: ToolbarProps) {
   const previewId = selectedBrush ? getSelectionPreviewId(selectedBrush, brushRegistry) : 0
   const brushLabel = selectedBrush
@@ -205,6 +207,7 @@ export function Toolbar({
         { label: 'Randomize Selection', shortcut: 'Ctrl+Shift+R', disabled: !hasSelection, onClick: onRandomizeSelection },
         'separator',
         { label: 'Map Properties...', disabled: !hasMap, onClick: onOpenMapProperties },
+        { label: 'Edit Towns...', disabled: !hasMap, onClick: onOpenEditTowns },
       ],
     },
     {

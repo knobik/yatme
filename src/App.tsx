@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import type { AppearanceData } from './lib/appearances'
-import type { OtbmMap } from './lib/otbm'
+import type { OtbmMap, OtbmTown } from './lib/otbm'
 import type { MapRenderer, FloorViewMode } from './lib/MapRenderer'
 import { MapMutator } from './lib/MapMutator'
 import type { ItemRegistry } from './lib/items'
@@ -19,6 +19,7 @@ import { FindItemDialog } from './components/FindItemDialog'
 import { ReplaceItemsDialog } from './components/ReplaceItemsDialog'
 import { SettingsModal } from './components/SettingsModal'
 import { MapPropertiesModal, type MapPropertiesPatch } from './components/MapPropertiesModal'
+import { EditTownsModal } from './components/EditTownsModal'
 import { SaveToast } from './components/SaveToast'
 import { loadSettings, saveSettings, type EditorSettings } from './lib/EditorSettings'
 import { findEntryInTilesets } from './lib/tilesets/TilesetLoader'
@@ -82,6 +83,7 @@ function App() {
   const [showReplaceItems, setShowReplaceItems] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [showMapProperties, setShowMapProperties] = useState(false)
+  const [showEditTowns, setShowEditTowns] = useState(false)
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(initialSettings)
   const [brushRegistryState, setBrushRegistryState] = useState<BrushRegistry | null>(null)
   const [tilesets, setTilesets] = useState<ResolvedTileset[]>([])
@@ -306,6 +308,10 @@ function App() {
     })
   }, [])
 
+  const handleEditTownsApply = useCallback((towns: OtbmTown[]) => {
+    setMapData(prev => prev ? { ...prev, towns } : prev)
+  }, [])
+
   const handleGoToPosition = useCallback((x: number, y: number, z: number) => {
     rendererRef.current?.setFloor(z)
     rendererRef.current?.centerOn(x, y)
@@ -404,6 +410,7 @@ function App() {
           onReplaceItems={() => { setShowReplaceItems(true); setShowFindItem(false) }}
           onOpenSettings={() => setShowSettingsModal(true)}
           onOpenMapProperties={() => setShowMapProperties(true)}
+          onOpenEditTowns={() => setShowEditTowns(true)}
           hasMap={!!mapData}
           showPalette={showPalette}
           onTogglePalette={() => {
@@ -545,6 +552,17 @@ function App() {
           map={mapData}
           onApply={handleMapPropertiesApply}
           onClose={() => setShowMapProperties(false)}
+        />
+      )}
+
+      {/* Edit towns modal */}
+      {showEditTowns && mapData && (
+        <EditTownsModal
+          towns={mapData.towns}
+          houses={sidecarsData.houses}
+          onApply={handleEditTownsApply}
+          onClose={() => setShowEditTowns(false)}
+          onNavigate={handleGoToPosition}
         />
       )}
 
