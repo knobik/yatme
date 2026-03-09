@@ -139,6 +139,12 @@ export function useEditorInit(
         setTileVersion(v => v + 1)
       }
 
+      mutator.onSpawnsChanged = () => {
+        const spawns = mutator.sidecars?.monsterSpawns ?? []
+        renderer.setSpawns(spawns)
+        setSidecarsData(prev => ({ ...prev, monsterSpawns: spawns }))
+      }
+
       // Wire renderer → React callbacks
       renderer.onCameraChange = (x, y, zoom, floor, floorViewMode, showTransparentUpper) => {
         setCamera({ x, y, zoom, floor, floorViewMode, showTransparentUpper })
@@ -242,6 +248,7 @@ export function useEditorInit(
       renderer.setShowSelectionBorder(savedSettings.selectionBorder)
       renderer.setShowZoneOverlay(savedSettings.showZoneOverlay)
       renderer.setShowHouseOverlay(savedSettings.showHouseOverlay)
+      renderer.setShowSpawnOverlay(savedSettings.showSpawnOverlay)
 
       setLoadingProgress(1)
       setLoadingStatus('Ready')

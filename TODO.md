@@ -134,11 +134,14 @@ Edit towns dialog (Map > Edit Towns): add/rename/delete towns, set temple positi
 - **RME ref**: `vendor/remeres-map-editor/source/common_windows.cpp` (`EditTownsDialog`)
 - **RME ref**: `vendor/remeres-map-editor/source/iomap_otbm.cpp` (lines ~876-923 read, ~1691-1703 write)
 
-### Monster & NPC Spawns
-Place individual monsters/NPCs and define spawn areas with radius.
+### Monster Spawns
+Place individual monsters and define spawn areas with radius. Multiple monsters per tile. **Cannot** be placed in PZ. Spawn brush does dense area population (scatter random monsters across `size*2+1` square, density-based count). Includes: data model (`tile.monsters[]`), monster brush, spawn brush, palette UI, rendering overlay, OTBM I/O.
 - **RME ref**: `vendor/remeres-map-editor/source/monster_brush.h` / `.cpp`
-- **RME ref**: `vendor/remeres-map-editor/source/npc_brush.h` / `.cpp`
 - **RME ref**: `vendor/remeres-map-editor/source/spawn_monster_brush.h` / `.cpp`
+
+### NPC Spawns
+Place individual NPCs and define spawn points with radius. Single NPC per tile (replace on draw). **Can** be placed in PZ. Spawn brush just marks a point with a radius (no population logic). Includes: data model (`tile.npc`), NPC brush, spawn brush, palette UI, rendering overlay, OTBM I/O. Shares infrastructure with monster spawns.
+- **RME ref**: `vendor/remeres-map-editor/source/npc_brush.h` / `.cpp`
 - **RME ref**: `vendor/remeres-map-editor/source/spawn_npc_brush.h` / `.cpp`
 
 ### Waypoint Management

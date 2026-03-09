@@ -7,6 +7,8 @@ import {
   serializeZonesXml,
   parseHousesXml,
   serializeHousesXml,
+  parseSpawnsXml,
+  serializeSpawnsXml,
   type MapSidecars,
 } from '../lib/sidecars'
 import type { MapStorageProvider } from '../lib/storage'
@@ -133,6 +135,19 @@ export function useSaveExport({
     }, 'Houses')
   }, [setSidecarsData])
 
+  const handleExportSpawns = useCallback(() => {
+    triggerDownload(serializeSpawnsXml(sidecarsData.monsterSpawns, 'monsters'), 'monster-spawns.xml', 'application/xml')
+  }, [sidecarsData.monsterSpawns])
+
+  const handleImportSpawns = useCallback(() => {
+    importXmlFile((xml) => parseSpawnsXml(xml, 'monsters'), (imported) => {
+      setSidecarsData(prev => ({
+        ...prev,
+        monsterSpawns: [...prev.monsterSpawns, ...imported],
+      }))
+    }, 'Spawns')
+  }, [setSidecarsData])
+
   return {
     saveProgress,
     savePhase,
@@ -141,5 +156,7 @@ export function useSaveExport({
     handleImportZones,
     handleExportHouses,
     handleImportHouses,
+    handleExportSpawns,
+    handleImportSpawns,
   }
 }

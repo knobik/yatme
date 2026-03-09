@@ -1,6 +1,6 @@
 import { type OtbmMap, type OtbmTile, type OtbmItem, deepCloneItem, isPositionValid } from './otbm'
 import type { AppearanceData } from './appearances'
-import type { MapSidecars } from './sidecars'
+import type { MapSidecars, SpawnPoint, SpawnCreature } from './sidecars'
 import { chunkKeyForTile } from './ChunkManager'
 import type { GroundBrush } from './brushes/BrushTypes'
 import type { WallBrush } from './brushes/WallTypes'
@@ -56,6 +56,7 @@ type MutationAction =
   | { type: 'setTileFlags'; x: number; y: number; z: number; oldFlags: number; newFlags: number }
   | { type: 'setTileZones'; x: number; y: number; z: number; oldZones: number[]; newZones: number[] }
   | { type: 'setTileHouseId'; x: number; y: number; z: number; oldHouseId: number | undefined; newHouseId: number | undefined }
+  | { type: 'setSpawns'; x: number; y: number; z: number; oldSpawns: SpawnPoint[]; newSpawns: SpawnPoint[] }
 
 interface MutationBatch {
   description: string
@@ -79,6 +80,7 @@ export class MapMutator {
   onChunksInvalidated?: (keys: Set<string>) => void
   onUndoRedoChanged?: (canUndo: boolean, canRedo: boolean) => void
   onTileChanged?: (x: number, y: number, z: number) => void
+  onSpawnsChanged?: () => void
 
   constructor(mapData: OtbmMap, appearances: AppearanceData) {
     this.mapData = mapData
@@ -353,6 +355,13 @@ export class MapMutator {
         }
         break
       }
+      case 'setSpawns': {
+        if (this._sidecars) {
+          this._sidecars.monsterSpawns = deepCloneSpawns(action.oldSpawns)
+          this.onSpawnsChanged?.()
+        }
+        break
+      }
     }
   }
 
@@ -397,6 +406,13 @@ export class MapMutator {
         if (tile) {
           if (action.newHouseId != null) tile.houseId = action.newHouseId
           else delete tile.houseId
+        }
+        break
+      }
+      case 'setSpawns': {
+        if (this._sidecars) {
+          this._sidecars.monsterSpawns = deepCloneSpawns(action.newSpawns)
+          this.onSpawnsChanged?.()
         }
         break
       }
@@ -1295,10 +1311,144 @@ export class MapMutator {
     this.onUndoRedoChanged?.(this.canUndo(), this.canRedo())
   }
 
+  // --- Spawn mutations ---
+
+  private snapshotSpawns(): SpawnPoint[] {
+    return deepCloneSpawns(this._sidecars?.monsterSpawns ?? [])
+  }
+
+  /** Place a monster at (x,y,z). Finds covering spawn or auto-creates one. */
+  placeMonster(x: number, y: number, z: number, name: string, spawnTime: number, direction: number): void {
+    if (!this._sidecars) return
+    const oldSpawns = this.snapshotSpawns()
+    const spawns = this._sidecars.monsterSpawns
+
+    // Find first spawn covering this position
+    let targetSpawn: SpawnPoint | null = null
+    for (const sp of spawns) {
+      if (sp.centerZ !== z) continue
+      if (Math.abs(x - sp.centerX) <= sp.radius && Math.abs(y - sp.centerY) <= sp.radius) {
+        targetSpawn = sp
+        break
+      }
+    }
+
+    if (!targetSpawn) {
+      // Auto-create a spawn centered here with default radius 5
+      targetSpawn = { centerX: x, centerY: y, centerZ: z, radius: 5, creatures: [] }
+      spawns.push(targetSpawn)
+    }
+
+    const creature: SpawnCreature = { name, x, y, z, spawnTime, direction }
+    targetSpawn.creatures.push(creature)
+
+    const newSpawns = this.snapshotSpawns()
+    // Use spawn center as the action coordinate
+    const cx = targetSpawn.centerX
+    const cy = targetSpawn.centerY
+    this.recordAction({ type: 'setSpawns', x: cx, y: cy, z, oldSpawns, newSpawns })
+    this.onSpawnsChanged?.()
+  }
+
+  /** Remove all creatures at (x,y,z) from their spawns. */
+  removeCreaturesAt(x: number, y: number, z: number): void {
+    if (!this._sidecars) return
+    const spawns = this._sidecars.monsterSpawns
+    let anyRemoved = false
+
+    // Check if any spawn has creatures at this position
+    for (const sp of spawns) {
+      if (sp.creatures.some(c => c.x === x && c.y === y && c.z === z)) {
+        anyRemoved = true
+        break
+      }
+    }
+
+    if (!anyRemoved) return
+
+    const oldSpawns = this.snapshotSpawns()
+
+    for (const sp of spawns) {
+      sp.creatures = sp.creatures.filter(c => !(c.x === x && c.y === y && c.z === z))
+    }
+
+    const newSpawns = this.snapshotSpawns()
+    this.recordAction({ type: 'setSpawns', x, y, z, oldSpawns, newSpawns })
+    this.onSpawnsChanged?.()
+  }
+
+  /** Create an empty spawn area. */
+  createSpawnArea(cx: number, cy: number, cz: number, radius: number): void {
+    if (!this._sidecars) return
+    const oldSpawns = this.snapshotSpawns()
+    this._sidecars.monsterSpawns.push({ centerX: cx, centerY: cy, centerZ: cz, radius, creatures: [] })
+    const newSpawns = this.snapshotSpawns()
+    this.autoBatch('Create spawn area', () => {
+      this.recordAction({ type: 'setSpawns', x: cx, y: cy, z: cz, oldSpawns, newSpawns })
+    })
+    this.onSpawnsChanged?.()
+  }
+
+  /** Remove a single creature from a spawn by index. */
+  deleteCreature(spawnIdx: number, creatureIdx: number): void {
+    if (!this._sidecars) return
+    const spawns = this._sidecars.monsterSpawns
+    if (spawnIdx < 0 || spawnIdx >= spawns.length) return
+    const sp = spawns[spawnIdx]
+    if (creatureIdx < 0 || creatureIdx >= sp.creatures.length) return
+    const oldSpawns = this.snapshotSpawns()
+    sp.creatures.splice(creatureIdx, 1)
+    const newSpawns = this.snapshotSpawns()
+    this.autoBatch('Remove creature', () => {
+      this.recordAction({ type: 'setSpawns', x: sp.centerX, y: sp.centerY, z: sp.centerZ, oldSpawns, newSpawns })
+    })
+    this.onSpawnsChanged?.()
+  }
+
+  /** Delete an entire spawn by index. */
+  deleteSpawn(spawnIdx: number): void {
+    if (!this._sidecars) return
+    const spawns = this._sidecars.monsterSpawns
+    if (spawnIdx < 0 || spawnIdx >= spawns.length) return
+    const sp = spawns[spawnIdx]
+    const oldSpawns = this.snapshotSpawns()
+    spawns.splice(spawnIdx, 1)
+    const newSpawns = this.snapshotSpawns()
+    this.autoBatch('Delete spawn', () => {
+      this.recordAction({ type: 'setSpawns', x: sp.centerX, y: sp.centerY, z: sp.centerZ, oldSpawns, newSpawns })
+    })
+    this.onSpawnsChanged?.()
+  }
+
+  /** Change a spawn's radius. */
+  modifySpawnRadius(spawnIdx: number, newRadius: number): void {
+    if (!this._sidecars) return
+    const spawns = this._sidecars.monsterSpawns
+    if (spawnIdx < 0 || spawnIdx >= spawns.length) return
+    const sp = spawns[spawnIdx]
+    if (sp.radius === newRadius) return
+    const oldSpawns = this.snapshotSpawns()
+    sp.radius = newRadius
+    const newSpawns = this.snapshotSpawns()
+    this.autoBatch('Modify spawn radius', () => {
+      this.recordAction({ type: 'setSpawns', x: sp.centerX, y: sp.centerY, z: sp.centerZ, oldSpawns, newSpawns })
+    })
+    this.onSpawnsChanged?.()
+  }
+
   // Invalidate chunks during a batch (for live visual feedback while dragging)
   flushChunkUpdates(): void {
     if (this.currentBatch && this.currentBatch.affectedChunks.size > 0) {
       this.onChunksInvalidated?.(new Set(this.currentBatch.affectedChunks))
     }
   }
+}
+
+// --- Spawn deep clone helper ---
+
+function deepCloneSpawns(spawns: SpawnPoint[]): SpawnPoint[] {
+  return spawns.map(sp => ({
+    ...sp,
+    creatures: sp.creatures.map(c => ({ ...c })),
+  }))
 }
