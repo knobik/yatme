@@ -57,7 +57,7 @@ Using **OTClient's `appearances.proto`** (`vendor/otclient/src/protobuf/appearan
 
 ## Data files for browser map editor (v15.00)
 
-### Files extracted to `tibia-versions/15.00/`
+### Files extracted to `tibia/`
 - `appearances.dat` — from Tibia 15.00 client (4.8MB)
 - `appearances.proto` — from `vendor/otclient/src/protobuf/appearances.proto`
 - `canary.otbm` — from `vendor/canary/data-canary/world/canary.otbm` (19MB, OTBM version 2)

@@ -10,8 +10,8 @@ const BYTES_IN_SHEET = SHEET_SIZE * SHEET_SIZE * BYTES_PER_PIXEL; // 589,824
 const SHEET_WIDTH_BYTES = SHEET_SIZE * BYTES_PER_PIXEL; // 1,536
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const INPUT_DIR = process.env['SPRITES_INPUT_DIR'] ?? path.resolve(__dirname, '../tibia-versions/15.00/sprites');
-const OUTPUT_DIR = process.env['SPRITES_OUTPUT_DIR'] ?? path.resolve(__dirname, '../tibia-versions/15.00/sprites-png');
+const INPUT_DIR = process.env['SPRITES_INPUT_DIR'] ?? path.resolve(__dirname, '../tibia/sprites');
+const OUTPUT_DIR = process.env['SPRITES_OUTPUT_DIR'] ?? path.resolve(__dirname, '../tibia/sprites-png');
 
 interface CatalogEntry {
   type: string;

@@ -30,7 +30,7 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     react(),
-    serveStaticDir('/sprites-png/', 'tibia-versions/15.00/sprites-png'),
+    serveStaticDir('/sprites-png/', 'tibia/sprites-png'),
     serveStaticDir('/data/', 'data'),
     serveStaticDir('/maps/', 'maps'),
   ],

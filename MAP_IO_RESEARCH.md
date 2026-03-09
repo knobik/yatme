@@ -160,7 +160,7 @@ services:
     ports:
       - "${PORT:-8080}:8080"
     volumes:
-      - ./tibia-versions/15.00/sprites:/app/sprites:ro   # Client sprite sheets
+      - ./tibia/sprites:/app/sprites:ro   # Client sprite sheets
       - ./maps:/app/maps                                  # OTBM + sidecars (read-write)
       - sprites-png:/app/sprites-png                      # Converted PNGs (persistent cache)
     restart: unless-stopped
@@ -194,7 +194,7 @@ npm run dev                # Vite dev server (StaticFileProvider)
 ```
 
 Vite serves files via plugins:
-- `/sprites-png/*` → `tibia-versions/15.00/sprites-png/`
+- `/sprites-png/*` → `tibia/sprites-png/`
 - `/data/*` → `data/`
 - `/maps/*` → `maps/`
 

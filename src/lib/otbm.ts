@@ -856,8 +856,11 @@ export async function serializeOtbm(
   writer.writeRawByte(0)
 
   // Root node (type 0)
+  // Clamp to MAP_OTBM_5 (version 4) minimum, matching RME behavior.
+  // Our serializer already writes v5 format (OTBM_ATTR_COUNT, not inline counts).
+  const saveVersion = Math.max(map.version, 4)
   writer.startNode(0)
-  writer.writeU32(map.version)
+  writer.writeU32(saveVersion)
   writer.writeU16(map.width)
   writer.writeU16(map.height)
   writer.writeU32(map.majorItems)

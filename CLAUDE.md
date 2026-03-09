@@ -8,7 +8,7 @@ Browser-based Tibia map editor targeting Tibia 15.00+ (protobuf data format). Bu
 
 ## Commands
 
-- **Dev server**: `npm run dev` (Vite dev server, serves `data/` and `tibia-versions/15.00/` as public)
+- **Dev server**: `npm run dev` (Vite dev server, serves `data/` and `tibia/` as public)
 - **Build**: `npm run build` (runs `tsc -b && vite build`)
 - **Lint**: `npm run lint` (ESLint)
 - **Protobuf codegen**: `npm run proto` (requires Docker — generates `src/proto/appearances.ts`)
@@ -54,7 +54,7 @@ Editor tools: `selectTool`, `drawTool`, `eraseTool`, `fillTool`, `doorTool`. Eac
 - **FindItemDialog / ReplaceItemsDialog** — Search and replace across map.
 
 ### Data Files
-- `tibia-versions/15.00/` — Client assets (appearances.dat, catalog-content.json, sprite sheets). Served as Vite publicDir.
+- `tibia/` — Client assets (appearances.dat, catalog-content.json, sprite sheets). Served as Vite publicDir.
 - `data/materials/` — Brush/tileset XML definitions (borders, brushes, tilesets).
 - `data/items.xml` — Item names and properties.
 

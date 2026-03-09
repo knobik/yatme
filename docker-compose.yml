@@ -5,7 +5,7 @@ services:
     ports:
       - "${PORT:-8080}:8080"
     volumes:
-      - ./tibia-versions/15.00/sprites:/app/sprites:ro
+      - ./tibia/sprites:/app/sprites:ro
       - ./maps:/app/maps
       - sprites-png:/app/sprites-png
     restart: unless-stopped

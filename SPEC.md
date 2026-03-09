@@ -6,7 +6,7 @@
 - protobufjs — runtime dependency for generated proto code
 
 ## Data files
-All in `tibia-versions/15.00/` — see `PROJECT.md` for details.
+All in `tibia/` — see `PROJECT.md` for details.
 
 ## Phases
 
@@ -40,4 +40,4 @@ Serialize map back to OTBM, file download.
 - OTBM format: `vendor/otclient/src/client/mapio.cpp`, `vendor/remeres-map-editor/source/iomap_otbm.cpp`
 - Appearances: `vendor/otclient/src/client/thingtypemanager.cpp`
 - Sprites: `vendor/otclient/src/client/spriteappearances.cpp`
-- Proto: `tibia-versions/15.00/appearances.proto`
+- Proto: `tibia/appearances.proto`

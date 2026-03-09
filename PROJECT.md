@@ -61,7 +61,7 @@ Reference parsers:
 ### appearances.dat (protobuf)
 Protobuf-serialized `Appearances` message containing all visual object definitions.
 
-Proto definition: `tibia-versions/15.00/appearances.proto`
+Proto definition: `tibia/appearances.proto`
 
 Categories:
 | Field | Content |
@@ -100,7 +100,7 @@ XML file with item names and server-side properties:
 
 ---
 
-## Available Data (`tibia-versions/15.00/`)
+## Available Data (`tibia/`)
 
 | File | Status | Source |
 |---|---|---|
