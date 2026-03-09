@@ -263,6 +263,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
               onClick: () => {
                 renderer!.setFloor(dest.z)
                 renderer!.centerOn(dest.x, dest.y)
+                renderer!.pingTile(dest.x, dest.y, dest.z)
               },
             },
             {

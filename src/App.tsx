@@ -528,6 +528,7 @@ function App() {
                 const [x, y, z] = key.split(',').map(Number)
                 rendererRef.current?.setFloor(z)
                 rendererRef.current?.centerOn(x, y)
+                rendererRef.current?.pingTile(x, y, z)
                 break
               }
             }
@@ -566,6 +567,7 @@ function App() {
               if (tile.houseId === houseId) {
                 rendererRef.current?.setFloor(tile.z)
                 rendererRef.current?.centerOn(tile.x, tile.y)
+                rendererRef.current?.pingTile(tile.x, tile.y, tile.z)
                 break
               }
             }
