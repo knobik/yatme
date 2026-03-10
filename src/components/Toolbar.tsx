@@ -7,7 +7,7 @@ import type { ItemRegistry } from '../lib/items'
 import { getItemDisplayName } from '../lib/items'
 import { getSelectionPreviewId, BRUSH_SIZE_TOOLS } from '../hooks/tools/types'
 import { ItemSprite } from './ItemSprite'
-import { HamburgerMenu, type MenuSection } from './HamburgerMenu'
+import { MenuBar, type MenuSection } from './MenuBar'
 import {
   DOOR_NORMAL, DOOR_LOCKED, DOOR_QUEST, DOOR_MAGIC,
   DOOR_WINDOW, DOOR_HATCH_WINDOW,
@@ -182,17 +182,22 @@ export function Toolbar({
       items: [
         { label: 'Save Map', shortcut: 'Ctrl+S', disabled: !canSave, onClick: onSave },
         'separator',
-        { label: 'Import Zones...', onClick: onImportZones },
-        { label: 'Export Zones', onClick: onExportZones },
-        'separator',
-        { label: 'Import Houses...', onClick: onImportHouses },
-        { label: 'Export Houses', onClick: onExportHouses },
-        'separator',
-        { label: 'Import Monster Spawns...', onClick: onImportMonsterSpawns },
-        { label: 'Export Monster Spawns', onClick: onExportMonsterSpawns },
-        'separator',
-        { label: 'Import NPC Spawns...', onClick: onImportNpcSpawns },
-        { label: 'Export NPC Spawns', onClick: onExportNpcSpawns },
+        {
+          label: 'Import/Export',
+          items: [
+            { label: 'Import Zones...', onClick: onImportZones },
+            { label: 'Export Zones', onClick: onExportZones },
+            'separator',
+            { label: 'Import Houses...', onClick: onImportHouses },
+            { label: 'Export Houses', onClick: onExportHouses },
+            'separator',
+            { label: 'Import Monster Spawns...', onClick: onImportMonsterSpawns },
+            { label: 'Export Monster Spawns', onClick: onExportMonsterSpawns },
+            'separator',
+            { label: 'Import NPC Spawns...', onClick: onImportNpcSpawns },
+            { label: 'Export NPC Spawns', onClick: onExportNpcSpawns },
+          ],
+        },
       ],
     },
     {
@@ -224,20 +229,21 @@ export function Toolbar({
     {
       title: 'View',
       items: [
+        { heading: 'Palettes' },
         { label: 'Brush Palette', shortcut: 'P', checked: editorSettings.showPalette, onClick: () => onToggleSetting('showPalette') },
         { label: 'Zone Palette', shortcut: 'Z', checked: editorSettings.showZonePalette, onClick: () => onToggleSetting('showZonePalette') },
         { label: 'House Palette', shortcut: 'H', checked: editorSettings.showHousePalette, onClick: () => onToggleSetting('showHousePalette') },
         { label: 'Creature Palette', checked: editorSettings.showCreaturePalette, onClick: () => onToggleSetting('showCreaturePalette') },
-        'separator',
+        { heading: 'Overlays' },
         { label: 'Show Zones', checked: editorSettings.showZoneOverlay, onClick: () => onToggleSetting('showZoneOverlay') },
         { label: 'Show Houses', checked: editorSettings.showHouseOverlay, onClick: () => onToggleSetting('showHouseOverlay') },
         { label: 'Show Lights', shortcut: 'L', checked: editorSettings.showLights, onClick: () => onToggleSetting('showLights') },
-        'separator',
+        { heading: 'Creatures' },
         { label: 'Show Monsters', shortcut: 'M', checked: editorSettings.showMonsters, onClick: () => onToggleSetting('showMonsters') },
         { label: 'Show Monster Spawns', shortcut: 'Ctrl+M', checked: editorSettings.showMonsterSpawns, onClick: () => onToggleSetting('showMonsterSpawns') },
         { label: 'Show NPCs', shortcut: 'N', checked: editorSettings.showNpcs, onClick: () => onToggleSetting('showNpcs') },
         { label: 'Show NPC Spawns', shortcut: 'Ctrl+N', checked: editorSettings.showNpcSpawns, onClick: () => onToggleSetting('showNpcSpawns') },
-        'separator',
+        { heading: 'Zoom' },
         { label: 'Zoom In', shortcut: 'Ctrl+=', onClick: onZoomIn },
         { label: 'Zoom Out', shortcut: 'Ctrl+-', onClick: onZoomOut },
         { label: 'Reset Zoom', shortcut: 'Ctrl+0', onClick: onResetZoom },
@@ -249,8 +255,8 @@ export function Toolbar({
 
   return (
     <div className="panel absolute top-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-4 px-5 py-3 pointer-events-auto select-none">
-      {/* Hamburger menu */}
-      <HamburgerMenu sections={menuSections} />
+      {/* Menu bar */}
+      <MenuBar sections={menuSections} />
 
       <div className="h-[22px] w-px shrink-0 bg-border-subtle" />
 
