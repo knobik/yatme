@@ -3,6 +3,7 @@ import type { MapRenderer } from '../lib/MapRenderer'
 import type { MapMutator } from '../lib/MapMutator'
 import type { OtbmMap } from '../lib/otbm'
 import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
+import { useLatestRef } from './useLatestRef'
 import { DOOR_NORMAL } from '../lib/brushes/WallTypes'
 import type { SelectedItemInfo } from './useSelection'
 import { useSelection } from './useSelection'
@@ -93,38 +94,21 @@ export function useEditorTools(
   const [selectedCreature, setSelectedCreature] = useState<SelectedCreatureInfo | null>(null)
 
   // ── Refs (avoid stale closures in pointer handlers) ──────────────
-  const activeToolRef = useRef(activeTool)
-  const selectedBrushRef = useRef(selectedBrush)
-  const brushSizeRef = useRef(brushSize)
-  const brushShapeRef = useRef(brushShape)
-  const brushRegistryRef = useRef(brushRegistry)
-  const activeDoorTypeRef = useRef(activeDoorType)
-  const selectedZoneRef = useRef(selectedZone)
-  const selectedHouseRef = useRef<number | null>(selectedHouse?.id ?? null)
-  const creatureSpawnTimeRef = useRef(creatureSpawnTime)
-  const creatureWeightRef = useRef(creatureWeight)
-  const spawnRadiusRef = useRef(spawnRadius)
-  const onRequestEditItemRef = useRef(onRequestEditItem)
-  const onRequestEditCreatureRef = useRef(onRequestEditCreature)
-  const onRequestEditSpawnRef = useRef(onRequestEditSpawn)
-  const clickToInspectRef = useRef(clickToInspect)
-  useEffect(() => {
-    activeToolRef.current = activeTool
-    selectedBrushRef.current = selectedBrush
-    brushSizeRef.current = brushSize
-    brushShapeRef.current = brushShape
-    brushRegistryRef.current = brushRegistry
-    activeDoorTypeRef.current = activeDoorType
-    selectedZoneRef.current = selectedZone
-    selectedHouseRef.current = selectedHouse?.id ?? null
-    creatureSpawnTimeRef.current = creatureSpawnTime
-    creatureWeightRef.current = creatureWeight
-    spawnRadiusRef.current = spawnRadius
-    onRequestEditItemRef.current = onRequestEditItem
-    onRequestEditCreatureRef.current = onRequestEditCreature
-    onRequestEditSpawnRef.current = onRequestEditSpawn
-    clickToInspectRef.current = clickToInspect
-  })
+  const activeToolRef = useLatestRef(activeTool)
+  const selectedBrushRef = useLatestRef(selectedBrush)
+  const brushSizeRef = useLatestRef(brushSize)
+  const brushShapeRef = useLatestRef(brushShape)
+  const brushRegistryRef = useLatestRef(brushRegistry)
+  const activeDoorTypeRef = useLatestRef(activeDoorType)
+  const selectedZoneRef = useLatestRef(selectedZone)
+  const selectedHouseRef = useLatestRef<number | null>(selectedHouse?.id ?? null)
+  const creatureSpawnTimeRef = useLatestRef(creatureSpawnTime)
+  const creatureWeightRef = useLatestRef(creatureWeight)
+  const spawnRadiusRef = useLatestRef(spawnRadius)
+  const onRequestEditItemRef = useLatestRef(onRequestEditItem)
+  const onRequestEditCreatureRef = useLatestRef(onRequestEditCreature)
+  const onRequestEditSpawnRef = useLatestRef(onRequestEditSpawn)
+  const clickToInspectRef = useLatestRef(clickToInspect)
 
   // Drag state refs
   const paintedTilesRef = useRef(new Set<string>())

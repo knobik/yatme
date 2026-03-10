@@ -130,16 +130,6 @@ export function CreaturePalette({
         </button>
       </div>
 
-      {/* Search */}
-      <div className="px-3 pb-2">
-        <input
-          className="w-full rounded-sm bg-bg-raised px-3 py-[5px] font-ui text-sm text-fg outline-none placeholder:text-fg-faint border border-border-subtle focus:border-accent"
-          placeholder="Search creatures..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-      </div>
-
       {/* Mode toggle */}
       <div className="flex gap-1 px-3 pb-2">
         <button
@@ -213,6 +203,16 @@ export function CreaturePalette({
             />
           </div>
         )}
+      </div>
+
+      {/* Search */}
+      <div className="px-3 pb-2">
+        <input
+          className="w-full rounded-sm bg-bg-raised px-3 py-[5px] font-ui text-sm text-fg outline-none placeholder:text-fg-faint border border-border-subtle focus:border-accent"
+          placeholder="Search creatures..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
       </div>
 
       <div className="mx-3 h-px bg-border-subtle" />

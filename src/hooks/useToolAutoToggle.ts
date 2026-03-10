@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { EditorSettings, BooleanSettingKey } from '../lib/EditorSettings'
 import type { EditorTool } from './tools/types'
+import { useLatestRef } from './useLatestRef'
 
 /**
  * Auto-toggle an overlay+palette pair when a specific tool is active.
@@ -17,8 +18,7 @@ export function useToolAutoToggle(
 ) {
   const overlayBeforeRef = useRef<boolean | null>(null)
   const paletteBeforeRef = useRef<boolean | null>(null)
-  const settingsRef = useRef(editorSettings)
-  useEffect(() => { settingsRef.current = editorSettings })
+  const settingsRef = useLatestRef(editorSettings)
 
   useEffect(() => {
     if (activeTool === toolName) {

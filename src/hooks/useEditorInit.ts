@@ -184,7 +184,7 @@ export function useEditorInit(
           return
         }
         const currentTool = toolsRef.current.activeTool
-        if (currentTool === 'draw' || currentTool === 'erase') {
+        if (currentTool === 'draw' || currentTool === 'erase' || currentTool === 'creature') {
           toolsRef.current.setActiveTool('select')
         }
         // Select the top item (like left-click) if tile not already in selection
