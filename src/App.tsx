@@ -29,6 +29,8 @@ import { scrubZoneFromTiles } from './lib/zoneCleanup'
 import { scrubHouseFromTiles } from './lib/houseCleanup'
 import { ZonePalette } from './components/ZonePalette'
 import { HousePalette } from './components/HousePalette'
+import { CreaturePalette } from './components/CreaturePalette'
+import type { CreatureDatabase } from './lib/creatures/CreatureDatabase'
 import type { CategoryType } from './lib/tilesets/TilesetTypes'
 import { emptySidecars, type MapSidecars } from './lib/sidecars'
 import { useEditorInit, type CameraState } from './hooks/useEditorInit'
@@ -93,6 +95,7 @@ function App() {
   const [showEditTowns, setShowEditTowns] = useState(false)
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(initialSettings)
   const [brushRegistryState, setBrushRegistryState] = useState<BrushRegistry | null>(null)
+  const [creatureDb, setCreatureDb] = useState<CreatureDatabase | null>(null)
   const [tilesets, setTilesets] = useState<ResolvedTileset[]>([])
   const [mapFilename, setMapFilename] = useState('map.otbm')
 
@@ -121,7 +124,7 @@ function App() {
     setTilesets, setMapFilename, setMapData, setSidecarsData,
     setRendererReady, setMutatorReady,
     setCamera, setSelectedTilePos, setContextMenu: (menu) => setContextMenu(menu),
-    setTileVersion, setPlacingHouseExit, placingHouseExitRef, toolsRef,
+    setTileVersion, setPlacingHouseExit, placingHouseExitRef, setCreatureDb, toolsRef,
   })
 
   // ── Settings helpers ─────────────────────────────────────────────
@@ -231,6 +234,7 @@ function App() {
   // ── Auto-toggle overlay/palette when zone or house tool is active ───
   useToolAutoToggle(tools.activeTool, 'zone', 'showZoneOverlay', 'showZonePalette', editorSettings, updateSetting)
   useToolAutoToggle(tools.activeTool, 'house', 'showHouseOverlay', 'showHousePalette', editorSettings, updateSetting)
+  useToolAutoToggle(tools.activeTool, 'creature', 'showMonsterSpawns', 'showCreaturePalette', editorSettings, updateSetting)
 
   useEffect(() => {
     if (rendererReady) {
@@ -617,6 +621,27 @@ function App() {
           onExportHouses={handleExportHouses}
           onImportHouses={handleImportHouses}
           onClose={() => updateSetting('showHousePalette', false)}
+        />
+      )}
+
+      {/* Creature palette — right side */}
+      {!loading && editorSettings.showCreaturePalette && creatureDb && appearancesData && (
+        <CreaturePalette
+          style={{ right: 68 + (editorSettings.showZonePalette ? 268 : 0) + (editorSettings.showHousePalette ? 268 : 0) }}
+          creatureDb={creatureDb}
+          appearances={appearancesData}
+          selectedBrush={tools.selectedBrush}
+          onCreatureSelect={(sel) => {
+            tools.setSelectedBrush(sel)
+            if (tools.activeTool !== 'creature') tools.setActiveTool('creature')
+          }}
+          creatureSpawnTime={tools.creatureSpawnTime}
+          onCreatureSpawnTimeChange={tools.setCreatureSpawnTime}
+          creatureWeight={tools.creatureWeight}
+          onCreatureWeightChange={tools.setCreatureWeight}
+          brushSize={tools.brushSize}
+          onBrushSizeChange={tools.setBrushSize}
+          onClose={() => updateSetting('showCreaturePalette', false)}
         />
       )}
 

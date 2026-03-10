@@ -219,6 +219,9 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
       } else if (e.key === 'h' && !e.ctrlKey) {
         e.preventDefault()
         toolsRef.current.setActiveTool('house')
+      } else if (e.key === 'c' && !e.ctrlKey) {
+        e.preventDefault()
+        toolsRef.current.setActiveTool('creature')
       } else if (e.key === ']') {
         e.preventDefault()
         const cur = toolsRef.current.brushSize

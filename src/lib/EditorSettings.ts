@@ -19,6 +19,7 @@ export interface EditorSettings {
   showZoneOverlay: boolean
   showHousePalette: boolean
   showHouseOverlay: boolean
+  showCreaturePalette: boolean
 
   // Creatures
   showMonsters: boolean
@@ -41,6 +42,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   showZoneOverlay: false,
   showHousePalette: false,
   showHouseOverlay: false,
+  showCreaturePalette: false,
   showMonsters: true,
   showMonsterSpawns: true,
   showNpcs: true,

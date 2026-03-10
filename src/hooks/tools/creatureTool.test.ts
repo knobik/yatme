@@ -52,7 +52,7 @@ describe('creatureTool', () => {
       expect(args[2]).toBe(5) // x
       expect(args[3]).toBe(5) // y
       expect(args[4]).toBe(7) // z
-      expect(args[5]).toEqual(expect.objectContaining({ spawnTime: 60, autoCreateSpawn: true }))
+      expect(args[5]).toEqual(expect.objectContaining({ spawnTime: 60, weight: 100, autoCreateSpawn: true }))
       expect(args[6]).toBe(ctx.mapData)
     })
 
@@ -131,6 +131,32 @@ describe('creatureTool', () => {
       // Check that the last argument (spawnRadius) passed is 3
       const lastCall = mockApply.mock.calls[0]
       expect(lastCall[lastCall.length - 1]).toBe(3)
+    })
+  })
+
+  describe('config from refs', () => {
+    const monsterSel: BrushSelection = { mode: 'creature', creatureName: 'Rat', isNpc: false }
+
+    it('reads spawnTime from creatureSpawnTimeRef', () => {
+      const { ctx } = makeToolContext({ selectedBrush: monsterSel })
+      ctx.creatureSpawnTimeRef = { current: 120 }
+      ctx.creatureWeightRef = { current: 50 }
+      const { onDown } = createCreatureHandlers(ctx)
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
+
+      const args = mockApply.mock.calls[0]
+      expect(args[5]).toEqual(expect.objectContaining({ spawnTime: 120, weight: 50 }))
+    })
+
+    it('reads weight from creatureWeightRef', () => {
+      const { ctx } = makeToolContext({ selectedBrush: monsterSel })
+      ctx.creatureSpawnTimeRef = { current: 60 }
+      ctx.creatureWeightRef = { current: 200 }
+      const { onDown } = createCreatureHandlers(ctx)
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
+
+      const args = mockApply.mock.calls[0]
+      expect(args[5]).toEqual(expect.objectContaining({ weight: 200 }))
     })
   })
 

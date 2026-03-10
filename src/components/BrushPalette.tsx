@@ -1,4 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { useVirtualScroll } from '../hooks/useVirtualScroll'
 import clsx from 'clsx'
 import type { AppearanceData } from '../lib/appearances'
 import type { ResolvedTileset, ResolvedPaletteEntry, ResolvedItemEntry, CategoryType } from '../lib/tilesets/TilesetTypes'
@@ -70,10 +72,7 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
   const [tilesetSearch, setTilesetSearch] = useState('')
   const [tilesetOpen, setTilesetOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const [scrollTop, setScrollTop] = useState(0)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const searchTimerRef = useRef<number>(0)
-  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const debouncedSearch = useDebouncedValue(search, 150)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Expose navigation API to parent
@@ -101,14 +100,7 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
     return () => document.removeEventListener('mousedown', handleClick)
   }, [tilesetOpen])
 
-  // Debounce search input
-  const handleSearch = useCallback((value: string) => {
-    setSearch(value)
-    clearTimeout(searchTimerRef.current)
-    searchTimerRef.current = window.setTimeout(() => {
-      setDebouncedSearch(value)
-    }, 150)
-  }, [])
+  const handleSearch = setSearch
 
   // Build the "ALL" entry list (all items as raw entries, for when no category filter)
   const allEntries = useMemo((): ResolvedPaletteEntry[] => {
@@ -206,46 +198,20 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
     return section?.entries.length ?? 0
   }, [activeCategory])
 
-  // Reset scroll when filter changes — adjust state during render (React-recommended pattern)
-  const [prevScrollDeps, setPrevScrollDeps] = useState({ effectiveTileset, activeCategory, debouncedSearch })
-  const [scrollResetKey, setScrollResetKey] = useState(0)
-  if (
-    prevScrollDeps.effectiveTileset !== effectiveTileset ||
-    prevScrollDeps.activeCategory !== activeCategory ||
-    prevScrollDeps.debouncedSearch !== debouncedSearch
-  ) {
-    setPrevScrollDeps({ effectiveTileset, activeCategory, debouncedSearch })
-    setScrollTop(0)
-    setScrollResetKey(k => k + 1)
-  }
+  const { scrollRef, totalHeight, startIndex, endIndex, handleScroll, resetScroll } = useVirtualScroll({
+    totalItems: filteredEntries.length,
+    itemHeight: CELL_HEIGHT,
+    bufferItems: BUFFER_ROWS,
+    columns: COLS,
+  })
+
+  // Reset scroll when filter changes
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = 0
-  }, [scrollResetKey])
+    resetScroll()
+  }, [effectiveTileset, activeCategory, debouncedSearch, resetScroll])
 
-  // Virtual scrolling calculations
-  const totalRows = Math.ceil(filteredEntries.length / COLS)
-  const totalHeight = totalRows * CELL_HEIGHT
-
-  const [viewportHeight, setViewportHeight] = useState(400)
-
-  const handleScroll = useCallback(() => {
-    if (scrollRef.current) {
-      setScrollTop(scrollRef.current.scrollTop)
-      setViewportHeight(scrollRef.current.clientHeight)
-    }
-  }, [])
-
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    setViewportHeight(el.clientHeight)
-    const observer = new ResizeObserver(() => setViewportHeight(el.clientHeight))
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
-  const startRow = Math.max(0, Math.floor(scrollTop / CELL_HEIGHT) - BUFFER_ROWS)
-  const endRow = Math.min(totalRows, Math.ceil((scrollTop + viewportHeight) / CELL_HEIGHT) + BUFFER_ROWS)
-  const visibleEntries = filteredEntries.slice(startRow * COLS, endRow * COLS)
+  const startRow = Math.floor(startIndex / COLS)
+  const visibleEntries = filteredEntries.slice(startIndex, endIndex)
 
   const selectedLabel = effectiveTileset === 'ALL' ? 'All Tilesets' : effectiveTileset
 

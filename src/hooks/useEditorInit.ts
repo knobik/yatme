@@ -13,6 +13,7 @@ import type { ItemRegistry } from '../lib/items'
 import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
 import type { ResolvedTileset } from '../lib/tilesets/TilesetTypes'
 import type { MapSidecars } from '../lib/sidecars'
+import type { CreatureDatabase } from '../lib/creatures/CreatureDatabase'
 import type { EditorToolsState } from './useEditorTools'
 import type { ContextMenuState } from './useContextMenu'
 
@@ -54,6 +55,8 @@ export interface UseEditorInitOptions {
   setPlacingHouseExit: (id: number | null) => void
   placingHouseExitRef: RefObject<number | null>
 
+  // Creature database
+  setCreatureDb: (db: CreatureDatabase) => void
   // Tools ref for accessing current tools state in callbacks
   toolsRef: RefObject<EditorToolsState>
 }
@@ -88,6 +91,7 @@ export function useEditorInit(
     setTileVersion,
     setPlacingHouseExit,
     placingHouseExitRef,
+    setCreatureDb,
     toolsRef,
   } = options
 
@@ -125,6 +129,7 @@ export function useEditorInit(
       })
       if (brushRegistry) setBrushRegistryState(brushRegistry)
       setTilesets(tilesets)
+      if (creatureDb) setCreatureDb(creatureDb)
 
       // Build renderer + mutator
       setSidecarsData(sidecars)

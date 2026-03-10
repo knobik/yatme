@@ -114,6 +114,8 @@ export function makeToolContext(opts: MakeToolContextOptions = {}) {
     activeToolRef: { current: opts.activeTool ?? 'draw' as EditorTool },
     selectedZoneRef: { current: null },
     selectedHouseRef: { current: null },
+    creatureSpawnTimeRef: { current: 60 },
+    creatureWeightRef: { current: 100 },
     settingsRef: { current: { ...DEFAULT_SETTINGS, ...opts.settings } },
   } as unknown as ToolContext
 

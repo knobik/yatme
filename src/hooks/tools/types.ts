@@ -86,6 +86,9 @@ export interface ToolContext {
   selectedZoneRef: React.RefObject<ZoneSelection | null>
   // House tool
   selectedHouseRef: React.RefObject<number | null>
+  // Creature tool config
+  creatureSpawnTimeRef: React.RefObject<number>
+  creatureWeightRef: React.RefObject<number>
   // Settings ref (for creature tool autoCreateSpawn, etc.)
   settingsRef: React.MutableRefObject<EditorSettings>
 }

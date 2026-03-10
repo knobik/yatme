@@ -56,6 +56,10 @@ export interface EditorToolsState {
   setSelectedZone: (zone: ZoneSelection | null) => void
   selectedHouse: HouseData | null
   setSelectedHouse: (house: HouseData | null) => void
+  creatureSpawnTime: number
+  setCreatureSpawnTime: (time: number) => void
+  creatureWeight: number
+  setCreatureWeight: (weight: number) => void
   cursorPos: { x: number; y: number; z: number } | null
 }
 
@@ -78,6 +82,8 @@ export function useEditorTools(
   const [activeDoorType, setActiveDoorType] = useState<number>(DOOR_NORMAL)
   const [selectedZone, setSelectedZone] = useState<ZoneSelection | null>(null)
   const [selectedHouse, setSelectedHouse] = useState<HouseData | null>(null)
+  const [creatureSpawnTime, setCreatureSpawnTime] = useState(60)
+  const [creatureWeight, setCreatureWeight] = useState(100)
 
   // ── Refs (avoid stale closures in pointer handlers) ──────────────
   const activeToolRef = useRef(activeTool)
@@ -88,6 +94,8 @@ export function useEditorTools(
   const activeDoorTypeRef = useRef(activeDoorType)
   const selectedZoneRef = useRef(selectedZone)
   const selectedHouseRef = useRef<number | null>(selectedHouse?.id ?? null)
+  const creatureSpawnTimeRef = useRef(creatureSpawnTime)
+  const creatureWeightRef = useRef(creatureWeight)
   const onRequestEditItemRef = useRef(onRequestEditItem)
   const clickToInspectRef = useRef(clickToInspect)
   useEffect(() => {
@@ -99,6 +107,8 @@ export function useEditorTools(
     activeDoorTypeRef.current = activeDoorType
     selectedZoneRef.current = selectedZone
     selectedHouseRef.current = selectedHouse?.id ?? null
+    creatureSpawnTimeRef.current = creatureSpawnTime
+    creatureWeightRef.current = creatureWeight
     onRequestEditItemRef.current = onRequestEditItem
     clickToInspectRef.current = clickToInspect
   })
@@ -151,6 +161,8 @@ export function useEditorTools(
       activeToolRef,
       selectedZoneRef,
       selectedHouseRef,
+      creatureSpawnTimeRef,
+      creatureWeightRef,
       settingsRef,
     }
 
@@ -313,6 +325,10 @@ export function useEditorTools(
     setSelectedZone,
     selectedHouse,
     setSelectedHouse,
+    creatureSpawnTime,
+    setCreatureSpawnTime,
+    creatureWeight,
+    setCreatureWeight,
     cursorPos,
   }
 }

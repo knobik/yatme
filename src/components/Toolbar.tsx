@@ -213,6 +213,7 @@ export function Toolbar({
         { label: 'Brush Palette', shortcut: 'P', checked: editorSettings.showPalette, onClick: () => onToggleSetting('showPalette') },
         { label: 'Zone Palette', shortcut: 'Z', checked: editorSettings.showZonePalette, onClick: () => onToggleSetting('showZonePalette') },
         { label: 'House Palette', shortcut: 'H', checked: editorSettings.showHousePalette, onClick: () => onToggleSetting('showHousePalette') },
+        { label: 'Creature Palette', checked: editorSettings.showCreaturePalette, onClick: () => onToggleSetting('showCreaturePalette') },
         'separator',
         { label: 'Show Zones', checked: editorSettings.showZoneOverlay, onClick: () => onToggleSetting('showZoneOverlay') },
         { label: 'Show Houses', checked: editorSettings.showHouseOverlay, onClick: () => onToggleSetting('showHouseOverlay') },

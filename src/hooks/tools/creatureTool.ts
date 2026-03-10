@@ -19,7 +19,7 @@ export function createCreatureHandlers(ctx: ToolContext) {
         const settings = ctx.settingsRef.current
         applyCreatureBrush(
           sel, ctx.mutator, x, y, z,
-          { spawnTime: 60, autoCreateSpawn: settings.autoCreateSpawn },
+          { spawnTime: ctx.creatureSpawnTimeRef.current, weight: ctx.creatureWeightRef.current, autoCreateSpawn: settings.autoCreateSpawn },
           ctx.mapData, ctx.mutator.getAppearances(), ctx.mutator.spawnManager!,
           ctx.brushSizeRef.current,
         )

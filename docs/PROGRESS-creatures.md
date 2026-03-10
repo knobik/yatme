@@ -146,20 +146,22 @@
 
 > New palette component. Depends on Phase 6 (sprite previews), Phase 9 (BrushSelection), Phase 10 (creature tool).
 
-- [ ] Create `CreaturePalette.tsx` shell with Monsters / NPCs tabs
-- [ ] Creature list: scrollable, shows outfit sprite preview + name per entry
-- [ ] Search field: filter creature list by name substring
-- [ ] Tileset category dropdown (filter by creature tileset categories)
-- [ ] Mode toggle: "Place Creature" vs "Place Spawn Zone" (switches BrushSelection mode)
-- [ ] Spawn time spinner (applies to placed creatures, default 60s)
-- [ ] Spawn radius spinner (visible in spawn zone mode, 1-15)
-- [ ] Weight spinner (visible in monster creature mode, 0-255)
-- [ ] Add `showCreaturePalette` state variable + toggle callback in `App.tsx`
-- [ ] Add creature-related state: `selectedCreature`, `creatureSpawnTime`, `creatureSpawnRadius`, `creatureWeight`
-- [ ] Wire `CreaturePalette` component into layout
-- [ ] `useToolAutoToggle` for creature tool ↔ creature palette
-- [ ] Add `showCreaturePalette` to `EditorSettings`
-- [ ] Add "Creature Palette" toggle entry in hamburger menu
+- [x] Create `CreaturePalette.tsx` shell with Monsters / NPCs tabs
+- [x] Creature list: scrollable, shows outfit sprite preview + name per entry
+- [x] Search field: filter creature list by name substring
+- [x] Mode toggle: "Place Creature" vs "Place Spawn Zone" (switches BrushSelection mode)
+- [x] Spawn time spinner (applies to placed creatures, default 60s)
+- [x] Spawn radius spinner (visible in spawn zone mode, 1-15)
+- [x] Weight spinner (visible in monster creature mode, 0-255)
+- [x] Add `showCreaturePalette` state variable + toggle callback in `App.tsx`
+- [x] Add creature-related state: `creatureSpawnTime`, `creatureWeight` in `useEditorTools`
+- [x] Wire `CreaturePalette` component into layout
+- [x] `useToolAutoToggle` for creature tool ↔ creature palette
+- [x] Add `showCreaturePalette` to `EditorSettings`
+- [x] Add "Creature Palette" toggle entry in hamburger menu
+- [x] Create `CreatureSprite.tsx` component for creature sprite rendering
+- [x] Creature tool reads spawnTime/weight from refs instead of hardcoded values
+- [x] Tests: creature tool ref-based config
 
 ## Phase 12: Selection & Movement
 
