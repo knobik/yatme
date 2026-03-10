@@ -44,6 +44,14 @@ export function classifyItem(itemId: number, appearances: AppearanceData): DrawL
   return 'common'
 }
 
+/** Returns true if the item has any special attributes (actionId, uniqueId, text, teleport, etc.) */
+export function isComplexItem(item: OtbmItem): boolean {
+  return !!(
+    item.actionId || item.uniqueId || item.text || item.description ||
+    item.teleportDestination || item.depotId || item.customAttributes || item.items?.length
+  )
+}
+
 // --- Mutation actions ---
 
 type MutationAction =
@@ -1367,6 +1375,91 @@ export class MapMutator {
         })
         this.onTileChanged?.(x, y, z)
       }
+    })
+  }
+
+  /** Remove all non-ground items from a tile. If leaveUnique is true, preserve items with attributes and border items.
+   *  When automagic is true and a brush registry is available, reborders the tile and its neighbors. */
+  eraseAllItems(x: number, y: number, z: number, options: { leaveUnique: boolean; automagic?: boolean }): void {
+    this.autoBatch('Erase all items', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile || tile.items.length === 0) return
+      const registry = this._brushRegistry
+
+      const oldItems = deepCloneItems(tile.items)
+
+      // When automagic is on, clean borders first (RME: cleanBorders before erase)
+      if (options.automagic && registry) {
+        this.removeBorderItems(tile, registry)
+      }
+
+      const newItems = tile.items.filter(item => {
+        // Always keep ground
+        if (classifyItem(item.id, this.appearances) === 'ground') return true
+        // If leaveUnique, keep complex items and border items
+        if (options.leaveUnique) {
+          if (isComplexItem(item)) return true
+          if (registry?.isBorderItem(item.id)) return true
+        }
+        return false
+      })
+      tile.items = newItems
+
+      // When automagic is on, recalculate borders/walls/carpets/tables on this tile
+      if (options.automagic && registry) {
+        // Wallize, tableize, carpetize the erased tile (RME does this for eraser)
+        const wallItems = doWalls(x, y, z, this.mapData, registry)
+        this.replaceWallItems(tile, wallItems, registry)
+        const carpetItems = doCarpets(x, y, z, this.mapData, registry)
+        this.replaceBrushItems(tile, carpetItems, registry, 'carpet')
+        const tableItems = doTables(x, y, z, this.mapData, registry)
+        this.replaceBrushItems(tile, tableItems, registry, 'table')
+        // Reborderize this tile
+        const centerBorders = computeBorders(x, y, z, this.mapData, registry)
+        this.insertBorderItems(tile, centerBorders)
+      }
+
+      if (!this.itemsEqual(oldItems, tile.items)) {
+        this.recordAction({
+          type: 'setTileItems', x, y, z,
+          oldItems,
+          newItems: deepCloneItems(tile.items),
+        })
+        this.onTileChanged?.(x, y, z)
+      }
+
+      // Reborder neighbors
+      if (options.automagic && registry) {
+        this.reborderNeighbors(x, y, z)
+        this.realignWallNeighbors(x, y, z)
+        this.updateNeighborBrush(x, y, z, registry, 'carpet')
+        this.updateNeighborBrush(x, y, z, registry, 'table')
+      }
+    })
+  }
+
+  /** Clear all flags on a tile. */
+  clearAllTileFlags(x: number, y: number, z: number): void {
+    this.autoBatch('Clear all tile flags', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile || tile.flags === 0) return
+      const oldFlags = tile.flags
+      tile.flags = 0
+      this.recordAction({ type: 'setTileFlags', x, y, z, oldFlags, newFlags: 0 })
+      this.onTileChanged?.(x, y, z)
+    })
+  }
+
+  /** Clear all zones on a tile. */
+  clearAllTileZones(x: number, y: number, z: number): void {
+    this.autoBatch('Clear all tile zones', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile) return
+      const oldZones = tile.zones ? [...tile.zones] : []
+      if (oldZones.length === 0) return
+      tile.zones = undefined
+      this.recordAction({ type: 'setTileZones', x, y, z, oldZones, newZones: [] })
+      this.onTileChanged?.(x, y, z)
     })
   }
 

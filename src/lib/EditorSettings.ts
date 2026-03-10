@@ -27,6 +27,11 @@ export interface EditorSettings {
   showNpcs: boolean
   showNpcSpawns: boolean
   autoCreateSpawn: boolean
+
+  // Eraser
+  eraserLeaveUnique: boolean
+  eraserKeepZones: boolean
+  eraserKeepMapFlags: boolean
 }
 
 export const DEFAULT_SETTINGS: EditorSettings = {
@@ -48,6 +53,9 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   showNpcs: true,
   showNpcSpawns: true,
   autoCreateSpawn: true,
+  eraserLeaveUnique: true,
+  eraserKeepZones: false,
+  eraserKeepMapFlags: false,
 }
 
 /** Union of all boolean keys in EditorSettings — used to type-check toggle callbacks. */
