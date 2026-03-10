@@ -3,7 +3,7 @@ import { tileKey } from '../otbm'
 import type { SpawnPoint, SpawnCreature } from '../sidecars'
 import type { SpawnManager } from './SpawnManager'
 
-interface CollectResult {
+export interface CollectResult {
   spawns: SpawnPoint[]
   orphans: string[]
 }

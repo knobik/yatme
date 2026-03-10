@@ -193,4 +193,31 @@ describe('SpawnManager', () => {
       expect(tiles).toHaveLength(961)
     })
   })
+
+  describe('performance', () => {
+    it('radius 15 spawn: add + query all + remove under 100ms', () => {
+      const start = performance.now()
+      manager.addMonsterSpawn(1000, 1000, 7, 15)
+      // Query all 961 tiles
+      for (let x = 985; x <= 1015; x++) {
+        for (let y = 985; y <= 1015; y++) {
+          manager.getMonsterSpawnCount(x, y, 7)
+        }
+      }
+      manager.removeMonsterSpawn(1000, 1000, 7, 15)
+      const elapsed = performance.now() - start
+      expect(elapsed).toBeLessThan(100)
+    })
+
+    it('50 overlapping radius-10 spawns: add all under 500ms with correct counts', () => {
+      const start = performance.now()
+      for (let i = 0; i < 50; i++) {
+        manager.addMonsterSpawn(1000 + i, 1000, 7, 10)
+      }
+      const elapsed = performance.now() - start
+      expect(elapsed).toBeLessThan(500)
+      // Center of the cluster should have count > 1
+      expect(manager.getMonsterSpawnCount(1010, 1000, 7)).toBeGreaterThan(1)
+    })
+  })
 })

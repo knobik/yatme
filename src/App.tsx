@@ -238,9 +238,17 @@ function App() {
   })
 
   // ── Save / Export / Import ─────────────────────────────────────────
-  const { saveProgress, savePhase, handleSave, handleExportZones, handleImportZones, handleExportHouses, handleImportHouses } = useSaveExport({
+  const {
+    saveProgress, savePhase, handleSave,
+    handleExportZones, handleImportZones,
+    handleExportHouses, handleImportHouses,
+    handleExportMonsterSpawns, handleExportNpcSpawns,
+    handleImportMonsterSpawns, handleImportNpcSpawns,
+  } = useSaveExport({
     mapData, mapFilename, sidecarsData, setSidecarsData, storageRef,
     spawnManager: mutatorReady?.spawnManager ?? null,
+    creatureDb,
+    renderer: rendererReady,
   })
 
   // ── Auto-toggle overlay/palette when zone or house tool is active ───
@@ -497,6 +505,10 @@ function App() {
           onImportZones={handleImportZones}
           onExportHouses={handleExportHouses}
           onImportHouses={handleImportHouses}
+          onExportMonsterSpawns={handleExportMonsterSpawns}
+          onImportMonsterSpawns={handleImportMonsterSpawns}
+          onExportNpcSpawns={handleExportNpcSpawns}
+          onImportNpcSpawns={handleImportNpcSpawns}
           editorSettings={editorSettings}
           onToggleSetting={toggleSetting}
         />

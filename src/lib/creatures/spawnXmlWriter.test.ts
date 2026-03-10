@@ -6,18 +6,11 @@ import { createEmptyMap, tileKey } from '../otbm'
 import type { OtbmTile } from '../otbm'
 import { parseSpawnsXml, serializeSpawnsXml } from '../sidecars'
 import { Direction } from './types'
-import type { TileCreature } from './types'
+import { makeMonster, makeNpc } from '../../test/fixtures'
 
+/** Local makeTile that accepts partial OtbmTile overrides (creature fields, etc.) */
 function makeTile(x: number, y: number, z: number, extra?: Partial<OtbmTile>): OtbmTile {
   return { x, y, z, flags: 0, items: [], ...extra }
-}
-
-function makeMonster(name: string, opts?: Partial<TileCreature>): TileCreature {
-  return { name, direction: Direction.SOUTH, spawnTime: 60, isNpc: false, ...opts }
-}
-
-function makeNpc(name: string, opts?: Partial<TileCreature>): TileCreature {
-  return { name, direction: Direction.NORTH, spawnTime: 60, isNpc: true, ...opts }
 }
 
 describe('collectMonsterSpawns', () => {

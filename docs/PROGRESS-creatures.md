@@ -207,24 +207,24 @@
 
 > Menu-driven import/export of spawn files. Depends on Phase 3 (parser) and Phase 15 (writer).
 
-- [ ] Import monster spawns from standalone XML file (merge into current map)
-- [ ] Import NPC spawns from standalone XML file
-- [ ] Export monster spawns to standalone XML file
-- [ ] Export NPC spawns to standalone XML file
-- [ ] Add "Import Monster Spawns..." hamburger menu entry
-- [ ] Add "Import NPC Spawns..." hamburger menu entry
-- [ ] Add "Export Monster Spawns..." hamburger menu entry
-- [ ] Add "Export NPC Spawns..." hamburger menu entry
+- [x] Import monster spawns from standalone XML file (merge into current map)
+- [x] Import NPC spawns from standalone XML file
+- [x] Export monster spawns to standalone XML file
+- [x] Export NPC spawns to standalone XML file
+- [x] Add "Import Monster Spawns..." hamburger menu entry
+- [x] Add "Import NPC Spawns..." hamburger menu entry
+- [x] Add "Export Monster Spawns..." hamburger menu entry
+- [x] Add "Export NPC Spawns..." hamburger menu entry
 
 ## Phase 17: Polish & Testing
 
-- [ ] Edge case: orphan creatures (outside any spawn zone)
-- [ ] Edge case: overlapping spawn zones (multiple spawn counts, overlay intensity)
-- [ ] Edge case: auto-create spawn when placing creature without coverage
-- [ ] Edge case: deleting spawn zone with creatures inside (creatures become orphans)
-- [ ] Performance: large spawn zones (radius 15+ covering many tiles)
-- [ ] Keyboard shortcuts for 4 visibility toggles
-- [ ] Comprehensive integration tests (full workflow: load map → place spawn → place creature → save → reload → verify)
+- [x] Edge case: orphan creatures (outside any spawn zone)
+- [x] Edge case: overlapping spawn zones (multiple spawn counts, overlay intensity)
+- [x] Edge case: auto-create spawn when placing creature without coverage
+- [x] Edge case: deleting spawn zone with creatures inside (creatures become orphans)
+- [x] Performance: large spawn zones (radius 15+ covering many tiles)
+- [x] Keyboard shortcuts for 4 visibility toggles
+- [x] Comprehensive integration tests (full workflow: load map → place spawn → place creature → save → reload → verify)
 - [ ] Manual QA pass with RME-exported maps
 
 ---

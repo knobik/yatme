@@ -63,6 +63,10 @@ interface ToolbarProps {
   onImportZones: () => void
   onExportHouses: () => void
   onImportHouses: () => void
+  onExportMonsterSpawns: () => void
+  onImportMonsterSpawns: () => void
+  onExportNpcSpawns: () => void
+  onImportNpcSpawns: () => void
   onOpenEditTowns: () => void
   editorSettings: EditorSettings
   onToggleSetting: (key: BooleanSettingKey) => void
@@ -161,6 +165,10 @@ export function Toolbar({
   onImportZones,
   onExportHouses,
   onImportHouses,
+  onExportMonsterSpawns,
+  onImportMonsterSpawns,
+  onExportNpcSpawns,
+  onImportNpcSpawns,
   onOpenEditTowns,
   editorSettings,
   onToggleSetting,
@@ -179,6 +187,12 @@ export function Toolbar({
         'separator',
         { label: 'Import Houses...', onClick: onImportHouses },
         { label: 'Export Houses', onClick: onExportHouses },
+        'separator',
+        { label: 'Import Monster Spawns...', onClick: onImportMonsterSpawns },
+        { label: 'Export Monster Spawns', onClick: onExportMonsterSpawns },
+        'separator',
+        { label: 'Import NPC Spawns...', onClick: onImportNpcSpawns },
+        { label: 'Export NPC Spawns', onClick: onExportNpcSpawns },
       ],
     },
     {
@@ -219,10 +233,10 @@ export function Toolbar({
         { label: 'Show Houses', checked: editorSettings.showHouseOverlay, onClick: () => onToggleSetting('showHouseOverlay') },
         { label: 'Show Lights', shortcut: 'L', checked: editorSettings.showLights, onClick: () => onToggleSetting('showLights') },
         'separator',
-        { label: 'Show Monsters', checked: editorSettings.showMonsters, onClick: () => onToggleSetting('showMonsters') },
-        { label: 'Show Monster Spawns', checked: editorSettings.showMonsterSpawns, onClick: () => onToggleSetting('showMonsterSpawns') },
-        { label: 'Show NPCs', checked: editorSettings.showNpcs, onClick: () => onToggleSetting('showNpcs') },
-        { label: 'Show NPC Spawns', checked: editorSettings.showNpcSpawns, onClick: () => onToggleSetting('showNpcSpawns') },
+        { label: 'Show Monsters', shortcut: 'M', checked: editorSettings.showMonsters, onClick: () => onToggleSetting('showMonsters') },
+        { label: 'Show Monster Spawns', shortcut: 'Ctrl+M', checked: editorSettings.showMonsterSpawns, onClick: () => onToggleSetting('showMonsterSpawns') },
+        { label: 'Show NPCs', shortcut: 'N', checked: editorSettings.showNpcs, onClick: () => onToggleSetting('showNpcs') },
+        { label: 'Show NPC Spawns', shortcut: 'Ctrl+N', checked: editorSettings.showNpcSpawns, onClick: () => onToggleSetting('showNpcSpawns') },
         'separator',
         { label: 'Zoom In', shortcut: 'Ctrl+=', onClick: onZoomIn },
         { label: 'Zoom Out', shortcut: 'Ctrl+-', onClick: onZoomOut },

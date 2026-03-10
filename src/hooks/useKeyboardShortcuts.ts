@@ -158,6 +158,16 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
           rendererRef.current?.resetZoom()
           return
         }
+        if (e.key === 'm') {
+          e.preventDefault()
+          toggleSetting('showMonsterSpawns')
+          return
+        }
+        if (e.key === 'n') {
+          e.preventDefault()
+          toggleSetting('showNpcSpawns')
+          return
+        }
         return
       }
 
@@ -222,6 +232,12 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
       } else if (e.key === 'c' && !e.ctrlKey) {
         e.preventDefault()
         toolsRef.current.setActiveTool('creature')
+      } else if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey) {
+        e.preventDefault()
+        toggleSetting('showMonsters')
+      } else if ((e.key === 'n' || e.key === 'N') && !e.ctrlKey) {
+        e.preventDefault()
+        toggleSetting('showNpcs')
       } else if (e.key === ']') {
         e.preventDefault()
         const cur = toolsRef.current.brushSize

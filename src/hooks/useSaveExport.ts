@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import type { OtbmMap } from '../lib/otbm'
 import { serializeOtbm } from '../lib/otbm'
 import {
@@ -7,6 +7,8 @@ import {
   serializeZonesXml,
   parseHousesXml,
   serializeHousesXml,
+  parseSpawnsXml,
+  serializeSpawnsXml,
   type MapSidecars,
 } from '../lib/sidecars'
 import type { MapStorageProvider } from '../lib/storage'
@@ -14,7 +16,11 @@ import { updateAllHouseSizes } from '../lib/houseCleanup'
 import { triggerDownload } from '../lib/triggerDownload'
 import type { SavePhase } from '../components/SaveToast'
 import type { SpawnManager } from '../lib/creatures/SpawnManager'
-import { collectMonsterSpawns, collectNpcSpawns } from '../lib/creatures/spawnXmlWriter'
+import { collectMonsterSpawns, collectNpcSpawns, type CollectResult } from '../lib/creatures/spawnXmlWriter'
+import { applyMonsterSpawns, applyNpcSpawns } from '../lib/creatures/applySpawns'
+import type { CreatureDatabase } from '../lib/creatures/CreatureDatabase'
+import type { MapRenderer } from '../lib/MapRenderer'
+import type { SpawnPoint } from '../lib/sidecars'
 
 /** Open a file picker, read the selected XML file, and pass parsed results to the updater. */
 function importXmlFile<T>(
@@ -48,6 +54,8 @@ interface UseSaveExportOptions {
   setSidecarsData: React.Dispatch<React.SetStateAction<MapSidecars>>
   storageRef: React.RefObject<MapStorageProvider | null>
   spawnManager: SpawnManager | null
+  creatureDb: CreatureDatabase | null
+  renderer: MapRenderer | null
 }
 
 export function useSaveExport({
@@ -57,6 +65,8 @@ export function useSaveExport({
   setSidecarsData,
   storageRef,
   spawnManager,
+  creatureDb,
+  renderer,
 }: UseSaveExportOptions) {
   const [saveProgress, setSaveProgress] = useState<number | null>(null)
   const [savePhase, setSavePhase] = useState<SavePhase>('serialize')
@@ -82,8 +92,7 @@ export function useSaveExport({
       if (spawnManager) {
         const monsterResult = collectMonsterSpawns(md, spawnManager)
         const npcResult = collectNpcSpawns(md, spawnManager)
-        sidecarsData.monsterSpawns = monsterResult.spawns
-        sidecarsData.npcSpawns = npcResult.spawns
+        setSidecarsData(prev => ({ ...prev, monsterSpawns: monsterResult.spawns, npcSpawns: npcResult.spawns }))
         for (const o of monsterResult.orphans) console.warn(`[Save] Orphan creature skipped: ${o}`)
         for (const o of npcResult.orphans) console.warn(`[Save] Orphan creature skipped: ${o}`)
       }
@@ -124,7 +133,7 @@ export function useSaveExport({
       saveInProgressRef.current = false
       setSaveProgress(null)
     }
-  }, [mapData, mapFilename, sidecarsData, storageRef, spawnManager])
+  }, [mapData, mapFilename, sidecarsData, storageRef, spawnManager, setSidecarsData])
 
   const handleExportZones = useCallback(() => {
     triggerDownload(serializeZonesXml(sidecarsData.zones), 'zones.xml', 'application/xml')
@@ -156,6 +165,65 @@ export function useSaveExport({
     }, 'Houses')
   }, [setSidecarsData])
 
+  const makeSpawnExportHandler = useCallback((
+    collectFn: (map: OtbmMap, sm: SpawnManager) => CollectResult,
+    kind: 'monsters' | 'npcs',
+    filename: string,
+  ) => {
+    return () => {
+      if (!mapData || !spawnManager) return
+      const { spawns } = collectFn(mapData, spawnManager)
+      triggerDownload(serializeSpawnsXml(spawns, kind), filename, 'application/xml')
+    }
+  }, [mapData, spawnManager])
+
+  const handleExportMonsterSpawns = useMemo(
+    () => makeSpawnExportHandler(collectMonsterSpawns, 'monsters', 'monster-spawns.xml'),
+    [makeSpawnExportHandler],
+  )
+  const handleExportNpcSpawns = useMemo(
+    () => makeSpawnExportHandler(collectNpcSpawns, 'npcs', 'npc-spawns.xml'),
+    [makeSpawnExportHandler],
+  )
+
+  const makeSpawnImportHandler = useCallback((
+    kind: 'monsters' | 'npcs',
+    field: 'monsterSpawns' | 'npcSpawns',
+    applyFn: typeof applyMonsterSpawns,
+    label: string,
+  ) => {
+    return () => {
+      if (!mapData || !spawnManager || !creatureDb) return
+      importXmlFile(
+        (xml) => parseSpawnsXml(xml, kind),
+        (imported) => {
+          setSidecarsData(prev => {
+            const existingKeys = new Set(
+              prev[field].map((s: SpawnPoint) => `${s.centerX},${s.centerY},${s.centerZ}`)
+            )
+            const newSpawns = imported.filter(s => !existingKeys.has(`${s.centerX},${s.centerY},${s.centerZ}`))
+            if (newSpawns.length === 0) return prev
+
+            applyFn(newSpawns, mapData, spawnManager, creatureDb)
+            renderer?.recycleAllChunks()
+
+            return { ...prev, [field]: [...prev[field], ...newSpawns] }
+          })
+        },
+        label,
+      )
+    }
+  }, [mapData, spawnManager, creatureDb, setSidecarsData, renderer])
+
+  const handleImportMonsterSpawns = useMemo(
+    () => makeSpawnImportHandler('monsters', 'monsterSpawns', applyMonsterSpawns, 'Monster Spawns'),
+    [makeSpawnImportHandler],
+  )
+  const handleImportNpcSpawns = useMemo(
+    () => makeSpawnImportHandler('npcs', 'npcSpawns', applyNpcSpawns, 'NPC Spawns'),
+    [makeSpawnImportHandler],
+  )
+
   return {
     saveProgress,
     savePhase,
@@ -164,5 +232,9 @@ export function useSaveExport({
     handleImportZones,
     handleExportHouses,
     handleImportHouses,
+    handleExportMonsterSpawns,
+    handleExportNpcSpawns,
+    handleImportMonsterSpawns,
+    handleImportNpcSpawns,
   }
 }
