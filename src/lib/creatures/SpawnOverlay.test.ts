@@ -98,7 +98,7 @@ describe('SpawnOverlay', () => {
       g.destroy()
     })
 
-    it('draws spawn center with center color', () => {
+    it('draws spawn center with base color (same as other tiles)', () => {
       sm.addMonsterSpawn(100, 100, 7, 2)
       const centerTile = makeTile(100, 100, 7) // this is the spawn center
       const g = new Graphics()
@@ -106,7 +106,7 @@ describe('SpawnOverlay', () => {
 
       monsterOverlay.drawTile(g, centerTile)
 
-      expect(fillSpy.color).toBe(0xFF6600) // center color
+      expect(fillSpy.color).toBe(0xCC4400) // base color, same as non-center tiles
 
       g.destroy()
     })

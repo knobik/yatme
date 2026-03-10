@@ -7,7 +7,8 @@ import { TileOverlay, ALPHA_NONE } from '../TileOverlay'
 import type { SpawnManager } from './SpawnManager'
 
 const ICON_SIZE = 10
-const CIRCLE_RADIUS = 6
+const BADGE_RADIUS = 7
+const SHADOW_RADIUS = 8
 const TILE_CENTER = TILE_SIZE / 2
 
 // Phosphor Bug Beetle icon (256x256 viewBox, fill white for tinting)
@@ -96,13 +97,10 @@ export class SpawnOverlay extends TileOverlay {
     const count = this._counts.get(key) ?? 0
     if (count <= 0) return
 
-    const isCenter = this._centers.has(key)
-
     // Overlap darkening: base alpha increases with overlapping spawn zones
     const alpha = Math.min(ALPHA_NONE + (count - 1) * 0.08, 0.6)
-    const color = isCenter ? this._centerColor : this._color
 
-    this.fillRect(g, tile.x, tile.y, color, isCenter ? alpha + 0.1 : alpha)
+    this.fillRect(g, tile.x, tile.y, this._color, alpha)
   }
 
   rebuild(floor: number, chunkIndex: Map<string, OtbmTile[]>): void {
@@ -157,6 +155,7 @@ export class SpawnOverlay extends TileOverlay {
         }
       }
     }
+
   }
 
   private rebuildIconsForChunk(tiles: OtbmTile[], floor: number, texture: Texture): void {
@@ -168,21 +167,30 @@ export class SpawnOverlay extends TileOverlay {
       const cx = tile.x * TILE_SIZE + TILE_CENTER
       const cy = tile.y * TILE_SIZE + TILE_CENTER
 
-      // White circle with dark outline
-      const circle = new PixiGraphics()
-      circle.circle(cx, cy, CIRCLE_RADIUS)
-      circle.fill({ color: 0xffffff, alpha: 0.7 })
+      const group = new Container()
 
-      // Black icon sprite centered on the circle
+      // Drop shadow for depth
+      const shadow = new PixiGraphics()
+      shadow.circle(cx + 1, cy + 1, SHADOW_RADIUS)
+      shadow.fill({ color: 0x000000, alpha: 0.4 })
+      group.addChild(shadow)
+
+      // Dark filled badge with colored ring
+      const badge = new PixiGraphics()
+      badge.circle(cx, cy, BADGE_RADIUS)
+      badge.fill({ color: 0x12121a, alpha: 0.85 })
+      badge.stroke({ color: this._centerColor, alpha: 0.9, width: 1.5 })
+      group.addChild(badge)
+
+      // White icon for contrast
       const sprite = new Sprite(texture)
       sprite.width = ICON_SIZE
       sprite.height = ICON_SIZE
       sprite.x = cx - ICON_SIZE / 2
       sprite.y = cy - ICON_SIZE / 2
-      sprite.tint = 0x222222
-
-      const group = new Container()
-      group.addChild(circle, sprite)
+      sprite.tint = 0xeeeeee
+      sprite.alpha = 0.95
+      group.addChild(sprite)
 
       this._iconContainer.addChild(group)
       this._iconSprites.set(key, group as unknown as Sprite)
