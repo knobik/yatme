@@ -115,20 +115,6 @@ All CSS variables and base classes: `src/styles/theme.css`
 
 - All tools, views, and map operations must have entries in the **hamburger menu** (`src/components/Toolbar.tsx` -> `menuSections`) — not just keyboard shortcuts or context menu items.
 
-## Implementation Checklists
-
-### Adding a New Overlay (zone/house/spawn/etc.)
-1. `src/lib/EditorSettings.ts` — add boolean settings + defaults + merge parsing
-2. `src/App.tsx` — `useState`, `useToolAutoToggle`, toggle callbacks, `handleSettingsChange` sync
-3. **`src/hooks/useEditorInit.ts`** — sync saved setting to renderer on init (e.g. `renderer.setShowFooOverlay(savedSettings.showFooOverlay)`). Without this, `useToolAutoToggle` sees the React state as "already on" but the renderer never gets told.
-4. `src/lib/MapRenderer.ts` — overlay instance, `update()` loop, `destroy()`, floor manager overlay list
-5. `src/components/Toolbar.tsx` — menu entries for toggle + import/export
-
-### Adding a New Tool
-1. `src/hooks/tools/hoverHandler.ts` — brush cursor size condition
-2. `src/hooks/useEditorTools.ts` — onDown/onMove/onUp switch cases, cursor style
-3. `src/components/Toolbar.tsx` — TOOLS array, brush size visibility condition
-
 ## Code Style
 
 - Don't copy code — if you need to write it twice, extract it into a shared utility, hook, or component.

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import clsx from 'clsx'
 import type { OtbmItem } from '../lib/otbm'
 import { ATTRMAP_STRING, ATTRMAP_INTEGER, ATTRMAP_FLOAT, ATTRMAP_BOOLEAN, applyItemProperties } from '../lib/otbm'
@@ -95,7 +95,6 @@ export function ItemPropertiesModal({
   )
   const [editingSlot, setEditingSlot] = useState<number | null>(null)
   const dragIndexRef = useRef<number | null>(null)
-  const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragging, setDragging] = useState(false)
 
   // Separate state for teleport destination and count/charges (not part of attribute map).
@@ -110,7 +109,7 @@ export function ItemPropertiesModal({
   useEscapeKey(onCancel, editingSlot === null)
 
   // Live reorder: move items out of the way as the dragged item passes over
-  const handleDragOver = (targetIndex: number) => {
+  const handleDragOver = useCallback((targetIndex: number) => {
     const fromIndex = dragIndexRef.current
     if (fromIndex === null || fromIndex === targetIndex) return
     // Only allow dragging onto filled slots or the slot right after the last item
@@ -123,8 +122,7 @@ export function ItemPropertiesModal({
       return updated
     })
     dragIndexRef.current = targetIndex
-    setDragIndex(targetIndex)
-  }
+  }, [containerItems.length])
 
   // Focus trap — click outside closes
   const handleScrimClick = (e: React.MouseEvent) => {
@@ -310,7 +308,7 @@ export function ItemPropertiesModal({
               <div className="grid grid-cols-6 gap-1">
                 {Array.from({ length: containerSize }, (_, i) => {
                   const slotItem = containerItems[i]
-                  const isDragSource = dragging && dragIndex === i
+                  const isDragSource = dragging && dragIndexRef.current === i
                   return (
                     <div
                       key={i}
@@ -326,13 +324,11 @@ export function ItemPropertiesModal({
                       draggable={!!slotItem}
                       onDragStart={slotItem ? (e) => {
                         dragIndexRef.current = i
-                        setDragIndex(i)
                         setDragging(true)
                         e.dataTransfer.effectAllowed = 'move'
                       } : undefined}
                       onDragEnd={() => {
                         dragIndexRef.current = null
-                        setDragIndex(null)
                         setDragging(false)
                       }}
                       onDragOver={(e) => {

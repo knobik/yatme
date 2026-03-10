@@ -16,7 +16,7 @@ import { ZONE_FLAG_DEFS } from '../hooks/tools/types'
 import {
   CursorIcon, PencilSimpleIcon, EraserIcon, DoorIcon, PaintBucketIcon, FlagIcon,
   ArrowCounterClockwiseIcon, ArrowClockwiseIcon, SquareIcon, CircleIcon,
-  HouseIcon, BugIcon,
+  HouseIcon,
 } from '@phosphor-icons/react'
 
 interface ToolbarProps {
@@ -74,12 +74,6 @@ interface ToolbarProps {
   onExportHouses: () => void
   onImportHouses: () => void
   onOpenEditTowns: () => void
-  showMonsterPalette: boolean
-  onToggleMonsterPalette: () => void
-  showSpawnOverlay: boolean
-  onToggleSpawnOverlay: () => void
-  onExportSpawns: () => void
-  onImportSpawns: () => void
 }
 
 const BRUSH_SIZES = [
@@ -103,7 +97,6 @@ const TOOLS: { id: EditorTool; label: string; shortcut: string; icon: React.Reac
   { id: 'fill', label: 'Fill', shortcut: 'F', icon: <PaintBucketIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
   { id: 'zone', label: 'Zone', shortcut: 'Z', icon: <FlagIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
   { id: 'house', label: 'House', shortcut: 'H', icon: <HouseIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
-  { id: 'monster', label: 'Monster', shortcut: 'M', icon: <BugIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
 ]
 
 const DOOR_TYPES = [
@@ -170,12 +163,6 @@ export function Toolbar({
   onExportHouses,
   onImportHouses,
   onOpenEditTowns,
-  showMonsterPalette,
-  onToggleMonsterPalette,
-  showSpawnOverlay,
-  onToggleSpawnOverlay,
-  onExportSpawns,
-  onImportSpawns,
 }: ToolbarProps) {
   const previewId = selectedBrush ? getSelectionPreviewId(selectedBrush, brushRegistry) : 0
   const brushLabel = selectedBrush
@@ -195,9 +182,6 @@ export function Toolbar({
         'separator',
         { label: 'Import Houses...', onClick: onImportHouses },
         { label: 'Export Houses', onClick: onExportHouses },
-        'separator',
-        { label: 'Import Spawns...', onClick: onImportSpawns },
-        { label: 'Export Spawns', onClick: onExportSpawns },
       ],
     },
     {
@@ -232,11 +216,9 @@ export function Toolbar({
         { label: 'Brush Palette', shortcut: 'P', checked: showPalette, onClick: onTogglePalette },
         { label: 'Zone Palette', shortcut: 'Z', checked: showZonePalette, onClick: onToggleZonePalette },
         { label: 'House Palette', shortcut: 'H', checked: showHousePalette, onClick: onToggleHousePalette },
-        { label: 'Monster Palette', shortcut: 'M', checked: showMonsterPalette, onClick: onToggleMonsterPalette },
         'separator',
         { label: 'Show Zones', checked: showZoneOverlay, onClick: onToggleZoneOverlay },
         { label: 'Show Houses', checked: showHouseOverlay, onClick: onToggleHouseOverlay },
-        { label: 'Show Spawns', checked: showSpawnOverlay, onClick: onToggleSpawnOverlay },
         { label: 'Show Lights', shortcut: 'L', checked: showLights, onClick: onToggleLights },
         'separator',
         { label: 'Zoom In', shortcut: 'Ctrl+=', onClick: onZoomIn },
@@ -294,7 +276,7 @@ export function Toolbar({
       </div>
 
       {/* Brush size — for draw/erase */}
-      {(activeTool === 'draw' || activeTool === 'erase' || activeTool === 'zone' || activeTool === 'house' || activeTool === 'monster') && (
+      {(activeTool === 'draw' || activeTool === 'erase' || activeTool === 'zone' || activeTool === 'house') && (
         <>
           <div className="h-[22px] w-px shrink-0 bg-border-subtle" />
           <div className="flex gap-1">

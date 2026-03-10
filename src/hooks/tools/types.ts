@@ -9,18 +9,12 @@ import type { DoodadBrush } from '../../lib/brushes/DoodadTypes'
 import type { SelectedItemInfo } from '../useSelection'
 import type { CopyBuffer } from '../../lib/CopyBuffer'
 
-export type EditorTool = 'select' | 'draw' | 'erase' | 'door' | 'fill' | 'zone' | 'house' | 'monster'
+export type EditorTool = 'select' | 'draw' | 'erase' | 'door' | 'fill' | 'zone' | 'house'
 export type BrushShape = 'square' | 'circle'
 
 export type ZoneSelection =
   | { type: 'flag'; flag: number; label: string }
   | { type: 'zone'; zoneId: number; name: string }
-
-export interface MonsterSelection {
-  name: string
-  spawnTime: number
-  direction: number
-}
 
 export const ZONE_FLAG_DEFS = [
   { flag: 0x0001, label: 'PZ', color: 0x00c800 },
@@ -86,8 +80,6 @@ export interface ToolContext {
   selectedZoneRef: React.RefObject<ZoneSelection | null>
   // House tool
   selectedHouseRef: React.RefObject<number | null>
-  // Monster tool
-  selectedMonsterRef: React.RefObject<MonsterSelection | null>
 }
 
 // ── Brush resolution ─────────────────────────────────────────────────

@@ -5,7 +5,6 @@ import { TileRenderer } from './TileRenderer'
 import { SelectionOverlay } from './SelectionOverlay'
 import { ZoneOverlay } from './ZoneOverlay'
 import { HouseOverlay } from './HouseOverlay'
-import { SpawnOverlay } from './SpawnOverlay'
 import { BoundaryOverlay } from './BoundaryOverlay'
 import { FloorManager } from './FloorManager'
 import { LightEngine } from './LightEngine'
@@ -17,7 +16,6 @@ import type { AppearanceData } from './appearances'
 import type { OtbmMap, OtbmTile, OtbmItem } from './otbm'
 import type { CopyBuffer } from './CopyBuffer'
 import type { ZoneSelection } from '../hooks/tools/types'
-import type { SpawnPoint } from './sidecars'
 
 export { type FloorViewMode } from './constants'
 
@@ -35,7 +33,6 @@ export class MapRenderer implements InputHost {
   private selection: SelectionOverlay
   private zoneOverlay: ZoneOverlay
   private houseOverlay: HouseOverlay
-  private spawnOverlay: SpawnOverlay
   private boundaryOverlay: BoundaryOverlay
   private floorManager: FloorManager
   private chunkManager: ChunkManager
@@ -80,7 +77,6 @@ export class MapRenderer implements InputHost {
     this.selection = new SelectionOverlay()
     this.zoneOverlay = new ZoneOverlay()
     this.houseOverlay = new HouseOverlay()
-    this.spawnOverlay = new SpawnOverlay()
     this.boundaryOverlay = new BoundaryOverlay()
 
     // Chunk manager
@@ -109,9 +105,6 @@ export class MapRenderer implements InputHost {
     // House overlay (between zone overlay and selection overlay)
     this.mapContainer.addChild(this.houseOverlay.container)
 
-    // Spawn overlay (between house overlay and selection overlay)
-    this.mapContainer.addChild(this.spawnOverlay.container)
-
     // Selection overlay (added to mapContainer; FloorManager keeps it on top)
     this.mapContainer.addChild(this.selection.container)
 
@@ -125,7 +118,6 @@ export class MapRenderer implements InputHost {
       this.boundaryOverlay.container,
       this.zoneOverlay.container,
       this.houseOverlay.container,
-      this.spawnOverlay.container,
       this.selection.container,
       this.lightEngine.container,
     )
@@ -176,7 +168,6 @@ export class MapRenderer implements InputHost {
     this.recycleAllChunks()
     this.zoneOverlay.markDirty()
     this.houseOverlay.markDirty()
-    this.spawnOverlay.markDirty()
     this.notifyCamera()
   }
 
@@ -283,28 +274,6 @@ export class MapRenderer implements InputHost {
   paintHouseTile(x: number, y: number): void {
     this.houseOverlay.paintTile(x, y, this.camera.floor)
   }
-
-  // ── Spawn overlay ─────────────────────────────────────────────
-
-  markSpawnOverlayDirty(): void {
-    this.spawnOverlay.markDirty()
-  }
-
-  get showSpawnOverlay(): boolean { return this.spawnOverlay.visible }
-
-  setShowSpawnOverlay(enabled: boolean): void {
-    this.spawnOverlay.setVisible(enabled)
-  }
-
-  setActiveSpawn(spawnIdx: number | null): void {
-    this.spawnOverlay.setActiveSpawn(spawnIdx)
-  }
-
-  setSpawns(spawns: SpawnPoint[]): void {
-    this.spawnOverlay.setSpawns(spawns)
-  }
-
-  get spawnIndex() { return this.spawnOverlay.index }
 
   get showLights(): boolean { return this.lightEngine.enabled }
 
@@ -495,9 +464,6 @@ export class MapRenderer implements InputHost {
 
     this.houseOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
     this.houseOverlay.rebuild(this.camera.floor, this.chunkManager.index)
-
-    this.spawnOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
-    this.spawnOverlay.rebuild(this.camera.floor)
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────
@@ -512,7 +478,6 @@ export class MapRenderer implements InputHost {
     this._cleanupInput?.()
     this.recycleAllChunks()
     this.lightEngine.destroy()
-    this.spawnOverlay.destroy()
     this.houseOverlay.destroy()
     this.zoneOverlay.destroy()
     this.boundaryOverlay.destroy()

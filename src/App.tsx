@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import clsx from 'clsx'
 import type { AppearanceData } from './lib/appearances'
 import type { OtbmMap, OtbmTown } from './lib/otbm'
 import type { MapRenderer, FloorViewMode } from './lib/MapRenderer'
@@ -29,7 +28,6 @@ import { scrubZoneFromTiles } from './lib/zoneCleanup'
 import { scrubHouseFromTiles } from './lib/houseCleanup'
 import { ZonePalette } from './components/ZonePalette'
 import { HousePalette } from './components/HousePalette'
-import { MonsterPalette } from './components/MonsterPalette'
 import type { CategoryType } from './lib/tilesets/TilesetTypes'
 import { emptySidecars, type MapSidecars } from './lib/sidecars'
 import { useEditorInit, type CameraState } from './hooks/useEditorInit'
@@ -72,9 +70,6 @@ function App() {
   const [showZoneOverlay, setShowZoneOverlay] = useState(initialSettings.showZoneOverlay)
   const [showHousePalette, setShowHousePalette] = useState(initialSettings.showHousePalette)
   const [showHouseOverlay, setShowHouseOverlay] = useState(initialSettings.showHouseOverlay)
-  const [showMonsterPalette, setShowMonsterPalette] = useState(initialSettings.showMonsterPalette)
-  const [showSpawnOverlay, setShowSpawnOverlay] = useState(initialSettings.showSpawnOverlay)
-  const [activeSpawnIdx, setActiveSpawnIdx] = useState<number | null>(null)
   const [placingHouseExit, setPlacingHouseExit] = useState<number | null>(null)
   const placingHouseExitRef = useRef<number | null>(null)
 
@@ -199,7 +194,7 @@ function App() {
   })
 
   // ── Save / Export / Import ─────────────────────────────────────────
-  const { saveProgress, savePhase, handleSave, handleExportZones, handleImportZones, handleExportHouses, handleImportHouses, handleExportSpawns, handleImportSpawns } = useSaveExport({
+  const { saveProgress, savePhase, handleSave, handleExportZones, handleImportZones, handleExportHouses, handleImportHouses } = useSaveExport({
     mapData, mapFilename, sidecarsData, setSidecarsData, storageRef,
   })
 
@@ -216,12 +211,6 @@ function App() {
     { show: showHousePalette, setShow: setShowHousePalette, settingsKey: 'showHousePalette' },
     setEditorSettings,
   )
-  useToolAutoToggle(
-    tools.activeTool, 'monster',
-    { show: showSpawnOverlay, setShow: setShowSpawnOverlay, rendererSet: (v) => rendererRef.current?.setShowSpawnOverlay(v), settingsKey: 'showSpawnOverlay' },
-    { show: showMonsterPalette, setShow: setShowMonsterPalette, settingsKey: 'showMonsterPalette' },
-    setEditorSettings,
-  )
 
   useEffect(() => {
     if (rendererReady) {
@@ -236,15 +225,6 @@ function App() {
   useEffect(() => {
     rendererRef.current?.setActiveHouse(tools.selectedHouse?.id ?? null)
   }, [tools.selectedHouse, rendererRef])
-
-  // Sync spawns to renderer
-  useEffect(() => {
-    rendererRef.current?.setSpawns(sidecarsData.monsterSpawns)
-  }, [sidecarsData.monsterSpawns, rendererRef])
-
-  useEffect(() => {
-    rendererRef.current?.setActiveSpawn(activeSpawnIdx)
-  }, [activeSpawnIdx, rendererRef])
 
   useEffect(() => {
     rendererRef.current?.setShowSelectionBorder(editorSettings.selectionBorder)
@@ -302,7 +282,6 @@ function App() {
       r.setShowSelectionBorder(next.selectionBorder)
       r.setShowZoneOverlay(next.showZoneOverlay)
       r.setShowHouseOverlay(next.showHouseOverlay)
-      r.setShowSpawnOverlay(next.showSpawnOverlay)
     }
     setShowPalette(next.showPalette)
     setShowLights(next.showLights)
@@ -310,8 +289,6 @@ function App() {
     setShowZoneOverlay(next.showZoneOverlay)
     setShowHousePalette(next.showHousePalette)
     setShowHouseOverlay(next.showHouseOverlay)
-    setShowMonsterPalette(next.showMonsterPalette)
-    setShowSpawnOverlay(next.showSpawnOverlay)
     saveSettings(next)
   }, [rendererRef])
 
@@ -508,25 +485,6 @@ function App() {
           }}
           onExportHouses={handleExportHouses}
           onImportHouses={handleImportHouses}
-          showMonsterPalette={showMonsterPalette}
-          onToggleMonsterPalette={() => {
-            setShowMonsterPalette(prev => {
-              const next = !prev
-              setEditorSettings(s => { const u = { ...s, showMonsterPalette: next }; saveSettings(u); return u })
-              return next
-            })
-          }}
-          showSpawnOverlay={showSpawnOverlay}
-          onToggleSpawnOverlay={() => {
-            setShowSpawnOverlay(prev => {
-              const next = !prev
-              rendererRef.current?.setShowSpawnOverlay(next)
-              setEditorSettings(s => { const u = { ...s, showSpawnOverlay: next }; saveSettings(u); return u })
-              return next
-            })
-          }}
-          onExportSpawns={handleExportSpawns}
-          onImportSpawns={handleImportSpawns}
         />
       )}
 
@@ -704,45 +662,6 @@ function App() {
           onClose={() => {
             setShowHousePalette(false)
             setEditorSettings(s => { const u = { ...s, showHousePalette: false }; saveSettings(u); return u })
-          }}
-        />
-      )}
-
-      {/* Monster palette — right side */}
-      {!loading && showMonsterPalette && (
-        <MonsterPalette
-          className={clsx(
-            showZonePalette && showHousePalette ? 'right-[622px]' :
-            showZonePalette || showHousePalette ? 'right-[336px]' : undefined,
-          )}
-          sidecars={sidecarsData}
-          selectedMonster={tools.selectedMonster}
-          onMonsterSelect={(monster) => {
-            tools.setSelectedMonster(monster)
-            if (tools.activeTool !== 'monster') tools.setActiveTool('monster')
-          }}
-          activeSpawnIdx={activeSpawnIdx}
-          onActiveSpawnChange={setActiveSpawnIdx}
-          onDeleteSpawn={(spawnIdx) => {
-            mutatorReady?.deleteSpawn(spawnIdx)
-            if (activeSpawnIdx === spawnIdx) setActiveSpawnIdx(null)
-          }}
-          onDeleteCreature={(spawnIdx, creatureIdx) => {
-            mutatorReady?.deleteCreature(spawnIdx, creatureIdx)
-          }}
-          onModifySpawnRadius={(spawnIdx, radius) => {
-            mutatorReady?.modifySpawnRadius(spawnIdx, radius)
-          }}
-          onNavigateToSpawn={(spawn) => {
-            rendererRef.current?.setFloor(spawn.centerZ)
-            rendererRef.current?.centerOn(spawn.centerX, spawn.centerY)
-            rendererRef.current?.pingTile(spawn.centerX, spawn.centerY, spawn.centerZ)
-          }}
-          onExportSpawns={handleExportSpawns}
-          onImportSpawns={handleImportSpawns}
-          onClose={() => {
-            setShowMonsterPalette(false)
-            setEditorSettings(s => { const u = { ...s, showMonsterPalette: false }; saveSettings(u); return u })
           }}
         />
       )}

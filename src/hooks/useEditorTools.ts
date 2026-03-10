@@ -9,7 +9,7 @@ import { useSelection } from './useSelection'
 import { useClipboard } from './useClipboard'
 import type { EditorSettings } from '../lib/EditorSettings'
 import type { HouseData } from '../lib/sidecars'
-import type { EditorTool, BrushShape, BrushSelection, ToolContext, TilePos, ZoneSelection, MonsterSelection } from './tools/types'
+import type { EditorTool, BrushShape, BrushSelection, ToolContext, TilePos, ZoneSelection } from './tools/types'
 import { createDrawHandlers } from './tools/drawTool'
 import { createEraseHandlers } from './tools/eraseTool'
 import { createDoorHandlers } from './tools/doorTool'
@@ -17,11 +17,10 @@ import { createSelectHandlers } from './tools/selectTool'
 import { createFillHandlers } from './tools/fillTool'
 import { createZoneHandlers } from './tools/zoneTool'
 import { createHouseHandlers } from './tools/houseTool'
-import { createMonsterHandlers } from './tools/monsterTool'
 import { createHoverHandler } from './tools/hoverHandler'
 
 // Re-export types for consumers
-export type { EditorTool, BrushShape, BrushSelection, TilePos, ZoneSelection, MonsterSelection }
+export type { EditorTool, BrushShape, BrushSelection, TilePos, ZoneSelection }
 export type { HouseData }
 export type { SelectedItemInfo }
 export { deriveHighlights } from './useSelection'
@@ -56,8 +55,6 @@ export interface EditorToolsState {
   setSelectedZone: (zone: ZoneSelection | null) => void
   selectedHouse: HouseData | null
   setSelectedHouse: (house: HouseData | null) => void
-  selectedMonster: MonsterSelection | null
-  setSelectedMonster: (monster: MonsterSelection | null) => void
 }
 
 export function useEditorTools(
@@ -79,7 +76,6 @@ export function useEditorTools(
   const [activeDoorType, setActiveDoorType] = useState<number>(DOOR_NORMAL)
   const [selectedZone, setSelectedZone] = useState<ZoneSelection | null>(null)
   const [selectedHouse, setSelectedHouse] = useState<HouseData | null>(null)
-  const [selectedMonster, setSelectedMonster] = useState<MonsterSelection | null>(null)
 
   // ── Refs (avoid stale closures in pointer handlers) ──────────────
   const activeToolRef = useRef(activeTool)
@@ -90,7 +86,6 @@ export function useEditorTools(
   const activeDoorTypeRef = useRef(activeDoorType)
   const selectedZoneRef = useRef(selectedZone)
   const selectedHouseRef = useRef<number | null>(selectedHouse?.id ?? null)
-  const selectedMonsterRef = useRef<MonsterSelection | null>(selectedMonster)
   const onRequestEditItemRef = useRef(onRequestEditItem)
   const clickToInspectRef = useRef(clickToInspect)
   useEffect(() => {
@@ -102,7 +97,6 @@ export function useEditorTools(
     activeDoorTypeRef.current = activeDoorType
     selectedZoneRef.current = selectedZone
     selectedHouseRef.current = selectedHouse?.id ?? null
-    selectedMonsterRef.current = selectedMonster
     onRequestEditItemRef.current = onRequestEditItem
     clickToInspectRef.current = clickToInspect
   })
@@ -155,7 +149,6 @@ export function useEditorTools(
       activeToolRef,
       selectedZoneRef,
       selectedHouseRef,
-      selectedMonsterRef,
     }
 
     const draw = createDrawHandlers(ctx)
@@ -164,7 +157,6 @@ export function useEditorTools(
     const fill = createFillHandlers(ctx)
     const zone = createZoneHandlers(ctx)
     const house = createHouseHandlers(ctx)
-    const monster = createMonsterHandlers(ctx)
     const select = createSelectHandlers(ctx)
     const hover = createHoverHandler(ctx)
 
@@ -182,7 +174,6 @@ export function useEditorTools(
         case 'fill': fill.onDown(pos); break
         case 'zone': zone.onDown(pos, event); break
         case 'house': house.onDown(pos, event); break
-        case 'monster': monster.onDown(pos, event); break
         case 'select': select.onDown(pos, event); break
       }
     }
@@ -195,7 +186,6 @@ export function useEditorTools(
         case 'door': door.onMove(pos); break
         case 'zone': zone.onMove(pos); break
         case 'house': house.onMove(pos); break
-        case 'monster': monster.onMove(pos); break
         case 'select': select.onMove(pos); break
       }
     }
@@ -212,8 +202,6 @@ export function useEditorTools(
         zone.onUp()
       } else if (tool === 'house') {
         house.onUp()
-      } else if (tool === 'monster') {
-        monster.onUp()
       } else if (tool === 'select') {
         select.onUp(pos)
       }
@@ -263,7 +251,6 @@ export function useEditorTools(
       case 'fill': renderer.setCursorStyle('crosshair'); break
       case 'zone': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
       case 'house': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
-      case 'monster': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
     }
   }, [renderer, activeTool])
 
@@ -317,8 +304,6 @@ export function useEditorTools(
     setSelectedZone,
     selectedHouse,
     setSelectedHouse,
-    selectedMonster,
-    setSelectedMonster,
     cursorPos,
   }
 }

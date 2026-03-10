@@ -19,8 +19,6 @@ export interface EditorSettings {
   showZoneOverlay: boolean
   showHousePalette: boolean
   showHouseOverlay: boolean
-  showMonsterPalette: boolean
-  showSpawnOverlay: boolean
 }
 
 export const DEFAULT_SETTINGS: EditorSettings = {
@@ -36,8 +34,6 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   showZoneOverlay: false,
   showHousePalette: false,
   showHouseOverlay: false,
-  showMonsterPalette: false,
-  showSpawnOverlay: false,
 }
 
 const SETTINGS_KEY = 'tibia-editor-settings'
@@ -91,7 +87,5 @@ function mergeWithDefaults(parsed: Record<string, unknown>): EditorSettings {
   if (typeof parsed.showZoneOverlay === 'boolean') s.showZoneOverlay = parsed.showZoneOverlay
   if (typeof parsed.showHousePalette === 'boolean') s.showHousePalette = parsed.showHousePalette
   if (typeof parsed.showHouseOverlay === 'boolean') s.showHouseOverlay = parsed.showHouseOverlay
-  if (typeof parsed.showMonsterPalette === 'boolean') s.showMonsterPalette = parsed.showMonsterPalette
-  if (typeof parsed.showSpawnOverlay === 'boolean') s.showSpawnOverlay = parsed.showSpawnOverlay
   return s
 }
