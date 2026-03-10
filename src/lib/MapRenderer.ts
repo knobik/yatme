@@ -17,6 +17,8 @@ import type { FloorViewMode } from './constants'
 import type { AppearanceData } from './appearances'
 import type { OtbmMap, OtbmTile, OtbmItem } from './otbm'
 import type { CopyBuffer } from './CopyBuffer'
+import { CreatureSpriteResolver } from './creatures/CreatureSpriteResolver'
+import type { CreatureDatabase } from './creatures/CreatureDatabase'
 import type { ZoneSelection } from '../hooks/tools/types'
 
 export { type FloorViewMode } from './constants'
@@ -312,11 +314,22 @@ export class MapRenderer implements InputHost {
     this.npcSpawnOverlay.markDirty()
   }
 
-  /** Stub for Phase 7 — toggle monster sprite rendering. */
-  setShowMonsters(_v: boolean): void { /* Phase 7 */ }
+  setShowMonsters(v: boolean): void {
+    this.tileRenderer.showMonsters = v
+    this.recycleAllChunks()
+    this.notifyCamera()
+  }
 
-  /** Stub for Phase 7 — toggle NPC sprite rendering. */
-  setShowNpcs(_v: boolean): void { /* Phase 7 */ }
+  setShowNpcs(v: boolean): void {
+    this.tileRenderer.showNpcs = v
+    this.recycleAllChunks()
+    this.notifyCamera()
+  }
+
+  setCreatureDatabase(db: CreatureDatabase): void {
+    this.tileRenderer.creatureSpriteResolver = new CreatureSpriteResolver(this.appearances)
+    this.tileRenderer.creatureDb = db
+  }
 
   get showLights(): boolean { return this.lightEngine.enabled }
 

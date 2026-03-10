@@ -22,7 +22,7 @@ export interface RenderTileItemsOptions {
  * Shared tile-item rendering loop: resolves sprites, positions them with
  * bottom-right anchor + elevation + shift, and accumulates elevation.
  */
-export function renderTileItems(opts: RenderTileItemsOptions): void {
+export function renderTileItems(opts: RenderTileItemsOptions): number {
   const { parent, items, tile, baseX, baseY, appearances, elapsedMs, onSprite } = opts
   let elevation = 0
 
@@ -51,4 +51,6 @@ export function renderTileItems(opts: RenderTileItemsOptions): void {
       elevation = Math.min(elevation + appearance.flags.height.elevation, MAX_ELEVATION)
     }
   }
+
+  return elevation
 }

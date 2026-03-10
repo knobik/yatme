@@ -1,7 +1,11 @@
 import { Container, Sprite } from 'pixi.js'
 import { type AnimatedSpriteRef } from './SpriteResolver'
 import { TILE_SIZE } from './constants'
+import { getTextureSync } from './TextureManager'
 import { renderTileItems } from './renderTileItems'
+import { Direction } from './creatures/types'
+import type { CreatureSpriteResolver } from './creatures/CreatureSpriteResolver'
+import type { CreatureDatabase } from './creatures/CreatureDatabase'
 import type { AppearanceData } from './appearances'
 import type { OtbmTile, OtbmItem } from './otbm'
 
@@ -17,6 +21,12 @@ export class TileRenderer {
 
   // Highlight state: tile key → item indices (null = all items on tile)
   private _highlightedTiles = new Map<string, number[] | null>()
+
+  // Creature rendering (set via properties, no constructor change)
+  creatureSpriteResolver: CreatureSpriteResolver | null = null
+  creatureDb: CreatureDatabase | null = null
+  showMonsters = true
+  showNpcs = true
 
   private appearances: AppearanceData
   constructor(appearances: AppearanceData) {
@@ -93,7 +103,7 @@ export class TileRenderer {
     }
     const hasHighlight = highlightIndices !== undefined
 
-    renderTileItems({
+    const elevation = renderTileItems({
       parent,
       items: drawOrder,
       tile,
@@ -122,5 +132,55 @@ export class TileRenderer {
         }
       },
     })
+
+    this.renderCreatures(parent, tile, baseX, baseY, elevation)
+  }
+
+  // ── Creature rendering ──────────────────────────────────────────
+
+  private renderCreatures(
+    parent: Container,
+    tile: OtbmTile,
+    baseX: number,
+    baseY: number,
+    elevation: number,
+  ): void {
+    if (!this.creatureSpriteResolver || !this.creatureDb) return
+
+    // Render monsters
+    if (this.showMonsters && tile.monsters) {
+      for (const monster of tile.monsters) {
+        this.renderCreatureSprite(parent, monster.name, monster.direction, baseX, baseY, elevation)
+      }
+    }
+
+    // Render NPC (on top of monsters)
+    if (this.showNpcs && tile.npc) {
+      this.renderCreatureSprite(parent, tile.npc.name, tile.npc.direction, baseX, baseY, elevation)
+    }
+  }
+
+  private renderCreatureSprite(
+    parent: Container,
+    name: string,
+    direction: Direction,
+    baseX: number,
+    baseY: number,
+    elevation: number,
+  ): void {
+    const creatureType = this.creatureDb!.getByName(name)
+    if (!creatureType) return
+
+    const spriteId = this.creatureSpriteResolver!.resolve(creatureType, direction)
+    if (spriteId == null) return
+
+    const texture = getTextureSync(spriteId)
+    if (!texture) return
+
+    const sprite = new Sprite(texture)
+    sprite.roundPixels = true
+    sprite.x = baseX + TILE_SIZE - texture.width - elevation
+    sprite.y = baseY + TILE_SIZE - texture.height - elevation
+    parent.addChild(sprite)
   }
 }

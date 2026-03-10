@@ -87,34 +87,34 @@
 
 > Resolves outfit lookType/lookItem to renderable sprites. No tile rendering integration yet — just the resolution logic.
 
-- [ ] Implement `CreatureSpriteResolver` in `src/lib/creatures/CreatureSpriteResolver.ts`
-- [ ] Resolve `lookType` → outfit appearance from appearances data → extract idle sprite ID for given `Direction`
-- [ ] Resolve `lookItem` fallback → use existing `SpriteResolver` to get item sprite
-- [ ] Handle missing/unknown outfits → return placeholder identifier
-- [ ] Tests: lookType resolution for each direction, lookItem fallback, missing outfit returns placeholder
+- [x] Implement `CreatureSpriteResolver` in `src/lib/creatures/CreatureSpriteResolver.ts`
+- [x] Resolve `lookType` → outfit appearance from appearances data → extract idle sprite ID for given `Direction`
+- [x] Resolve `lookItem` fallback → use existing `SpriteResolver` to get item sprite
+- [x] Handle missing/unknown outfits → return placeholder identifier
+- [x] Tests: lookType resolution for each direction, lookItem fallback, missing outfit returns placeholder
 
 ## Phase 7: Creature Rendering on Tiles
 
 > Integrates creature sprites into TileRenderer. Depends on Phase 5 (renderer methods) and Phase 6 (sprite resolution).
 
-- [ ] Render creature sprites in `TileRenderer` AFTER all item layers (creatures on top)
-- [ ] Render order: monsters first (in array order), then NPC on top
-- [ ] Respect `showMonsters` setting — skip monster rendering when false
-- [ ] Respect `showNpcs` setting — skip NPC rendering when false
-- [ ] Tests: creatures render after items, visibility toggle skips rendering, render order correct
+- [x] Render creature sprites in `TileRenderer` AFTER all item layers (creatures on top)
+- [x] Render order: monsters first (in array order), then NPC on top
+- [x] Respect `showMonsters` setting — skip monster rendering when false
+- [x] Respect `showNpcs` setting — skip NPC rendering when false
+- [x] Tests: creatures render after items, visibility toggle skips rendering, render order correct
 
 ## Phase 8: MapMutator Creature Operations
 
 > All creature/spawn mutations with undo/redo. Depends on Phase 2 (tile model, SpawnManager).
 
-- [ ] `placeCreature(x, y, z, creature: TileCreature)` — add monster to array or set NPC (with undo)
-- [ ] `removeCreature(x, y, z, creatureName, isNpc)` — remove from tile (with undo)
-- [ ] `moveCreature(from, to, creatureName, isNpc)` — remove from source + add to target (with undo)
-- [ ] `updateCreatureProperties(x, y, z, creatureName, isNpc, props)` — edit direction/spawnTime/weight (with undo)
-- [ ] `placeSpawnZone(x, y, z, type, radius)` — set spawnMonster/spawnNpc on tile + update SpawnManager (with undo)
-- [ ] `removeSpawnZone(x, y, z, type)` — remove spawn marker + update SpawnManager (with undo)
-- [ ] `updateSpawnRadius(x, y, z, type, newRadius)` — change radius + re-calculate SpawnManager counts (with undo)
-- [ ] Tests: each operation forward + undo, placeCreature duplicate monster skip, NPC replace, spawn zone undo restores counts
+- [x] `placeCreature(x, y, z, creature: TileCreature)` — add monster to array or set NPC (with undo)
+- [x] `removeCreature(x, y, z, creatureName, isNpc)` — remove from tile (with undo)
+- [x] `moveCreature(from, to, creatureName, isNpc)` — remove from source + add to target (with undo)
+- [x] `updateCreatureProperties(x, y, z, creatureName, isNpc, props)` — edit direction/spawnTime/weight (with undo)
+- [x] `placeSpawnZone(x, y, z, type, radius)` — set spawnMonster/spawnNpc on tile + update SpawnManager (with undo)
+- [x] `removeSpawnZone(x, y, z, type)` — remove spawn marker + update SpawnManager (with undo)
+- [x] `updateSpawnRadius(x, y, z, type, newRadius)` — change radius + re-calculate SpawnManager counts (with undo)
+- [x] Tests: each operation forward + undo, placeCreature duplicate monster skip, NPC replace, spawn zone undo restores counts
 
 ## Phase 9: Creature Brushes
 
