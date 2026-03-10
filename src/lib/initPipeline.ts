@@ -14,6 +14,9 @@ import type { DoodadBrush } from './brushes/DoodadTypes'
 import { BrushRegistry } from './brushes/BrushRegistry'
 import { loadTilesets, resolveTilesets } from './tilesets/TilesetLoader'
 import type { ResolvedTileset } from './tilesets/TilesetTypes'
+import { loadCreatureDatabase, CreatureDatabase } from './creatures/CreatureDatabase'
+import { SpawnManager } from './creatures/SpawnManager'
+import { applyMonsterSpawns, applyNpcSpawns } from './creatures/applySpawns'
 
 export interface InitProgress {
   setStatus: (msg: string) => void
@@ -28,6 +31,8 @@ export interface InitResult {
   registry: ItemRegistry
   brushRegistry: BrushRegistry | null
   tilesets: ResolvedTileset[]
+  creatureDb: CreatureDatabase
+  spawnManager: SpawnManager
   mapFilename: string
 }
 
@@ -98,9 +103,12 @@ export async function loadAssets(
   if (signal.destroyed) return null
   nextStep()
 
-  // Step 4: Item registry
+  // Step 4: Item registry + creature database (parallel — independent of each other)
   progress.setStatus('Loading item data...')
-  const registry = await loadItems(undefined, stepProgress)
+  const [registry, creatureDb] = await Promise.all([
+    loadItems(undefined, stepProgress),
+    loadCreatureDatabase(),
+  ])
   if (signal.destroyed) return null
   nextStep()
 
@@ -163,6 +171,7 @@ export async function loadAssets(
 
   let mapData: OtbmMap
   let sidecars: MapSidecars
+  let spawnManager: SpawnManager
 
   if (bundle.otbm.length > 0) {
     progress.setStatus('Processing map data...')
@@ -190,10 +199,24 @@ export async function loadAssets(
     if (sidecarCounts.length > 0) {
       console.log(`[Sidecars] Loaded: ${sidecarCounts.join(', ')}`)
     }
+
+    // Apply spawns to tiles + SpawnManager
+    spawnManager = new SpawnManager()
+    if (sidecars.monsterSpawns.length > 0) {
+      const result = applyMonsterSpawns(sidecars.monsterSpawns, mapData, spawnManager, creatureDb)
+      console.log(`[Creatures] Applied ${result.spawnsApplied} monster spawns, ${result.creaturesApplied} creatures` +
+        (result.unknownCreatures.length > 0 ? ` (${result.unknownCreatures.length} unknown)` : ''))
+    }
+    if (sidecars.npcSpawns.length > 0) {
+      const result = applyNpcSpawns(sidecars.npcSpawns, mapData, spawnManager, creatureDb)
+      console.log(`[Creatures] Applied ${result.spawnsApplied} NPC spawns, ${result.creaturesApplied} NPCs` +
+        (result.unknownCreatures.length > 0 ? ` (${result.unknownCreatures.length} unknown)` : ''))
+    }
   } else {
     progress.setStatus('Creating empty map...')
     mapData = createEmptyMap()
     sidecars = emptySidecars()
+    spawnManager = new SpawnManager()
     stepProgress(1)
   }
 
@@ -205,5 +228,5 @@ export async function loadAssets(
   // Yield so the UI can paint the status update before setupEditor blocks
   await new Promise(r => setTimeout(r, 0))
 
-  return { app, appearances, mapData, sidecars, registry, brushRegistry, tilesets, mapFilename: bundle.filename }
+  return { app, appearances, mapData, sidecars, registry, brushRegistry, tilesets, creatureDb, spawnManager, mapFilename: bundle.filename }
 }

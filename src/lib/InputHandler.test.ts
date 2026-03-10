@@ -301,7 +301,7 @@ describe('setupMapInput', () => {
         },
       })
 
-      expect((evt as { dataTransfer: { dropEffect: string } }).dataTransfer.dropEffect).toBe('move')
+      expect((evt as unknown as { dataTransfer: { dropEffect: string } }).dataTransfer.dropEffect).toBe('move')
     })
 
     it('sets dropEffect to copy for palette drags', () => {
@@ -318,7 +318,7 @@ describe('setupMapInput', () => {
         },
       })
 
-      expect((evt as { dataTransfer: { dropEffect: string } }).dataTransfer.dropEffect).toBe('copy')
+      expect((evt as unknown as { dataTransfer: { dropEffect: string } }).dataTransfer.dropEffect).toBe('copy')
     })
 
     it('fires onDragHover with tile position during dragover', () => {

@@ -16,8 +16,8 @@ RME source: `vendor/remeres-map-editor/source/` — key files: `monster.h`, `npc
 
 ```typescript
 interface TileCreature {
-  name: string          // creature type name (lookup key)
-  direction: Direction  // NORTH=0, EAST=1, SOUTH=2, WEST=3
+  name: string          // creature type name (lookup key into CreatureDatabase)
+  direction: Direction  // facing direction
   spawnTime: number     // respawn interval in seconds
   weight?: number       // spawn probability weight (monsters only, 0-255)
   isNpc: boolean        // true = NPC, false = monster
@@ -39,14 +39,6 @@ Extend `OtbmTile` with:
 - `spawnMonster?: { radius: number }` — monster spawn zone center marker
 - `spawnNpc?: { radius: number }` — NPC spawn zone center marker
 
-### Spawn Zone Tracking (Map-Level)
-
-On `OtbmMap` or a separate manager:
-- `monsterSpawns: Set<string>` — positions ("x,y,z") of all monster spawn centers
-- `npcSpawns: Set<string>` — positions ("x,y,z") of all NPC spawn centers
-
-Each tile location also needs a **spawn count** (how many spawn zones cover this tile) for both monster and NPC spawns. This determines whether creatures can be placed on a tile.
-
 ### Creature Database
 
 ```typescript
@@ -64,22 +56,64 @@ interface CreatureType {
 }
 ```
 
-Loaded from `data/creatures/monsters.xml` and `data/creatures/npcs.xml` (or a combined `creatures.xml`). Format matches RME:
+Loaded from `data/creatures/monsters.xml` and `data/creatures/npcs.xml`. Actual RME format (attributes on element, NOT child nodes):
 
 ```xml
+<!-- monsters.xml -->
 <monsters>
-  <monster name="Rat">
-    <look type="21" />
-  </monster>
-  ...
+  <monster name="Rat" looktype="21"/>
+  <monster name="Achad" looktype="146" lookhead="95" lookbody="93" looklegs="38" lookfeet="59" lookaddons="3"/>
+  <monster name="A Shielded Astral Glyph" lookitem="24226"/>
 </monsters>
+
+<!-- npcs.xml -->
+<npcs>
+  <npc name="Josef" looktype="131" lookitem="0" lookaddon="0" lookhead="38" lookbody="85" looklegs="9" lookfeet="85"/>
+</npcs>
 ```
 
-A `CreatureDatabase` class provides lookup by name, lists all monsters/NPCs, and supports search/filtering.
+`CreatureDatabase` class responsibilities:
+- Parse both XML files
+- Lookup by name (case-insensitive): `getByName(name: string): CreatureType | undefined`
+- List all: `getAllMonsters(): CreatureType[]`, `getAllNpcs(): CreatureType[]`
+- Search/filter by name substring (for palette UI): `search(query: string, isNpc: boolean): CreatureType[]`
+
+### Init Pipeline Integration
+
+`CreatureDatabase` is loaded in `loadAssets()` (`src/lib/initPipeline.ts`) **after** appearances (needed to validate lookType exists). The `data/creatures/` directory must be served by Vite (add to `publicDir` or serve config alongside existing `data/` path).
 
 ---
 
 ## Spawn Zone System
+
+### SpawnManager
+
+A new class `SpawnManager` (lives on `OtbmMap` or as standalone) encapsulates all spawn zone logic:
+
+```typescript
+class SpawnManager {
+  // Spawn center registries
+  monsterSpawns: Set<string>   // "x,y,z" keys of monster spawn centers
+  npcSpawns: Set<string>       // "x,y,z" keys of NPC spawn centers
+
+  // Per-tile spawn coverage counts
+  monsterSpawnCounts: Map<string, number>  // "x,y,z" → count of monster spawns covering this tile
+  npcSpawnCounts: Map<string, number>      // "x,y,z" → count of NPC spawns covering this tile
+
+  // Mutators
+  addMonsterSpawn(centerX, centerY, centerZ, radius): void
+  removeMonsterSpawn(centerX, centerY, centerZ, radius): void
+  addNpcSpawn(centerX, centerY, centerZ, radius): void
+  removeNpcSpawn(centerX, centerY, centerZ, radius): void
+
+  // Queries
+  getMonsterSpawnCount(x, y, z): number
+  getNpcSpawnCount(x, y, z): number
+  isInMonsterSpawn(x, y, z): boolean
+  isInNpcSpawn(x, y, z): boolean
+  getTilesInRadius(centerX, centerY, centerZ, radius): Position[]
+}
+```
 
 ### How Spawn Zones Work (RME Behavior)
 
@@ -91,13 +125,13 @@ A `CreatureDatabase` class provides lookup by name, lists all monsters/NPCs, and
 
 ### Spawn Count Tracking
 
-When a spawn zone is added/removed, increment/decrement spawn counts on all tiles in its radius. This is tracked at the `TileLocation` level (or equivalent). Used for:
+When a spawn zone is added/removed, `SpawnManager` increments/decrements counts on all tiles in the radius. Used for:
 - `canPlaceCreature()` checks
 - Overlay rendering intensity (overlapping spawns darken more)
 
 ### Auto-Create Spawn
 
-Setting: when placing a creature on a tile with no spawn coverage, auto-create a `SpawnMonster(1)` or `SpawnNpc(1)` (radius=1) on that tile. Enabled by default (matches RME's `AUTO_CREATE_SPAWN_MONSTER` / `AUTO_CREATE_SPAWN_NPC`).
+Editor setting (`autoCreateSpawn: boolean`, default `true`): when placing a creature on a tile with no spawn coverage, auto-create a spawn zone (radius=1) centered on that tile. Matches RME's `AUTO_CREATE_SPAWN_MONSTER` / `AUTO_CREATE_SPAWN_NPC`.
 
 ---
 
@@ -121,6 +155,29 @@ type BrushSelection =
   | { mode: 'creature'; creatureName: string; isNpc: boolean }
   | { mode: 'spawn'; spawnType: 'monster' | 'npc' }
 ```
+
+---
+
+## MapMutator Creature Operations
+
+Extend `MapMutator` with creature-specific mutations (all undoable):
+
+```typescript
+// Creature placement
+placeCreature(x, y, z, creature: TileCreature): void
+removeCreature(x, y, z, creatureName: string, isNpc: boolean): void
+moveCreature(fromX, fromY, fromZ, toX, toY, toZ, creatureName: string, isNpc: boolean): void
+
+// Creature property editing
+updateCreatureProperties(x, y, z, creatureName: string, isNpc: boolean, props: Partial<TileCreature>): void
+
+// Spawn zone operations
+placeSpawnZone(x, y, z, type: 'monster' | 'npc', radius: number): void
+removeSpawnZone(x, y, z, type: 'monster' | 'npc'): void
+updateSpawnRadius(x, y, z, type: 'monster' | 'npc', newRadius: number): void
+```
+
+Each mutation records an undo action that reverses the change. Spawn zone mutations also update `SpawnManager` counts.
 
 ---
 
@@ -150,10 +207,12 @@ Creature tilesets loaded from `data/materials/tilesets.xml` (like existing brush
 
 ### Creature Sprites
 
-Creatures are rendered on their tile using their **outfit lookType** from the appearances data. The outfit system uses:
-- `lookType` → appearance ID for the creature sprite
-- Pattern/animation selection for idle frame
-- Direction affects which sprite frame to show
+Creatures are rendered on their tile using their **outfit lookType** from the appearances data:
+- `lookType` → outfit appearance ID. Resolve to idle sprite for the stored direction.
+- `lookItem` → item-based outfit (fallback: render as item sprite using existing `SpriteResolver`).
+- Missing/unknown outfits → render a placeholder icon (e.g., question mark or generic creature silhouette).
+
+**Render layer order**: Creatures render AFTER all tile items (on top of everything). Monsters first, then NPC (NPC on top if both exist).
 
 For MVP, render creatures as a single idle frame facing their stored direction. Full outfit coloring (head/body/legs/feet layers) is a stretch goal.
 
@@ -198,10 +257,10 @@ Menu entries in hamburger menu under **View** section. Keyboard shortcuts TBD (R
 New editor tool for placing creatures and spawn zones. Activated when a creature brush or spawn brush is selected from the palette.
 
 **Behavior:**
-- **MonsterBrush/NpcBrush active**: Click places creature on tile. Drag to smear (place on multiple tiles).
-- **SpawnMonsterBrush/SpawnNpcBrush active**: Click creates spawn zone centered on tile with configured radius.
-- **Erase tool**: Removes creatures and spawn zones.
-- **Select tool**: Can select creatures (click on creature sprite to select it, drag to move).
+- **MonsterBrush/NpcBrush active**: Click places creature on tile via `MapMutator.placeCreature()`. Drag to smear (place on multiple tiles).
+- **SpawnMonsterBrush/SpawnNpcBrush active**: Click creates spawn zone via `MapMutator.placeSpawnZone()` with configured radius.
+- **Erase tool**: Removes creatures via `MapMutator.removeCreature()` and spawn zones via `MapMutator.removeSpawnZone()`.
+- **Select tool**: Can select creatures (click on creature sprite to select it, drag to move via `MapMutator.moveCreature()`).
 
 ### Creature Properties Modal
 
@@ -252,21 +311,10 @@ NPC spawns saved to `{mapname}-npc.xml`:
 
 ### Import/Export
 
-- **Import**: Parse sidecar XML files when loading OTBM. Match creature names against `CreatureDatabase`.
-- **Export**: Write sidecar XML files when saving OTBM. Iterate spawn centers, collect creatures within radius.
+- **Import (on load)**: Parse sidecar XML files when loading OTBM. Match creature names against `CreatureDatabase`. Unknown creatures logged as warnings but still loaded (marked as missing).
+- **Export (on save)**: Write sidecar XML files when saving OTBM. Iterate spawn centers, collect creatures within radius.
 - **Import standalone**: Menu option to import spawn XML files independently.
 - **Export standalone**: Menu option to export spawn XML files independently.
-
----
-
-## Undo/Redo
-
-All creature and spawn operations go through `MapMutator` and are undoable:
-- Place/remove creature
-- Place/remove spawn zone
-- Move creature (drag & drop)
-- Edit creature properties
-- Edit spawn zone radius
 
 ---
 
@@ -278,7 +326,7 @@ All creature and spawn operations go through `MapMutator` and are undoable:
 4. Spawn zones render as colored overlays
 5. Four independent visibility toggles work correctly
 6. Creatures can be selected, moved (drag & drop), and deleted
-7. Creature and spawn properties are editable
+7. Creature and spawn properties are editable via modals
 8. Spawn data serializes to/from RME-compatible XML format
 9. All operations support undo/redo
 10. Creature palette supports search and tileset filtering
@@ -289,53 +337,24 @@ All creature and spawn operations go through `MapMutator` and are undoable:
 
 ## Implementation Phases
 
-### Phase 1: Data Foundation
-- Creature types and database (`CreatureDatabase`)
-- Tile model extensions (monsters, npc, spawnMonster, spawnNpc)
-- Spawn zone tracking (spawn counts per tile location)
-- Creature data file (`data/creatures/monsters.xml`, `data/creatures/npcs.xml`)
-- Parse `*-monster.xml` and `*-npc.xml` sidecar files on OTBM load
+See [PROGRESS-creatures.md](./PROGRESS-creatures.md) for detailed task-level tracking and dependency graph.
 
-### Phase 2: Spawn Zone System
-- Spawn zone add/remove logic with radius-based tile coverage
-- Spawn count tracking on tile locations
-- MonsterSpawnOverlay and NpcSpawnOverlay rendering
-- Visibility toggles in EditorSettings + MapRenderer
-- Hamburger menu entries
-
-### Phase 3: Creature Brushes & Placement
-- MonsterBrush, NpcBrush, SpawnMonsterBrush, SpawnNpcBrush
-- BrushSelection extension for creature/spawn modes
-- Creature tool (place, smear, erase)
-- Auto-create spawn setting
-- Integration with MapMutator (undo/redo)
-
-### Phase 4: Creature Rendering
-- Outfit sprite resolution from appearances data
-- Creature rendering on tiles (idle frame, direction-aware)
-- Creature visibility toggles
-
-### Phase 5: Creature Palette UI
-- CreaturePalette component (monsters tab, NPCs tab)
-- Search, tileset filtering, creature list with sprite preview
-- Mode toggle (place creature vs place spawn)
-- Spawn time, radius, weight controls
-- Integration with App.tsx state and toolbar
-
-### Phase 6: Selection & Interaction
-- Select tool: select creatures, drag to move
-- Creature properties panel/modal (direction, spawn time, weight)
-- Spawn zone properties (radius editing)
-- Context menu entries for creatures
-- Inspector integration
-
-### Phase 7: Serialization (Write & Standalone Import/Export)
-- Write sidecar XML files on OTBM save
-- Import/export standalone spawn files
-- Hamburger menu entries for import/export
-
-### Phase 8: Polish & Testing
-- Comprehensive test coverage
-- Edge cases (orphan creatures, overlapping spawns, auto-create)
-- Performance optimization for large spawn zones
-- Keyboard shortcuts for visibility toggles
+| Phase | Name | Depends On | Summary |
+|-------|------|------------|---------|
+| 1 | Types & Creature Database | — | `Direction`, `TileCreature`, `CreatureType`, `CreatureDatabase` (parse XML, lookup) |
+| 2 | Tile Model & Spawn Manager | 1 | Extend `OtbmTile` with creature/spawn fields, `SpawnManager` class |
+| 3 | Sidecar XML Parsing & Init | 1, 2 | Parse `*-monster.xml` / `*-npc.xml`, wire into `initPipeline.ts` |
+| 4 | Editor Settings & Toggles | 3 | 4 visibility settings + `autoCreateSpawn`, App.tsx state, hamburger menu |
+| 5 | Spawn Zone Overlays | 2, 4 | `MonsterSpawnOverlay`, `NpcSpawnOverlay`, MapRenderer wiring |
+| 6 | Creature Sprite Resolution | 3 | `CreatureSpriteResolver` — lookType/lookItem → renderable sprite |
+| 7 | Creature Rendering on Tiles | 5, 6 | Render creatures in `TileRenderer` after items, respect visibility |
+| 8 | MapMutator Creature Ops | 2 | place/remove/move creature, place/remove/update spawn zone (all with undo) |
+| 9 | Creature Brushes | 4, 8 | `MonsterBrush`, `NpcBrush`, `SpawnMonsterBrush`, `SpawnNpcBrush`, auto-create |
+| 10 | Creature Tool & Erase | 9 | `creatureTool.ts`, smear, hoverHandler, erase tool extension |
+| 11 | Creature Palette UI | 6, 10 | `CreaturePalette` component, tabs, search, mode toggle, controls |
+| 12 | Selection & Movement | 7, 8 | Select tool creature selection + drag-move |
+| 13 | Property Modals | 8 | Creature properties modal, spawn zone properties modal |
+| 14 | Context Menu & Inspector | 12, 13 | Context menu entries, inspector creature display |
+| 15 | Write on Save | 2, 3 | `writeMonsterSpawnXml` / `writeNpcSpawnXml`, hook into save flow |
+| 16 | Standalone Import/Export | 3, 15 | Menu-driven import/export of spawn XML files |
+| 17 | Polish & Testing | all | Edge cases, performance, keyboard shortcuts, integration tests |

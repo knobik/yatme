@@ -27,7 +27,7 @@ interface UseKeyboardShortcutsOptions {
   selectedTilePos: { x: number; y: number; z: number } | null
   setSelectedTilePos: React.Dispatch<React.SetStateAction<{ x: number; y: number; z: number } | null>>
   contextMenu: ContextMenuState | null
-  setContextMenu: React.Dispatch<React.SetStateAction<ContextMenuState | null>>
+  setContextMenu: (menu: ContextMenuState | null) => void
   placingHouseExit: number | null
   setPlacingHouseExit: React.Dispatch<React.SetStateAction<number | null>>
 }

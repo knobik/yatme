@@ -1,4 +1,4 @@
-import { type OtbmMap, type OtbmTile, type OtbmItem, deepCloneItem, isPositionValid } from './otbm'
+import { type OtbmMap, type OtbmTile, type OtbmItem, deepCloneItem, isPositionValid, tileKey } from './otbm'
 import type { AppearanceData } from './appearances'
 import type { MapSidecars } from './sidecars'
 import { chunkKeyForTile } from './ChunkManager'
@@ -9,6 +9,8 @@ import type { DoodadBrush, DoodadAlternative, DoodadComposite } from './brushes/
 import { CARPET_CENTER, TABLE_ALONE } from './brushes/CarpetTypes'
 import type { BrushRegistry } from './brushes/BrushRegistry'
 import type { ItemRegistry } from './items'
+import type { SpawnManager } from './creatures/SpawnManager'
+import type { CreatureDatabase } from './creatures/CreatureDatabase'
 import { computeBorders } from './brushes/BorderSystem'
 import { doWalls, getWallAlignment } from './brushes/WallSystem'
 import { findDoorForAlignment, switchDoor } from './brushes/DoorSystem'
@@ -24,10 +26,6 @@ const OFFSETS_8: ReadonlyArray<[number, number]> = [
 const OFFSETS_4: ReadonlyArray<[number, number]> = [
   [0, -1], [-1, 0], [1, 0], [0, 1],
 ]
-
-function tileKey(x: number, y: number, z: number): string {
-  return `${x},${y},${z}`
-}
 
 function deepCloneItems(items: OtbmItem[]): OtbmItem[] {
   return items.map(deepCloneItem)
@@ -71,6 +69,8 @@ export class MapMutator {
   private _brushRegistry: BrushRegistry | null = null
   private _itemRegistry: ItemRegistry | null = null
   private _sidecars: MapSidecars | null = null
+  private _spawnManager: SpawnManager | null = null
+  private _creatureDb: CreatureDatabase | null = null
 
   // Current batch being built (between beginBatch/commitBatch)
   private currentBatch: MutationBatch | null = null
@@ -107,6 +107,22 @@ export class MapMutator {
 
   get sidecars(): MapSidecars | null {
     return this._sidecars
+  }
+
+  set spawnManager(manager: SpawnManager | null) {
+    this._spawnManager = manager
+  }
+
+  get spawnManager(): SpawnManager | null {
+    return this._spawnManager
+  }
+
+  set creatureDb(db: CreatureDatabase | null) {
+    this._creatureDb = db
+  }
+
+  get creatureDb(): CreatureDatabase | null {
+    return this._creatureDb
   }
 
   // --- Batch management ---

@@ -55,6 +55,7 @@ export interface EditorToolsState {
   setSelectedZone: (zone: ZoneSelection | null) => void
   selectedHouse: HouseData | null
   setSelectedHouse: (house: HouseData | null) => void
+  cursorPos: { x: number; y: number; z: number } | null
 }
 
 export function useEditorTools(

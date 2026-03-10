@@ -111,7 +111,7 @@ export function useEditorInit(
       }, signal, provider)
       if (!result) return
 
-      const { app, appearances, mapData, sidecars, registry, brushRegistry, tilesets, mapFilename: filename } = result
+      const { app, appearances, mapData, sidecars, registry, brushRegistry, tilesets, creatureDb, spawnManager, mapFilename: filename } = result
       setMapFilename(filename)
       appInstance = app
       appRef.current = app
@@ -128,7 +128,7 @@ export function useEditorInit(
 
       // Build renderer + mutator
       setSidecarsData(sidecars)
-      const { renderer, mutator } = setupEditor(app, appearances, mapData, brushRegistry, registry, sidecars)
+      const { renderer, mutator } = setupEditor(app, appearances, mapData, brushRegistry, registry, sidecars, spawnManager, creatureDb)
       rendererRef.current = renderer
       mutatorRef.current = mutator
 
