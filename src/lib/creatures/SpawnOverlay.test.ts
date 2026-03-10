@@ -16,13 +16,17 @@ class TestableSpawnOverlay extends SpawnOverlay {
   public hasActiveSelection(): boolean { return super.hasActiveSelection() }
 }
 
-/** Intercept Graphics.fill() calls to capture color/alpha args. */
+/** Intercept Graphics.fill() calls to capture the first fill's color/alpha args. */
 function spyOnFill(g: Graphics): { color: number; alpha: number } {
   const spy = { color: 0, alpha: 0 }
+  let captured = false
   const origFill = g.fill.bind(g)
   g.fill = ((opts: { color: number; alpha: number }) => {
-    spy.color = opts.color
-    spy.alpha = opts.alpha
+    if (!captured) {
+      spy.color = opts.color
+      spy.alpha = opts.alpha
+      captured = true
+    }
     return origFill(opts)
   }) as typeof g.fill
   return spy
