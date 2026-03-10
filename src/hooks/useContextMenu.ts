@@ -27,6 +27,8 @@ export interface UseContextMenuOptions {
   handleSelectAsBrush: (itemId: number) => void
   setSelectedTilePos: (pos: { x: number; y: number; z: number }) => void
   setEditingItem: (item: { x: number; y: number; z: number; index: number } | null) => void
+  setEditingCreature: (creature: { x: number; y: number; z: number; creatureName: string; isNpc: boolean } | null) => void
+  setEditingSpawn: (spawn: { x: number; y: number; z: number; spawnType: 'monster' | 'npc' } | null) => void
 }
 
 export function useContextMenu(options: UseContextMenuOptions) {
@@ -41,6 +43,8 @@ export function useContextMenu(options: UseContextMenuOptions) {
     handleSelectAsBrush,
     setSelectedTilePos,
     setEditingItem,
+    setEditingCreature,
+    setEditingSpawn,
   } = options
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
@@ -124,6 +128,37 @@ export function useContextMenu(options: UseContextMenuOptions) {
           : []),
       ],
     }
+
+    // Creature/spawn properties group
+    const creaturePropsItems: ContextMenuAction[] = []
+    if (tile) {
+      if (tile.spawnMonster) {
+        creaturePropsItems.push({
+          label: 'Monster Spawn Properties',
+          onClick: () => setEditingSpawn({ x: tilePos.x, y: tilePos.y, z: tilePos.z, spawnType: 'monster' }),
+        })
+      }
+      if (tile.spawnNpc) {
+        creaturePropsItems.push({
+          label: 'NPC Spawn Properties',
+          onClick: () => setEditingSpawn({ x: tilePos.x, y: tilePos.y, z: tilePos.z, spawnType: 'npc' }),
+        })
+      }
+      if (tile.monsters && tile.monsters.length > 0) {
+        const topMonster = tile.monsters[tile.monsters.length - 1]
+        creaturePropsItems.push({
+          label: `Monster Properties (${topMonster.name})`,
+          onClick: () => setEditingCreature({ x: tilePos.x, y: tilePos.y, z: tilePos.z, creatureName: topMonster.name, isNpc: false }),
+        })
+      }
+      if (tile.npc) {
+        creaturePropsItems.push({
+          label: `NPC Properties (${tile.npc.name})`,
+          onClick: () => setEditingCreature({ x: tilePos.x, y: tilePos.y, z: tilePos.z, creatureName: tile.npc!.name, isNpc: true }),
+        })
+      }
+    }
+    const creaturePropsGroup: ContextMenuGroup = { items: creaturePropsItems }
 
     const topItem = tile?.items?.[tile.items.length - 1]
     const itemInfoGroup: ContextMenuGroup = {
@@ -275,7 +310,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
         : [],
     }
 
-    return [clipboardGroup, positionGroup, itemInfoGroup, brushSelectGroup, doorGroup, rotateGroup, teleportGroup]
+    return [clipboardGroup, positionGroup, creaturePropsGroup, itemInfoGroup, brushSelectGroup, doorGroup, rotateGroup, teleportGroup]
   }
 
   const handleSetContextMenu = (menu: ContextMenuState | null) => {

@@ -9,11 +9,11 @@ import { useSelection } from './useSelection'
 import { useClipboard } from './useClipboard'
 import type { EditorSettings } from '../lib/EditorSettings'
 import type { HouseData } from '../lib/sidecars'
-import type { EditorTool, BrushShape, BrushSelection, ToolContext, TilePos, ZoneSelection } from './tools/types'
+import type { EditorTool, BrushShape, BrushSelection, ToolContext, TilePos, ZoneSelection, SelectedCreatureInfo } from './tools/types'
 import { createDrawHandlers } from './tools/drawTool'
 import { createEraseHandlers } from './tools/eraseTool'
 import { createDoorHandlers } from './tools/doorTool'
-import { createSelectHandlers } from './tools/selectTool'
+import { createSelectHandlers, findSelectableOnTile } from './tools/selectTool'
 import { createFillHandlers } from './tools/fillTool'
 import { createZoneHandlers } from './tools/zoneTool'
 import { createHouseHandlers } from './tools/houseTool'
@@ -21,7 +21,7 @@ import { createCreatureHandlers } from './tools/creatureTool'
 import { createHoverHandler } from './tools/hoverHandler'
 
 // Re-export types for consumers
-export type { EditorTool, BrushShape, BrushSelection, TilePos, ZoneSelection }
+export type { EditorTool, BrushShape, BrushSelection, TilePos, ZoneSelection, SelectedCreatureInfo }
 export type { HouseData }
 export type { SelectedItemInfo }
 export { deriveHighlights } from './useSelection'
@@ -60,6 +60,7 @@ export interface EditorToolsState {
   setCreatureSpawnTime: (time: number) => void
   creatureWeight: number
   setCreatureWeight: (weight: number) => void
+  selectedCreature: SelectedCreatureInfo | null
   cursorPos: { x: number; y: number; z: number } | null
 }
 
@@ -69,6 +70,8 @@ export function useEditorTools(
   mapData: OtbmMap | null,
   brushRegistry: BrushRegistry | null,
   onRequestEditItem: ((x: number, y: number, z: number, itemIndex: number) => void) | undefined,
+  onRequestEditCreature: ((x: number, y: number, z: number, creatureName: string, isNpc: boolean) => void) | undefined,
+  onRequestEditSpawn: ((x: number, y: number, z: number, spawnType: 'monster' | 'npc') => void) | undefined,
   clickToInspect: boolean,
   settingsRef: React.MutableRefObject<EditorSettings>,
 ): EditorToolsState {
@@ -84,6 +87,7 @@ export function useEditorTools(
   const [selectedHouse, setSelectedHouse] = useState<HouseData | null>(null)
   const [creatureSpawnTime, setCreatureSpawnTime] = useState(60)
   const [creatureWeight, setCreatureWeight] = useState(100)
+  const [selectedCreature, setSelectedCreature] = useState<SelectedCreatureInfo | null>(null)
 
   // ── Refs (avoid stale closures in pointer handlers) ──────────────
   const activeToolRef = useRef(activeTool)
@@ -97,6 +101,8 @@ export function useEditorTools(
   const creatureSpawnTimeRef = useRef(creatureSpawnTime)
   const creatureWeightRef = useRef(creatureWeight)
   const onRequestEditItemRef = useRef(onRequestEditItem)
+  const onRequestEditCreatureRef = useRef(onRequestEditCreature)
+  const onRequestEditSpawnRef = useRef(onRequestEditSpawn)
   const clickToInspectRef = useRef(clickToInspect)
   useEffect(() => {
     activeToolRef.current = activeTool
@@ -110,6 +116,8 @@ export function useEditorTools(
     creatureSpawnTimeRef.current = creatureSpawnTime
     creatureWeightRef.current = creatureWeight
     onRequestEditItemRef.current = onRequestEditItem
+    onRequestEditCreatureRef.current = onRequestEditCreature
+    onRequestEditSpawnRef.current = onRequestEditSpawn
     clickToInspectRef.current = clickToInspect
   })
 
@@ -124,6 +132,8 @@ export function useEditorTools(
   const dragMoveOriginRef = useRef<TilePos | null>(null)
   const dragMoveLastPosRef = useRef<TilePos | null>(null)
   const hoverPosRef = useRef<TilePos | null>(null)
+  const selectedCreatureRef = useRef<SelectedCreatureInfo | null>(null)
+  const isCreatureDragRef = useRef(false)
   const [cursorPos, setCursorPos] = useState<TilePos | null>(null)
 
   // ── Compose sub-hooks ────────────────────────────────────────────
@@ -153,7 +163,7 @@ export function useEditorTools(
       applyHighlights: selection.applyHighlights,
       selectStartRef, isShiftDragRef, isCtrlDragRef, selectedItemsSnapshotRef,
       isDragMovingRef, dragMoveOriginRef, dragMoveLastPosRef, hoverPosRef,
-      onRequestEditItemRef, clickToInspectRef,
+      onRequestEditItemRef, onRequestEditCreatureRef, onRequestEditSpawnRef, clickToInspectRef,
       isPastingRef: clipboard.isPastingRef,
       copyBufferRef: clipboard.copyBufferRef,
       executePasteAt: clipboard.executePasteAt,
@@ -163,6 +173,9 @@ export function useEditorTools(
       selectedHouseRef,
       creatureSpawnTimeRef,
       creatureWeightRef,
+      selectedCreatureRef,
+      setSelectedCreature,
+      isCreatureDragRef,
       settingsRef,
     }
 
@@ -239,7 +252,21 @@ export function useEditorTools(
       if (activeToolRef.current !== 'select') return
       const key = `${pos.x},${pos.y},${pos.z}`
       const tile = mapData.tiles.get(key) ?? null
-      if (!tile || tile.items.length === 0) return
+      if (!tile) return
+
+      // Check for creature/spawn first (same priority as selection)
+      const creatureHit = findSelectableOnTile(tile, settingsRef.current)
+      if (creatureHit) {
+        if (creatureHit.type === 'creature') {
+          onRequestEditCreatureRef.current?.(pos.x, pos.y, pos.z, creatureHit.creatureName, creatureHit.isNpc)
+        } else {
+          onRequestEditSpawnRef.current?.(pos.x, pos.y, pos.z, creatureHit.spawnType)
+        }
+        return
+      }
+
+      // Fallback: item properties
+      if (tile.items.length === 0) return
       const topIdx = tile.items.length - 1
 
       const newSel: SelectedItemInfo = { x: pos.x, y: pos.y, z: pos.z, itemIndex: topIdx }
@@ -284,6 +311,8 @@ export function useEditorTools(
     if (activeTool !== 'select') {
       selection.setSelectedItems([])
       renderer?.clearItemHighlight()
+      setSelectedCreature(null)
+      selectedCreatureRef.current = null
     }
     if (clipboard.isPastingRef.current) {
       clipboard.cancelPaste()
@@ -329,6 +358,7 @@ export function useEditorTools(
     setCreatureSpawnTime,
     creatureWeight,
     setCreatureWeight,
+    selectedCreature,
     cursorPos,
   }
 }

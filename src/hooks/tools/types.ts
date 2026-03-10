@@ -16,6 +16,10 @@ export type BrushShape = 'square' | 'circle'
 /** Tools that support variable brush size (shown in toolbar + used for hover cursor). */
 export const BRUSH_SIZE_TOOLS: ReadonlySet<EditorTool> = new Set(['draw', 'erase', 'door', 'zone', 'house', 'creature'])
 
+export type SelectedCreatureInfo =
+  | { type: 'creature'; x: number; y: number; z: number; creatureName: string; isNpc: boolean }
+  | { type: 'spawnZone'; x: number; y: number; z: number; spawnType: 'monster' | 'npc' }
+
 export type ZoneSelection =
   | { type: 'flag'; flag: number; label: string }
   | { type: 'zone'; zoneId: number; name: string }
@@ -89,8 +93,15 @@ export interface ToolContext {
   // Creature tool config
   creatureSpawnTimeRef: React.RefObject<number>
   creatureWeightRef: React.RefObject<number>
+  // Creature selection (select tool)
+  selectedCreatureRef: React.MutableRefObject<SelectedCreatureInfo | null>
+  setSelectedCreature: (creature: SelectedCreatureInfo | null) => void
+  isCreatureDragRef: React.MutableRefObject<boolean>
   // Settings ref (for creature tool autoCreateSpawn, etc.)
   settingsRef: React.MutableRefObject<EditorSettings>
+  // Creature/spawn property edit callbacks
+  onRequestEditCreatureRef: React.MutableRefObject<((x: number, y: number, z: number, creatureName: string, isNpc: boolean) => void) | undefined>
+  onRequestEditSpawnRef: React.MutableRefObject<((x: number, y: number, z: number, spawnType: 'monster' | 'npc') => void) | undefined>
 }
 
 // ── Brush resolution ─────────────────────────────────────────────────

@@ -1,8 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
-import { createSelectHandlers } from './selectTool'
+import { createSelectHandlers, findSelectableOnTile } from './selectTool'
 import { makeToolContext, makeMockRenderer, makePointerEvent } from '../../test/toolFixtures'
 import { makeMapData, makeTile, makeItem } from '../../test/fixtures'
 import type { SelectedItemInfo } from '../useSelection'
+import type { OtbmTile } from '../../lib/otbm'
+import { DEFAULT_SETTINGS } from '../../lib/EditorSettings'
 
 describe('selectTool', () => {
   describe('onDown — plain click', () => {
@@ -311,6 +313,286 @@ describe('selectTool', () => {
       onUp({ x: 6, y: 5, z: 7 })
 
       expect(renderer.clearDragPreview).toHaveBeenCalled()
+    })
+  })
+
+  // ── findSelectableOnTile ─────────────────────────────────────────
+
+  describe('findSelectableOnTile', () => {
+    const settings = { ...DEFAULT_SETTINGS }
+
+    it('returns null for null tile', () => {
+      expect(findSelectableOnTile(null, settings)).toBeNull()
+    })
+
+    it('returns null for empty tile', () => {
+      const tile = makeTile(5, 5, 7, [])
+      expect(findSelectableOnTile(tile, settings)).toBeNull()
+    })
+
+    it('returns creature info for tile with monster', () => {
+      const tile: OtbmTile = { ...makeTile(5, 5, 7, []), monsters: [{ name: 'Rat', direction: 2, spawnTime: 60, isNpc: false }] }
+      const result = findSelectableOnTile(tile, settings)
+      expect(result).toEqual({ type: 'creature', x: 5, y: 5, z: 7, creatureName: 'Rat', isNpc: false })
+    })
+
+    it('returns NPC info for tile with NPC', () => {
+      const tile: OtbmTile = { ...makeTile(5, 5, 7, []), npc: { name: 'Sam', direction: 2, spawnTime: 60, isNpc: true } }
+      const result = findSelectableOnTile(tile, settings)
+      expect(result).toEqual({ type: 'creature', x: 5, y: 5, z: 7, creatureName: 'Sam', isNpc: true })
+    })
+
+    it('returns monster over NPC when both exist (higher priority)', () => {
+      const tile: OtbmTile = {
+        ...makeTile(5, 5, 7, []),
+        monsters: [{ name: 'Rat', direction: 2, spawnTime: 60, isNpc: false }],
+        npc: { name: 'Sam', direction: 2, spawnTime: 60, isNpc: true },
+      }
+      const result = findSelectableOnTile(tile, settings)
+      expect(result).toEqual({ type: 'creature', x: 5, y: 5, z: 7, creatureName: 'Rat', isNpc: false })
+    })
+
+    it('returns spawnMonster zone info', () => {
+      const tile: OtbmTile = { ...makeTile(5, 5, 7, []), spawnMonster: { radius: 3 } }
+      const result = findSelectableOnTile(tile, settings)
+      expect(result).toEqual({ type: 'spawnZone', x: 5, y: 5, z: 7, spawnType: 'monster' })
+    })
+
+    it('returns spawnMonster over monster (higher priority)', () => {
+      const tile: OtbmTile = {
+        ...makeTile(5, 5, 7, []),
+        spawnMonster: { radius: 3 },
+        monsters: [{ name: 'Rat', direction: 2, spawnTime: 60, isNpc: false }],
+      }
+      const result = findSelectableOnTile(tile, settings)
+      expect(result).toEqual({ type: 'spawnZone', x: 5, y: 5, z: 7, spawnType: 'monster' })
+    })
+
+    it('returns spawnNpc zone info', () => {
+      const tile: OtbmTile = { ...makeTile(5, 5, 7, []), spawnNpc: { radius: 3 } }
+      const result = findSelectableOnTile(tile, settings)
+      expect(result).toEqual({ type: 'spawnZone', x: 5, y: 5, z: 7, spawnType: 'npc' })
+    })
+
+    it('returns null for monster when showMonsters=false', () => {
+      const tile: OtbmTile = { ...makeTile(5, 5, 7, []), monsters: [{ name: 'Rat', direction: 2, spawnTime: 60, isNpc: false }] }
+      const result = findSelectableOnTile(tile, { ...settings, showMonsters: false })
+      expect(result).toBeNull()
+    })
+
+    it('falls through to NPC when showMonsters=false', () => {
+      const tile: OtbmTile = {
+        ...makeTile(5, 5, 7, []),
+        monsters: [{ name: 'Rat', direction: 2, spawnTime: 60, isNpc: false }],
+        npc: { name: 'Sam', direction: 2, spawnTime: 60, isNpc: true },
+      }
+      const result = findSelectableOnTile(tile, { ...settings, showMonsters: false })
+      expect(result).toEqual({ type: 'creature', x: 5, y: 5, z: 7, creatureName: 'Sam', isNpc: true })
+    })
+
+    it('returns null for spawnMonster when showMonsterSpawns=false', () => {
+      const tile: OtbmTile = { ...makeTile(5, 5, 7, []), spawnMonster: { radius: 3 } }
+      const result = findSelectableOnTile(tile, { ...settings, showMonsterSpawns: false })
+      expect(result).toBeNull()
+    })
+  })
+
+  // ── Creature selection ───────────────────────────────────────────
+
+  describe('creature selection', () => {
+    it('selects creature on plain click, clears item selection', () => {
+      const tile: OtbmTile = {
+        ...makeTile(5, 5, 7, [makeItem({ id: 10 })]),
+        monsters: [{ name: 'Rat', direction: 2, spawnTime: 60, isNpc: false }],
+      }
+      const map = makeMapData([tile])
+      const renderer = makeMockRenderer()
+      const { ctx } = makeToolContext({ mapData: map, renderer })
+      const { onDown } = createSelectHandlers(ctx)
+
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
+
+      expect(ctx.setSelectedCreature).toHaveBeenCalledWith({
+        type: 'creature', x: 5, y: 5, z: 7, creatureName: 'Rat', isNpc: false,
+      })
+      // Item selection should be cleared
+      expect(ctx.setSelectedItems).toHaveBeenCalledWith([])
+      expect(renderer.clearItemHighlight).toHaveBeenCalled()
+    })
+
+    it('falls through to item selection when no creature on tile', () => {
+      const map = makeMapData([makeTile(5, 5, 7, [makeItem({ id: 10 })])])
+      const renderer = makeMockRenderer()
+      const { ctx } = makeToolContext({ mapData: map, renderer })
+      const { onDown } = createSelectHandlers(ctx)
+
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
+
+      expect(ctx.setSelectedCreature).not.toHaveBeenCalled()
+      expect(ctx.setSelectedItems).toHaveBeenCalledWith([
+        { x: 5, y: 5, z: 7, itemIndex: 0 },
+      ])
+    })
+
+    it('clears creature selection when clicking empty tile', () => {
+      const map = makeMapData([makeTile(5, 5, 7, [])])
+      const renderer = makeMockRenderer()
+      const { ctx } = makeToolContext({ mapData: map, renderer })
+      // Simulate having a creature selected
+      ctx.selectedCreatureRef.current = { type: 'creature', x: 3, y: 3, z: 7, creatureName: 'Rat', isNpc: false }
+      const { onDown } = createSelectHandlers(ctx)
+
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
+
+      expect(ctx.setSelectedCreature).toHaveBeenCalledWith(null)
+    })
+
+    it('selects spawn zone and enables drag-move', () => {
+      const tile: OtbmTile = { ...makeTile(5, 5, 7, []), spawnMonster: { radius: 3 } }
+      const map = makeMapData([tile])
+      const renderer = makeMockRenderer()
+      const { ctx } = makeToolContext({ mapData: map, renderer })
+      const { onDown } = createSelectHandlers(ctx)
+
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
+
+      expect(ctx.setSelectedCreature).toHaveBeenCalledWith({
+        type: 'spawnZone', x: 5, y: 5, z: 7, spawnType: 'monster',
+      })
+      expect(ctx.isCreatureDragRef.current).toBe(true)
+      expect(ctx.isDragMovingRef.current).toBe(true)
+    })
+  })
+
+  // ── Creature drag-move ───────────────────────────────────────────
+
+  describe('creature drag-move', () => {
+    it('calls mutator.moveCreature when dragging creature to new tile', () => {
+      const tile: OtbmTile = {
+        ...makeTile(5, 5, 7, []),
+        monsters: [{ name: 'Rat', direction: 2, spawnTime: 60, isNpc: false }],
+      }
+      const map = makeMapData([tile])
+      const renderer = makeMockRenderer()
+      const { ctx, mutator } = makeToolContext({ mapData: map, renderer })
+      const { onDown, onMove, onUp } = createSelectHandlers(ctx)
+
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
+      onMove({ x: 7, y: 6, z: 7 })
+      onUp({ x: 7, y: 6, z: 7 })
+
+      expect(mutator.moveCreature).toHaveBeenCalledWith(5, 5, 7, 7, 6, 7, 'Rat', false)
+    })
+
+    it('updates selectedCreature position after move', () => {
+      const tile: OtbmTile = {
+        ...makeTile(5, 5, 7, []),
+        monsters: [{ name: 'Rat', direction: 2, spawnTime: 60, isNpc: false }],
+      }
+      const map = makeMapData([tile])
+      const renderer = makeMockRenderer()
+      const { ctx } = makeToolContext({ mapData: map, renderer })
+      const { onDown, onMove, onUp } = createSelectHandlers(ctx)
+
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
+      onMove({ x: 7, y: 6, z: 7 })
+      onUp({ x: 7, y: 6, z: 7 })
+
+      // setSelectedCreature called twice: once for initial selection, once for updated position
+      const calls = vi.mocked(ctx.setSelectedCreature).mock.calls
+      const lastCall = calls[calls.length - 1][0]
+      expect(lastCall).toEqual({
+        type: 'creature', x: 7, y: 6, z: 7, creatureName: 'Rat', isNpc: false,
+      })
+    })
+
+    it('does not move creature when releasing on same tile', () => {
+      const tile: OtbmTile = {
+        ...makeTile(5, 5, 7, []),
+        monsters: [{ name: 'Rat', direction: 2, spawnTime: 60, isNpc: false }],
+      }
+      const map = makeMapData([tile])
+      const renderer = makeMockRenderer()
+      const { ctx, mutator } = makeToolContext({ mapData: map, renderer })
+      const { onDown, onUp } = createSelectHandlers(ctx)
+
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
+      onUp({ x: 5, y: 5, z: 7 })
+
+      expect(mutator.moveCreature).not.toHaveBeenCalled()
+      // Creature should still be selected
+      expect(ctx.selectedCreatureRef.current).toEqual({
+        type: 'creature', x: 5, y: 5, z: 7, creatureName: 'Rat', isNpc: false,
+      })
+    })
+
+    it('does not show drag preview during creature drag', () => {
+      const tile: OtbmTile = {
+        ...makeTile(5, 5, 7, []),
+        monsters: [{ name: 'Rat', direction: 2, spawnTime: 60, isNpc: false }],
+      }
+      const map = makeMapData([tile])
+      const renderer = makeMockRenderer()
+      const { ctx } = makeToolContext({ mapData: map, renderer })
+      const { onDown, onMove } = createSelectHandlers(ctx)
+
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
+      onMove({ x: 7, y: 6, z: 7 })
+
+      expect(renderer.updateDragPreview).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── Spawn zone drag-move ─────────────────────────────────────────
+
+  describe('spawn zone drag-move', () => {
+    it('moves spawn zone to new tile via remove + place', () => {
+      const tile: OtbmTile = { ...makeTile(5, 5, 7, []), spawnMonster: { radius: 3 } }
+      const map = makeMapData([tile])
+      const renderer = makeMockRenderer()
+      const { ctx, mutator } = makeToolContext({ mapData: map, renderer })
+      const { onDown, onMove, onUp } = createSelectHandlers(ctx)
+
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
+      onMove({ x: 8, y: 5, z: 7 })
+      onUp({ x: 8, y: 5, z: 7 })
+
+      expect(mutator.beginBatch).toHaveBeenCalledWith('Move spawn zone')
+      expect(mutator.removeSpawnZone).toHaveBeenCalledWith(5, 5, 7, 'monster')
+      expect(mutator.placeSpawnZone).toHaveBeenCalledWith(8, 5, 7, 'monster', 3)
+      expect(mutator.commitBatch).toHaveBeenCalled()
+    })
+
+    it('updates selection position after spawn zone move', () => {
+      const tile: OtbmTile = { ...makeTile(5, 5, 7, []), spawnNpc: { radius: 2 } }
+      const map = makeMapData([tile])
+      const renderer = makeMockRenderer()
+      const { ctx } = makeToolContext({ mapData: map, renderer })
+      const { onDown, onMove, onUp } = createSelectHandlers(ctx)
+
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
+      onMove({ x: 7, y: 6, z: 7 })
+      onUp({ x: 7, y: 6, z: 7 })
+
+      const calls = vi.mocked(ctx.setSelectedCreature).mock.calls
+      const lastCall = calls[calls.length - 1][0]
+      expect(lastCall).toEqual({
+        type: 'spawnZone', x: 7, y: 6, z: 7, spawnType: 'npc',
+      })
+    })
+
+    it('does not move spawn zone when releasing on same tile', () => {
+      const tile: OtbmTile = { ...makeTile(5, 5, 7, []), spawnMonster: { radius: 3 } }
+      const map = makeMapData([tile])
+      const renderer = makeMockRenderer()
+      const { ctx, mutator } = makeToolContext({ mapData: map, renderer })
+      const { onDown, onUp } = createSelectHandlers(ctx)
+
+      onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
+      onUp({ x: 5, y: 5, z: 7 })
+
+      expect(mutator.removeSpawnZone).not.toHaveBeenCalled()
+      expect(mutator.placeSpawnZone).not.toHaveBeenCalled()
     })
   })
 })

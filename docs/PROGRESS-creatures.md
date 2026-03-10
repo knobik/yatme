@@ -167,18 +167,18 @@
 
 > Select and drag-move creatures. Depends on Phase 7 (rendering, click targets) and Phase 8 (moveCreature).
 
-- [ ] Click on tile with creature → select creature (prioritize: spawnMonster > top monster > spawnNpc > NPC, like RME)
-- [ ] Drag selected creature → move via `MapMutator.moveCreature()` (with undo)
+- [x] Click on tile with creature → select creature (prioritize: spawnMonster > top monster > spawnNpc > NPC, like RME)
+- [x] Drag selected creature → move via `MapMutator.moveCreature()` (with undo)
 
 ## Phase 13: Creature & Spawn Property Modals
 
 > Edit creature/spawn properties via modals. Depends on Phase 8 (updateCreatureProperties, updateSpawnRadius).
 
-- [ ] Creature properties modal component — name (read-only), direction (dropdown N/E/S/W), spawn time (spinner), weight (spinner, monsters only)
-- [ ] Spawn zone properties modal component — spawn type (read-only), radius (spinner 1-15)
-- [ ] Open creature modal via: context menu "Properties" or double-click on creature
-- [ ] Open spawn modal via: context menu "Properties" or double-click on spawn center
-- [ ] Modals call `MapMutator.updateCreatureProperties()` / `MapMutator.updateSpawnRadius()` on save
+- [x] Creature properties modal component — name (read-only), direction (dropdown N/E/S/W), spawn time (spinner), weight (spinner, monsters only)
+- [x] Spawn zone properties modal component — spawn type (read-only), radius (spinner 1-15)
+- [x] Open creature modal via: context menu "Properties" or double-click on creature
+- [x] Open spawn modal via: context menu "Properties" or double-click on spawn center
+- [x] Modals call `MapMutator.updateCreatureProperties()` / `MapMutator.updateSpawnRadius()` on save
 
 ## Phase 14: Context Menu & Inspector
 

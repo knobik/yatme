@@ -33,6 +33,7 @@ export function makeMockMutator(overrides: Record<string, unknown> = {}) {
     getTile: vi.fn(),
     placeCreature: vi.fn(),
     removeCreature: vi.fn(),
+    moveCreature: vi.fn(),
     placeSpawnZone: vi.fn(),
     removeSpawnZone: vi.fn(),
     setTileFlag: vi.fn(),
@@ -106,6 +107,8 @@ export function makeToolContext(opts: MakeToolContextOptions = {}) {
     dragMoveLastPosRef: { current: null as TilePos | null },
     hoverPosRef: { current: null as TilePos | null },
     onRequestEditItemRef: { current: undefined as ((x: number, y: number, z: number, idx: number) => void) | undefined },
+    onRequestEditCreatureRef: { current: undefined as ((x: number, y: number, z: number, name: string, isNpc: boolean) => void) | undefined },
+    onRequestEditSpawnRef: { current: undefined as ((x: number, y: number, z: number, spawnType: 'monster' | 'npc') => void) | undefined },
     clickToInspectRef: { current: opts.clickToInspect ?? false },
     isPastingRef: { current: opts.isPasting ?? false },
     copyBufferRef: { current: opts.copyBuffer ?? { canPaste: () => false, getTiles: () => [] } },
@@ -116,6 +119,9 @@ export function makeToolContext(opts: MakeToolContextOptions = {}) {
     selectedHouseRef: { current: null },
     creatureSpawnTimeRef: { current: 60 },
     creatureWeightRef: { current: 100 },
+    selectedCreatureRef: { current: null },
+    setSelectedCreature: vi.fn(),
+    isCreatureDragRef: { current: false },
     settingsRef: { current: { ...DEFAULT_SETTINGS, ...opts.settings } },
   } as unknown as ToolContext
 

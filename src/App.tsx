@@ -8,6 +8,8 @@ import { useEditorTools, deriveHighlights } from './hooks/useEditorTools'
 import type { BrushRegistry } from './lib/brushes/BrushRegistry'
 import { Inspector } from './components/Inspector'
 import { ItemPropertiesModal } from './components/ItemPropertiesModal'
+import { CreaturePropertiesModal } from './components/CreaturePropertiesModal'
+import { SpawnPropertiesModal } from './components/SpawnPropertiesModal'
 import type { OtbmItem } from './lib/otbm'
 import { applyItemProperties } from './lib/otbm'
 import { BrushPalette, type BrushPaletteHandle } from './components/BrushPalette'
@@ -103,12 +105,20 @@ function App() {
   const editorSettingsRef = useRef(editorSettings)
 
   const [editingItem, setEditingItem] = useState<{ x: number; y: number; z: number; index: number } | null>(null)
+  const [editingCreature, setEditingCreature] = useState<{ x: number; y: number; z: number; creatureName: string; isNpc: boolean } | null>(null)
+  const [editingSpawn, setEditingSpawn] = useState<{ x: number; y: number; z: number; spawnType: 'monster' | 'npc' } | null>(null)
 
   const handleRequestEditItem = useCallback((x: number, y: number, z: number, itemIndex: number) => {
     setEditingItem({ x, y, z, index: itemIndex })
   }, [])
+  const handleRequestEditCreature = useCallback((x: number, y: number, z: number, creatureName: string, isNpc: boolean) => {
+    setEditingCreature({ x, y, z, creatureName, isNpc })
+  }, [])
+  const handleRequestEditSpawn = useCallback((x: number, y: number, z: number, spawnType: 'monster' | 'npc') => {
+    setEditingSpawn({ x, y, z, spawnType })
+  }, [])
 
-  const tools = useEditorTools(rendererReady, mutatorReady, mapData, brushRegistryState, handleRequestEditItem, editorSettings.clickToInspect, editorSettingsRef)
+  const tools = useEditorTools(rendererReady, mutatorReady, mapData, brushRegistryState, handleRequestEditItem, handleRequestEditCreature, handleRequestEditSpawn, editorSettings.clickToInspect, editorSettingsRef)
   const toolsRef = useRef(tools)
 
   useEffect(() => {
@@ -224,6 +234,7 @@ function App() {
   const { contextMenuGroups, contextMenu, setContextMenu } = useContextMenu({
     toolsRef, mutatorReady, brushRegistryState, itemRegistry, appearancesData,
     rendererRef, handleSelectAsRaw, handleSelectAsBrush, setSelectedTilePos, setEditingItem,
+    setEditingCreature, setEditingSpawn,
   })
 
   // ── Save / Export / Import ─────────────────────────────────────────
@@ -238,9 +249,12 @@ function App() {
 
   useEffect(() => {
     if (rendererReady) {
+      // Skip item highlight sync when a creature/spawn is selected —
+      // creature selection sets its own highlight in selectTool.onDown
+      if (tools.selectedCreature) return
       rendererReady.setHighlights(deriveHighlights(tools.selectedItems, mapData!))
     }
-  }, [tools.selectedItems, rendererReady, mapData])
+  }, [tools.selectedItems, rendererReady, mapData, tools.selectedCreature])
 
   useEffect(() => {
     rendererRef.current?.setActiveZone(tools.selectedZone)
@@ -367,6 +381,41 @@ function App() {
     const tile = mapData.tiles.get(`${editingItem.x},${editingItem.y},${editingItem.z}`)
     return tile?.items[editingItem.index] ?? null
   }, [editingItem, mapData])
+
+  // ── Creature Properties Modal ────────────────────────────────────────
+  const editingCreatureData = useMemo(() => {
+    if (!editingCreature || !mapData) return null
+    const tile = mapData.tiles.get(`${editingCreature.x},${editingCreature.y},${editingCreature.z}`)
+    if (!tile) return null
+    if (editingCreature.isNpc) return tile.npc ?? null
+    return tile.monsters?.find(m => m.name === editingCreature.creatureName) ?? null
+  }, [editingCreature, mapData])
+
+  const handleApplyCreatureProperties = useCallback((props: Partial<import('./lib/creatures/types').TileCreature>) => {
+    if (!editingCreature || !mutatorReady) return
+    mutatorReady.updateCreatureProperties(
+      editingCreature.x, editingCreature.y, editingCreature.z,
+      editingCreature.creatureName, editingCreature.isNpc, props,
+    )
+    setEditingCreature(null)
+  }, [editingCreature, mutatorReady])
+
+  // ── Spawn Properties Modal ─────────────────────────────────────────
+  const editingSpawnData = useMemo(() => {
+    if (!editingSpawn || !mapData) return null
+    const tile = mapData.tiles.get(`${editingSpawn.x},${editingSpawn.y},${editingSpawn.z}`)
+    if (!tile) return null
+    return editingSpawn.spawnType === 'monster' ? tile.spawnMonster : tile.spawnNpc
+  }, [editingSpawn, mapData])
+
+  const handleApplySpawnRadius = useCallback((newRadius: number) => {
+    if (!editingSpawn || !mutatorReady) return
+    mutatorReady.updateSpawnRadius(
+      editingSpawn.x, editingSpawn.y, editingSpawn.z,
+      editingSpawn.spawnType, newRadius,
+    )
+    setEditingSpawn(null)
+  }, [editingSpawn, mutatorReady])
 
   // Derive house name for the currently inspected tile
   const inspectedHouseName = (() => {
@@ -684,6 +733,25 @@ function App() {
           mapVersion={mapData.version}
           onApply={handleApplyProperties}
           onCancel={() => setEditingItem(null)}
+        />
+      )}
+
+      {/* Creature Properties modal */}
+      {editingCreatureData && (
+        <CreaturePropertiesModal
+          creature={editingCreatureData}
+          onApply={handleApplyCreatureProperties}
+          onCancel={() => setEditingCreature(null)}
+        />
+      )}
+
+      {/* Spawn Properties modal */}
+      {editingSpawnData && editingSpawn && (
+        <SpawnPropertiesModal
+          spawnType={editingSpawn.spawnType}
+          currentRadius={editingSpawnData.radius}
+          onApply={handleApplySpawnRadius}
+          onCancel={() => setEditingSpawn(null)}
         />
       )}
 
