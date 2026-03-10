@@ -7,6 +7,7 @@ export function createCreatureHandlers(ctx: ToolContext) {
     label: 'Place creature',
     eraseLabel: 'Remove creature',
     flushChunks: true,
+    sizeOverride: 0,
     isReady: () => {
       const sel = ctx.selectedBrushRef.current
       return sel?.mode === 'creature' || sel?.mode === 'spawn'
@@ -21,7 +22,7 @@ export function createCreatureHandlers(ctx: ToolContext) {
           sel, ctx.mutator, x, y, z,
           { spawnTime: ctx.creatureSpawnTimeRef.current, weight: ctx.creatureWeightRef.current, autoCreateSpawn: settings.autoCreateSpawn },
           ctx.mapData, ctx.mutator.getAppearances(), ctx.mutator.spawnManager!,
-          ctx.brushSizeRef.current,
+          ctx.spawnRadiusRef.current,
         )
       }
     },

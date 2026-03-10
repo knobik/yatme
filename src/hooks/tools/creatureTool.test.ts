@@ -120,17 +120,15 @@ describe('creatureTool', () => {
       expect(args[6]).toBe(ctx.mapData)
     })
 
-    it('uses brush size as spawn radius', () => {
-      const { ctx } = makeToolContext({ selectedBrush: spawnMonsterSel, brushSize: 3 })
+    it('uses spawnRadius for spawn placement', () => {
+      const { ctx } = makeToolContext({ selectedBrush: spawnMonsterSel, spawnRadius: 5 })
       const { onDown } = createCreatureHandlers(ctx)
       onDown({ x: 5, y: 5, z: 7 }, makePointerEvent())
 
-      // With brushSize=3, applyCreatureBrush is called for each tile in the 7x7 area
-      // The spawnRadius param (last arg) is the brushSizeRef value
-      expect(mockApply).toHaveBeenCalled()
-      // Check that the last argument (spawnRadius) passed is 3
+      // Creature tool always paints single tile — spawnRadius is passed to applyCreatureBrush
+      expect(mockApply).toHaveBeenCalledTimes(1)
       const lastCall = mockApply.mock.calls[0]
-      expect(lastCall[lastCall.length - 1]).toBe(3)
+      expect(lastCall[lastCall.length - 1]).toBe(5)
     })
   })
 

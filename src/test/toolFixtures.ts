@@ -70,6 +70,7 @@ export interface MakeToolContextOptions {
   selectedBrush?: BrushSelection | null
   brushSize?: number
   brushShape?: BrushShape
+  spawnRadius?: number
   registry?: BrushRegistry | null
   activeDoorType?: number
   activeTool?: EditorTool
@@ -119,6 +120,7 @@ export function makeToolContext(opts: MakeToolContextOptions = {}) {
     selectedHouseRef: { current: null },
     creatureSpawnTimeRef: { current: 60 },
     creatureWeightRef: { current: 100 },
+    spawnRadiusRef: { current: opts.spawnRadius ?? 1 },
     selectedCreatureRef: { current: null },
     setSelectedCreature: vi.fn(),
     isCreatureDragRef: { current: false },

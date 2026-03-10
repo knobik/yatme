@@ -701,8 +701,8 @@ function App() {
           onCreatureSpawnTimeChange={tools.setCreatureSpawnTime}
           creatureWeight={tools.creatureWeight}
           onCreatureWeightChange={tools.setCreatureWeight}
-          brushSize={tools.brushSize}
-          onBrushSizeChange={tools.setBrushSize}
+          spawnRadius={tools.spawnRadius}
+          onSpawnRadiusChange={tools.setSpawnRadius}
           onClose={() => updateSetting('showCreaturePalette', false)}
         />
       )}

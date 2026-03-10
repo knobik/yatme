@@ -119,23 +119,6 @@ All CSS variables and base classes: `src/styles/theme.css`
 
 - Don't copy code — if you need to write it twice, extract it into a shared utility, hook, or component.
 
-## Workflow
-
-- When working on plans, track progress using the task tool (TaskCreate/TaskUpdate).
-
 ## Documentation Conventions
 
 - When writing diagrams in Markdown files, always use Mermaid syntax (```mermaid code blocks).
-
-## Active Feature: Creature System
-
-**PRD**: `docs/PRD-creatures.md` — Full requirements for monsters, NPCs, spawn zones.
-**Progress**: `docs/PROGRESS-creatures.md` — Task-level checklist with 17 phases and dependency graph.
-
-**Current phase**: Phase 17 (Polish & Testing)
-
-When resuming work on the creature system:
-1. Read `docs/PROGRESS-creatures.md` to find the current phase and next unchecked task.
-2. Read the PRD section relevant to that phase for full context.
-3. After completing a phase, update the progress file (check off tasks) and bump "Current phase" here.
-4. New creature code goes in `src/lib/creatures/` unless modifying existing files.

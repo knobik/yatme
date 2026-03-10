@@ -60,6 +60,8 @@ export interface EditorToolsState {
   setCreatureSpawnTime: (time: number) => void
   creatureWeight: number
   setCreatureWeight: (weight: number) => void
+  spawnRadius: number
+  setSpawnRadius: (radius: number) => void
   selectedCreature: SelectedCreatureInfo | null
   cursorPos: { x: number; y: number; z: number } | null
 }
@@ -87,6 +89,7 @@ export function useEditorTools(
   const [selectedHouse, setSelectedHouse] = useState<HouseData | null>(null)
   const [creatureSpawnTime, setCreatureSpawnTime] = useState(60)
   const [creatureWeight, setCreatureWeight] = useState(100)
+  const [spawnRadius, setSpawnRadius] = useState(1)
   const [selectedCreature, setSelectedCreature] = useState<SelectedCreatureInfo | null>(null)
 
   // ── Refs (avoid stale closures in pointer handlers) ──────────────
@@ -100,6 +103,7 @@ export function useEditorTools(
   const selectedHouseRef = useRef<number | null>(selectedHouse?.id ?? null)
   const creatureSpawnTimeRef = useRef(creatureSpawnTime)
   const creatureWeightRef = useRef(creatureWeight)
+  const spawnRadiusRef = useRef(spawnRadius)
   const onRequestEditItemRef = useRef(onRequestEditItem)
   const onRequestEditCreatureRef = useRef(onRequestEditCreature)
   const onRequestEditSpawnRef = useRef(onRequestEditSpawn)
@@ -115,6 +119,7 @@ export function useEditorTools(
     selectedHouseRef.current = selectedHouse?.id ?? null
     creatureSpawnTimeRef.current = creatureSpawnTime
     creatureWeightRef.current = creatureWeight
+    spawnRadiusRef.current = spawnRadius
     onRequestEditItemRef.current = onRequestEditItem
     onRequestEditCreatureRef.current = onRequestEditCreature
     onRequestEditSpawnRef.current = onRequestEditSpawn
@@ -173,6 +178,7 @@ export function useEditorTools(
       selectedHouseRef,
       creatureSpawnTimeRef,
       creatureWeightRef,
+      spawnRadiusRef,
       selectedCreatureRef,
       setSelectedCreature,
       isCreatureDragRef,
@@ -358,6 +364,8 @@ export function useEditorTools(
     setCreatureSpawnTime,
     creatureWeight,
     setCreatureWeight,
+    spawnRadius,
+    setSpawnRadius,
     selectedCreature,
     cursorPos,
   }

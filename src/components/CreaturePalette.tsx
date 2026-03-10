@@ -14,13 +14,13 @@ interface CreaturePaletteProps {
   creatureDb: CreatureDatabase
   appearances: AppearanceData
   selectedBrush: BrushSelection | null
-  onCreatureSelect: (sel: BrushSelection) => void
+  onCreatureSelect: (sel: BrushSelection | null) => void
   creatureSpawnTime: number
   onCreatureSpawnTimeChange: (t: number) => void
   creatureWeight: number
   onCreatureWeightChange: (w: number) => void
-  brushSize: number
-  onBrushSizeChange: (s: number) => void
+  spawnRadius: number
+  onSpawnRadiusChange: (r: number) => void
   onClose: () => void
   className?: string
   style?: React.CSSProperties
@@ -40,8 +40,8 @@ export function CreaturePalette({
   onCreatureSpawnTimeChange,
   creatureWeight,
   onCreatureWeightChange,
-  brushSize,
-  onBrushSizeChange,
+  spawnRadius,
+  onSpawnRadiusChange,
   onClose,
   className,
   style,
@@ -78,6 +78,9 @@ export function CreaturePalette({
   const handleModeChange = useCallback((mode: 'creature' | 'spawn') => {
     if (mode === 'spawn') {
       onCreatureSelect({ mode: 'spawn', spawnType: isNpc ? 'npc' : 'monster' })
+    } else {
+      // Clear spawn mode — go back to creature mode with no creature selected
+      onCreatureSelect(null)
     }
   }, [isNpc, onCreatureSelect])
 
@@ -200,12 +203,12 @@ export function CreaturePalette({
             <input
               type="number"
               className="w-[64px] rounded-sm bg-bg-raised px-2 py-[3px] font-mono text-xs text-fg outline-none border border-border-subtle focus:border-accent text-right"
-              value={brushSize + 1}
+              value={spawnRadius}
               min={1}
               max={15}
               onChange={e => {
                 const v = parseInt(e.target.value, 10)
-                if (!isNaN(v) && v >= 1 && v <= 15) onBrushSizeChange(v - 1)
+                if (!isNaN(v) && v >= 1 && v <= 15) onSpawnRadiusChange(v)
               }}
             />
           </div>
