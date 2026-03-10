@@ -27,7 +27,7 @@ export function setupEditor(
   spawnManager: SpawnManager | null = null,
   creatureDb: CreatureDatabase | null = null,
 ): EditorInstances {
-  const renderer = new MapRenderer(app, appearances, mapData)
+  const renderer = new MapRenderer(app, appearances, mapData, spawnManager)
   const mutator = new MapMutator(mapData, appearances)
   mutator.brushRegistry = brushRegistry
   mutator.itemRegistry = itemRegistry

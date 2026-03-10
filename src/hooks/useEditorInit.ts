@@ -242,6 +242,10 @@ export function useEditorInit(
       renderer.setShowSelectionBorder(savedSettings.selectionBorder)
       renderer.setShowZoneOverlay(savedSettings.showZoneOverlay)
       renderer.setShowHouseOverlay(savedSettings.showHouseOverlay)
+      renderer.setShowMonsterSpawnOverlay(savedSettings.showMonsterSpawns)
+      renderer.setShowNpcSpawnOverlay(savedSettings.showNpcSpawns)
+      renderer.setShowMonsters(savedSettings.showMonsters)
+      renderer.setShowNpcs(savedSettings.showNpcs)
 
       setLoadingProgress(1)
       setLoadingStatus('Ready')

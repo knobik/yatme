@@ -19,6 +19,13 @@ export interface EditorSettings {
   showZoneOverlay: boolean
   showHousePalette: boolean
   showHouseOverlay: boolean
+
+  // Creatures
+  showMonsters: boolean
+  showMonsterSpawns: boolean
+  showNpcs: boolean
+  showNpcSpawns: boolean
+  autoCreateSpawn: boolean
 }
 
 export const DEFAULT_SETTINGS: EditorSettings = {
@@ -34,7 +41,15 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   showZoneOverlay: false,
   showHousePalette: false,
   showHouseOverlay: false,
+  showMonsters: true,
+  showMonsterSpawns: true,
+  showNpcs: true,
+  showNpcSpawns: true,
+  autoCreateSpawn: true,
 }
+
+/** Union of all boolean keys in EditorSettings — used to type-check toggle callbacks. */
+export type BooleanSettingKey = { [K in keyof EditorSettings]: EditorSettings[K] extends boolean ? K : never }[keyof EditorSettings]
 
 const SETTINGS_KEY = 'tibia-editor-settings'
 
@@ -71,21 +86,18 @@ export function importSettings(json: string): EditorSettings | null {
   }
 }
 
+const VALID_FLOOR_VIEW_MODES = new Set(['single', 'current-below', 'all'])
+
 function mergeWithDefaults(parsed: Record<string, unknown>): EditorSettings {
   const s = { ...DEFAULT_SETTINGS }
-  if (parsed.floorViewMode === 'single' || parsed.floorViewMode === 'current-below' || parsed.floorViewMode === 'all') {
-    s.floorViewMode = parsed.floorViewMode
+  if (VALID_FLOOR_VIEW_MODES.has(parsed.floorViewMode as string)) {
+    s.floorViewMode = parsed.floorViewMode as EditorSettings['floorViewMode']
   }
-  if (typeof parsed.showTransparentUpper === 'boolean') s.showTransparentUpper = parsed.showTransparentUpper
-  if (typeof parsed.showLights === 'boolean') s.showLights = parsed.showLights
-  if (typeof parsed.selectionBorder === 'boolean') s.selectionBorder = parsed.selectionBorder
-  if (typeof parsed.showPalette === 'boolean') s.showPalette = parsed.showPalette
-  if (typeof parsed.clickToInspect === 'boolean') s.clickToInspect = parsed.clickToInspect
-  if (typeof parsed.autoMagic === 'boolean') s.autoMagic = parsed.autoMagic
-  if (typeof parsed.mergePaste === 'boolean') s.mergePaste = parsed.mergePaste
-  if (typeof parsed.showZonePalette === 'boolean') s.showZonePalette = parsed.showZonePalette
-  if (typeof parsed.showZoneOverlay === 'boolean') s.showZoneOverlay = parsed.showZoneOverlay
-  if (typeof parsed.showHousePalette === 'boolean') s.showHousePalette = parsed.showHousePalette
-  if (typeof parsed.showHouseOverlay === 'boolean') s.showHouseOverlay = parsed.showHouseOverlay
+  for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof EditorSettings)[]) {
+    if (key === 'floorViewMode') continue
+    if (typeof parsed[key] === typeof DEFAULT_SETTINGS[key]) {
+      ;(s as Record<string, unknown>)[key] = parsed[key]
+    }
+  }
   return s
 }

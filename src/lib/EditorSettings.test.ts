@@ -42,6 +42,24 @@ describe('EditorSettings', () => {
       saveSettings(custom)
       expect(loadSettings()).toEqual(custom)
     })
+
+    it('persists and restores creature settings', () => {
+      const custom = {
+        ...DEFAULT_SETTINGS,
+        showMonsters: false,
+        showMonsterSpawns: false,
+        showNpcs: false,
+        showNpcSpawns: false,
+        autoCreateSpawn: false,
+      }
+      saveSettings(custom)
+      const loaded = loadSettings()
+      expect(loaded.showMonsters).toBe(false)
+      expect(loaded.showMonsterSpawns).toBe(false)
+      expect(loaded.showNpcs).toBe(false)
+      expect(loaded.showNpcSpawns).toBe(false)
+      expect(loaded.autoCreateSpawn).toBe(false)
+    })
   })
 
   describe('importSettings', () => {

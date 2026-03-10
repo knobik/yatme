@@ -6,6 +6,8 @@ import { SelectionOverlay } from './SelectionOverlay'
 import { ZoneOverlay } from './ZoneOverlay'
 import { HouseOverlay } from './HouseOverlay'
 import { BoundaryOverlay } from './BoundaryOverlay'
+import { SpawnOverlay } from './creatures/SpawnOverlay'
+import { SpawnManager } from './creatures/SpawnManager'
 import { FloorManager } from './FloorManager'
 import { LightEngine } from './LightEngine'
 import { setupMapInput, type InputHost } from './InputHandler'
@@ -33,6 +35,8 @@ export class MapRenderer implements InputHost {
   private selection: SelectionOverlay
   private zoneOverlay: ZoneOverlay
   private houseOverlay: HouseOverlay
+  private monsterSpawnOverlay: SpawnOverlay
+  private npcSpawnOverlay: SpawnOverlay
   private boundaryOverlay: BoundaryOverlay
   private floorManager: FloorManager
   private chunkManager: ChunkManager
@@ -63,7 +67,7 @@ export class MapRenderer implements InputHost {
   /** Set by drag sources (Inspector/Palette) so dragover can show a ghost preview. */
   dragPreviewItemId: number | null = null
 
-  constructor(app: Application, appearances: AppearanceData, mapData: OtbmMap) {
+  constructor(app: Application, appearances: AppearanceData, mapData: OtbmMap, spawnManager?: SpawnManager | null) {
     this.app = app
     this.mapData = mapData
     this.appearances = appearances
@@ -78,6 +82,11 @@ export class MapRenderer implements InputHost {
     this.zoneOverlay = new ZoneOverlay()
     this.houseOverlay = new HouseOverlay()
     this.boundaryOverlay = new BoundaryOverlay()
+
+    // Spawn overlays
+    const sm = spawnManager ?? new SpawnManager()
+    this.monsterSpawnOverlay = new SpawnOverlay(sm, 'monster', 0xCC4400, 0xFF6600)
+    this.npcSpawnOverlay = new SpawnOverlay(sm, 'npc', 0x2288CC, 0x44BBFF)
 
     // Chunk manager
     const { index, animatedKeys } = buildChunkIndex(mapData.tiles, appearances)
@@ -105,6 +114,10 @@ export class MapRenderer implements InputHost {
     // House overlay (between zone overlay and selection overlay)
     this.mapContainer.addChild(this.houseOverlay.container)
 
+    // Spawn overlays (between house overlay and selection overlay)
+    this.mapContainer.addChild(this.monsterSpawnOverlay.container)
+    this.mapContainer.addChild(this.npcSpawnOverlay.container)
+
     // Selection overlay (added to mapContainer; FloorManager keeps it on top)
     this.mapContainer.addChild(this.selection.container)
 
@@ -118,6 +131,8 @@ export class MapRenderer implements InputHost {
       this.boundaryOverlay.container,
       this.zoneOverlay.container,
       this.houseOverlay.container,
+      this.monsterSpawnOverlay.container,
+      this.npcSpawnOverlay.container,
       this.selection.container,
       this.lightEngine.container,
     )
@@ -168,6 +183,8 @@ export class MapRenderer implements InputHost {
     this.recycleAllChunks()
     this.zoneOverlay.markDirty()
     this.houseOverlay.markDirty()
+    this.monsterSpawnOverlay.markDirty()
+    this.npcSpawnOverlay.markDirty()
     this.notifyCamera()
   }
 
@@ -224,6 +241,8 @@ export class MapRenderer implements InputHost {
     this.lightEngine.markDirty()
     this.zoneOverlay.invalidateChunks(keys)
     this.houseOverlay.invalidateChunks(keys)
+    this.monsterSpawnOverlay.invalidateChunks(keys)
+    this.npcSpawnOverlay.invalidateChunks(keys)
   }
 
   /** Update the chunk index when a tile is created or modified. */
@@ -274,6 +293,30 @@ export class MapRenderer implements InputHost {
   paintHouseTile(x: number, y: number): void {
     this.houseOverlay.paintTile(x, y, this.camera.floor)
   }
+
+  // ── Spawn overlays ──────────────────────────────────────────
+
+  setShowMonsterSpawnOverlay(enabled: boolean): void {
+    this.monsterSpawnOverlay.setVisible(enabled)
+  }
+
+  setShowNpcSpawnOverlay(enabled: boolean): void {
+    this.npcSpawnOverlay.setVisible(enabled)
+  }
+
+  markMonsterSpawnOverlayDirty(): void {
+    this.monsterSpawnOverlay.markDirty()
+  }
+
+  markNpcSpawnOverlayDirty(): void {
+    this.npcSpawnOverlay.markDirty()
+  }
+
+  /** Stub for Phase 7 — toggle monster sprite rendering. */
+  setShowMonsters(_v: boolean): void { /* Phase 7 */ }
+
+  /** Stub for Phase 7 — toggle NPC sprite rendering. */
+  setShowNpcs(_v: boolean): void { /* Phase 7 */ }
 
   get showLights(): boolean { return this.lightEngine.enabled }
 
@@ -464,6 +507,12 @@ export class MapRenderer implements InputHost {
 
     this.houseOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
     this.houseOverlay.rebuild(this.camera.floor, this.chunkManager.index)
+
+    this.monsterSpawnOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
+    this.monsterSpawnOverlay.rebuild(this.camera.floor, this.chunkManager.index)
+
+    this.npcSpawnOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
+    this.npcSpawnOverlay.rebuild(this.camera.floor, this.chunkManager.index)
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────
@@ -478,6 +527,8 @@ export class MapRenderer implements InputHost {
     this._cleanupInput?.()
     this.recycleAllChunks()
     this.lightEngine.destroy()
+    this.npcSpawnOverlay.destroy()
+    this.monsterSpawnOverlay.destroy()
     this.houseOverlay.destroy()
     this.zoneOverlay.destroy()
     this.boundaryOverlay.destroy()

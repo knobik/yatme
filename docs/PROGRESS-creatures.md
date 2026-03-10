@@ -52,36 +52,36 @@
 
 > Adds settings + App.tsx state + hamburger menu entries. No rendering yet — just the wiring.
 
-- [ ] Add `showMonsters: boolean` (default `true`) to `EditorSettings`
-- [ ] Add `showMonsterSpawns: boolean` (default `true`) to `EditorSettings`
-- [ ] Add `showNpcs: boolean` (default `true`) to `EditorSettings`
-- [ ] Add `showNpcSpawns: boolean` (default `true`) to `EditorSettings`
-- [ ] Add `autoCreateSpawn: boolean` (default `true`) to `EditorSettings`
-- [ ] Update `mergeWithDefaults()` to parse new settings
-- [ ] Add `useState` for all 4 show states in `App.tsx`
-- [ ] Add toggle callbacks for each setting
-- [ ] Sync in `handleSettingsChange`
-- [ ] Add "Show Monsters" toggle entry in hamburger menu
-- [ ] Add "Show Monster Spawns" toggle entry in hamburger menu
-- [ ] Add "Show NPCs" toggle entry in hamburger menu
-- [ ] Add "Show NPC Spawns" toggle entry in hamburger menu
+- [x] Add `showMonsters: boolean` (default `true`) to `EditorSettings`
+- [x] Add `showMonsterSpawns: boolean` (default `true`) to `EditorSettings`
+- [x] Add `showNpcs: boolean` (default `true`) to `EditorSettings`
+- [x] Add `showNpcSpawns: boolean` (default `true`) to `EditorSettings`
+- [x] Add `autoCreateSpawn: boolean` (default `true`) to `EditorSettings`
+- [x] Update `mergeWithDefaults()` to parse new settings
+- [x] Add `useState` for all 4 show states in `App.tsx`
+- [x] Add toggle callbacks for each setting
+- [x] Sync in `handleSettingsChange`
+- [x] Add "Show Monsters" toggle entry in hamburger menu
+- [x] Add "Show Monster Spawns" toggle entry in hamburger menu
+- [x] Add "Show NPCs" toggle entry in hamburger menu
+- [x] Add "Show NPC Spawns" toggle entry in hamburger menu
 
 ## Phase 5: Spawn Zone Overlays
 
 > Overlay rendering classes + MapRenderer wiring. Depends on Phase 2 (SpawnManager) and Phase 4 (settings).
 
-- [ ] Create `MonsterSpawnOverlay` class (warm red/orange tint, intensity *= 0.7 per overlapping spawn)
-- [ ] Create `NpcSpawnOverlay` class (cool blue/cyan tint, same overlap behavior)
-- [ ] Spawn center indicator (distinct icon/border on center tile vs covered tiles)
-- [ ] Add `MonsterSpawnOverlay` + `NpcSpawnOverlay` instances to `MapRenderer`
-- [ ] Wire overlays into `update()` render loop
-- [ ] Wire overlays into `destroy()` cleanup
-- [ ] Wire overlays into `recycleAllChunks()`
-- [ ] Add overlays to `FloorManager` overlay list
-- [ ] Add `setShowMonsterSpawnOverlay(v)` / `setShowNpcSpawnOverlay(v)` methods on renderer
-- [ ] Add `setShowMonsters(v)` / `setShowNpcs(v)` methods on renderer (for creature sprite visibility later)
-- [ ] Sync saved settings to renderer on init in `useEditorInit.ts`
-- [ ] Tests: overlay renders for tiles with spawn coverage, intensity with overlapping zones, toggle on/off
+- [x] Create `SpawnOverlay` parameterized class (single class for both monster/NPC, warm red/orange for monsters, cool blue/cyan for NPCs)
+- [x] Spawn center indicator (distinct brighter color + higher alpha on center tile vs covered tiles)
+- [x] Add monster + NPC `SpawnOverlay` instances to `MapRenderer`
+- [x] Wire overlays into `update()` render loop
+- [x] Wire overlays into `destroy()` cleanup
+- [x] Wire overlays into `invalidateChunks()`
+- [x] Add overlays to `FloorManager` overlay list
+- [x] Add `setShowMonsterSpawnOverlay(v)` / `setShowNpcSpawnOverlay(v)` methods on renderer
+- [x] Add `setShowMonsters(v)` / `setShowNpcs(v)` stub methods on renderer (for creature sprite visibility later)
+- [x] Sync saved settings to renderer on init in `useEditorInit.ts`
+- [x] Wire renderer calls in `App.tsx` toggle callbacks and `handleSettingsChange`
+- [x] Tests: overlay renders for tiles with spawn coverage, intensity with overlapping zones, spawn center detection, toggle on/off
 
 ## Phase 6: Creature Sprite Resolution
 

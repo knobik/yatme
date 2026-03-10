@@ -3,14 +3,15 @@ import type { OtbmMap, OtbmTile } from '../lib/otbm'
 
 /**
  * Pre-computes tile counts grouped by an ID extracted from each tile.
- * Returns a Map<id, count> that updates when any dependency changes.
+ * Returns a Map<id, count> that updates when mapData, extractor, or
+ * invalidationKey changes. The invalidationKey is an intentional
+ * cache-buster (e.g. sidecars) that signals tile data has mutated.
  */
 export function useTileCounts(
   mapData: OtbmMap | null,
   extractor: (tile: OtbmTile) => number[],
-  deps: React.DependencyList,
+  invalidationKey: unknown,
 ): Map<number, number> {
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   return useMemo(() => {
     const counts = new Map<number, number>()
     if (mapData) {
@@ -21,5 +22,6 @@ export function useTileCounts(
       }
     }
     return counts
-  }, [mapData, ...deps])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- invalidationKey is an intentional cache-buster
+  }, [mapData, extractor, invalidationKey])
 }

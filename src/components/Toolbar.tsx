@@ -18,6 +18,7 @@ import {
   ArrowCounterClockwiseIcon, ArrowClockwiseIcon, SquareIcon, CircleIcon,
   HouseIcon,
 } from '@phosphor-icons/react'
+import type { EditorSettings, BooleanSettingKey } from '../lib/EditorSettings'
 
 interface ToolbarProps {
   activeTool: EditorTool
@@ -39,10 +40,6 @@ interface ToolbarProps {
   onGoToPosition: () => void
   onFindItem: () => void
   onReplaceItems: () => void
-  showPalette: boolean
-  onTogglePalette: () => void
-  showLights: boolean
-  onToggleLights: () => void
   onOpenSettings: () => void
   onOpenMapProperties: () => void
   hasMap: boolean
@@ -59,21 +56,15 @@ interface ToolbarProps {
   onDoorTypeChange: (type: number) => void
   onSave: () => void
   canSave: boolean
-  showZonePalette: boolean
-  onToggleZonePalette: () => void
-  showZoneOverlay: boolean
-  onToggleZoneOverlay: () => void
   selectedZone: ZoneSelection | null
   onZoneSelect: (zone: ZoneSelection) => void
   onExportZones: () => void
   onImportZones: () => void
-  showHousePalette: boolean
-  onToggleHousePalette: () => void
-  showHouseOverlay: boolean
-  onToggleHouseOverlay: () => void
   onExportHouses: () => void
   onImportHouses: () => void
   onOpenEditTowns: () => void
+  editorSettings: EditorSettings
+  onToggleSetting: (key: BooleanSettingKey) => void
 }
 
 const BRUSH_SIZES = [
@@ -131,8 +122,6 @@ export function Toolbar({
   onOpenSettings,
   onOpenMapProperties,
   hasMap,
-  showPalette,
-  onTogglePalette,
   onZoomIn,
   onZoomOut,
   onResetZoom,
@@ -144,25 +133,17 @@ export function Toolbar({
   onBrushShapeChange,
   activeDoorType,
   onDoorTypeChange,
-  showLights,
-  onToggleLights,
   onSave,
   canSave,
-  showZonePalette,
-  onToggleZonePalette,
-  showZoneOverlay,
-  onToggleZoneOverlay,
   selectedZone,
   onZoneSelect,
   onExportZones,
   onImportZones,
-  showHousePalette,
-  onToggleHousePalette,
-  showHouseOverlay,
-  onToggleHouseOverlay,
   onExportHouses,
   onImportHouses,
   onOpenEditTowns,
+  editorSettings,
+  onToggleSetting,
 }: ToolbarProps) {
   const previewId = selectedBrush ? getSelectionPreviewId(selectedBrush, brushRegistry) : 0
   const brushLabel = selectedBrush
@@ -213,13 +194,18 @@ export function Toolbar({
     {
       title: 'View',
       items: [
-        { label: 'Brush Palette', shortcut: 'P', checked: showPalette, onClick: onTogglePalette },
-        { label: 'Zone Palette', shortcut: 'Z', checked: showZonePalette, onClick: onToggleZonePalette },
-        { label: 'House Palette', shortcut: 'H', checked: showHousePalette, onClick: onToggleHousePalette },
+        { label: 'Brush Palette', shortcut: 'P', checked: editorSettings.showPalette, onClick: () => onToggleSetting('showPalette') },
+        { label: 'Zone Palette', shortcut: 'Z', checked: editorSettings.showZonePalette, onClick: () => onToggleSetting('showZonePalette') },
+        { label: 'House Palette', shortcut: 'H', checked: editorSettings.showHousePalette, onClick: () => onToggleSetting('showHousePalette') },
         'separator',
-        { label: 'Show Zones', checked: showZoneOverlay, onClick: onToggleZoneOverlay },
-        { label: 'Show Houses', checked: showHouseOverlay, onClick: onToggleHouseOverlay },
-        { label: 'Show Lights', shortcut: 'L', checked: showLights, onClick: onToggleLights },
+        { label: 'Show Zones', checked: editorSettings.showZoneOverlay, onClick: () => onToggleSetting('showZoneOverlay') },
+        { label: 'Show Houses', checked: editorSettings.showHouseOverlay, onClick: () => onToggleSetting('showHouseOverlay') },
+        { label: 'Show Lights', shortcut: 'L', checked: editorSettings.showLights, onClick: () => onToggleSetting('showLights') },
+        'separator',
+        { label: 'Show Monsters', checked: editorSettings.showMonsters, onClick: () => onToggleSetting('showMonsters') },
+        { label: 'Show Monster Spawns', checked: editorSettings.showMonsterSpawns, onClick: () => onToggleSetting('showMonsterSpawns') },
+        { label: 'Show NPCs', checked: editorSettings.showNpcs, onClick: () => onToggleSetting('showNpcs') },
+        { label: 'Show NPC Spawns', checked: editorSettings.showNpcSpawns, onClick: () => onToggleSetting('showNpcSpawns') },
         'separator',
         { label: 'Zoom In', shortcut: 'Ctrl+=', onClick: onZoomIn },
         { label: 'Zoom Out', shortcut: 'Ctrl+-', onClick: onZoomOut },

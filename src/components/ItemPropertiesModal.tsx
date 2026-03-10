@@ -94,8 +94,10 @@ export function ItemPropertiesModal({
     item.items ? item.items.map(i => ({ ...i })) : []
   )
   const [editingSlot, setEditingSlot] = useState<number | null>(null)
+  const [dragIndex, setDragIndexState] = useState<number | null>(null)
   const dragIndexRef = useRef<number | null>(null)
-  const [dragging, setDragging] = useState(false)
+  const dragging = dragIndex !== null
+  const setDragIndex = (v: number | null) => { dragIndexRef.current = v; setDragIndexState(v) }
 
   // Separate state for teleport destination and count/charges (not part of attribute map).
   // RME convention: stackable items use item.count as "count", charged items use item.count
@@ -121,8 +123,8 @@ export function ItemPropertiesModal({
       updated.splice(insertAt, 0, moved)
       return updated
     })
-    dragIndexRef.current = targetIndex
-  }, [containerItems.length])
+    setDragIndex(targetIndex)
+  }, [setContainerItems, containerItems.length])
 
   // Focus trap — click outside closes
   const handleScrimClick = (e: React.MouseEvent) => {
@@ -308,7 +310,7 @@ export function ItemPropertiesModal({
               <div className="grid grid-cols-6 gap-1">
                 {Array.from({ length: containerSize }, (_, i) => {
                   const slotItem = containerItems[i]
-                  const isDragSource = dragging && dragIndexRef.current === i
+                  const isDragSource = dragging && dragIndex === i
                   return (
                     <div
                       key={i}
@@ -323,13 +325,11 @@ export function ItemPropertiesModal({
                       onClick={slotItem && !dragging ? () => setEditingSlot(i) : undefined}
                       draggable={!!slotItem}
                       onDragStart={slotItem ? (e) => {
-                        dragIndexRef.current = i
-                        setDragging(true)
+                        setDragIndex(i)
                         e.dataTransfer.effectAllowed = 'move'
                       } : undefined}
                       onDragEnd={() => {
-                        dragIndexRef.current = null
-                        setDragging(false)
+                        setDragIndex(null)
                       }}
                       onDragOver={(e) => {
                         if (dragIndexRef.current === null) return

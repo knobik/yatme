@@ -21,7 +21,8 @@ import { SettingsModal } from './components/SettingsModal'
 import { MapPropertiesModal, type MapPropertiesPatch } from './components/MapPropertiesModal'
 import { EditTownsModal } from './components/EditTownsModal'
 import { SaveToast } from './components/SaveToast'
-import { loadSettings, saveSettings, type EditorSettings } from './lib/EditorSettings'
+import { loadSettings, saveSettings, type EditorSettings, type BooleanSettingKey } from './lib/EditorSettings'
+import type { MapRenderer as MapRendererType } from './lib/MapRenderer'
 import { findEntryInTilesets } from './lib/tilesets/TilesetLoader'
 import { ZONE_FLAG_DEFS, type BrushSelection } from './hooks/tools/types'
 import { scrubZoneFromTiles } from './lib/zoneCleanup'
@@ -38,6 +39,18 @@ import { useToolAutoToggle } from './hooks/useToolAutoToggle'
 import { FloorSelector } from './components/FloorSelector'
 import { LoadingOverlay } from './components/LoadingOverlay'
 import { HudField } from './components/HudField'
+
+/** Maps boolean setting keys to their corresponding MapRenderer method calls. */
+const RENDERER_SYNC: Partial<Record<BooleanSettingKey, (r: MapRendererType, v: boolean) => void>> = {
+  showLights: (r, v) => r.setShowLights(v),
+  selectionBorder: (r, v) => r.setShowSelectionBorder(v),
+  showZoneOverlay: (r, v) => r.setShowZoneOverlay(v),
+  showHouseOverlay: (r, v) => r.setShowHouseOverlay(v),
+  showMonsterSpawns: (r, v) => r.setShowMonsterSpawnOverlay(v),
+  showNpcSpawns: (r, v) => r.setShowNpcSpawnOverlay(v),
+  showMonsters: (r, v) => r.setShowMonsters(v),
+  showNpcs: (r, v) => r.setShowNpcs(v),
+}
 
 /** Compute left offset for elements that need to dodge all left-side panels. */
 function computeLeftOffset(palette: boolean, inspector: boolean, findItem: boolean, replaceItems: boolean): string {
@@ -64,12 +77,6 @@ function App() {
   const [itemRegistry, setItemRegistry] = useState<ItemRegistry | null>(null)
   const [appearancesData, setAppearancesData] = useState<AppearanceData | null>(null)
   const [initialSettings] = useState(() => loadSettings())
-  const [showPalette, setShowPalette] = useState(initialSettings.showPalette)
-  const [showLights, setShowLights] = useState(initialSettings.showLights)
-  const [showZonePalette, setShowZonePalette] = useState(initialSettings.showZonePalette)
-  const [showZoneOverlay, setShowZoneOverlay] = useState(initialSettings.showZoneOverlay)
-  const [showHousePalette, setShowHousePalette] = useState(initialSettings.showHousePalette)
-  const [showHouseOverlay, setShowHouseOverlay] = useState(initialSettings.showHouseOverlay)
   const [placingHouseExit, setPlacingHouseExit] = useState<number | null>(null)
   const placingHouseExitRef = useRef<number | null>(null)
 
@@ -117,6 +124,30 @@ function App() {
     setTileVersion, setPlacingHouseExit, placingHouseExitRef, toolsRef,
   })
 
+  // ── Settings helpers ─────────────────────────────────────────────
+  /** Update a single boolean setting, sync renderer if applicable, and persist. */
+  const updateSetting = useCallback((key: BooleanSettingKey, value: boolean) => {
+    setEditorSettings(prev => {
+      const next = { ...prev, [key]: value }
+      const r = rendererRef.current
+      if (r) RENDERER_SYNC[key]?.(r, value)
+      saveSettings(next)
+      return next
+    })
+  }, [rendererRef])
+
+  /** Toggle a boolean setting, sync renderer if applicable, and persist. */
+  const toggleSetting = useCallback((key: BooleanSettingKey) => {
+    setEditorSettings(prev => {
+      const value = !prev[key]
+      const next = { ...prev, [key]: value }
+      const r = rendererRef.current
+      if (r) RENDERER_SYNC[key]?.(r, value)
+      saveSettings(next)
+      return next
+    })
+  }, [rendererRef])
+
   // ── Context Menu ───────────────────────────────────────────────────
   const navigatePaletteAndDraw = useCallback((selection: BrushSelection, primaryCategory: CategoryType) => {
     const location = findEntryInTilesets(tilesets, (entry) => {
@@ -138,9 +169,8 @@ function App() {
       paletteRef.current?.navigateTo('all', 'ALL')
     }
 
-    setShowPalette(true)
-    setEditorSettings(s => { const u = { ...s, showPalette: true }; saveSettings(u); return u })
-  }, [tools, tilesets])
+    updateSetting('showPalette', true)
+  }, [tools, tilesets, updateSetting])
 
   const handleSelectAsRaw = useCallback((itemId: number) => {
     navigatePaletteAndDraw({ mode: 'raw', itemId }, 'items')
@@ -199,18 +229,8 @@ function App() {
   })
 
   // ── Auto-toggle overlay/palette when zone or house tool is active ───
-  useToolAutoToggle(
-    tools.activeTool, 'zone',
-    { show: showZoneOverlay, setShow: setShowZoneOverlay, rendererSet: (v) => rendererRef.current?.setShowZoneOverlay(v), settingsKey: 'showZoneOverlay' },
-    { show: showZonePalette, setShow: setShowZonePalette, settingsKey: 'showZonePalette' },
-    setEditorSettings,
-  )
-  useToolAutoToggle(
-    tools.activeTool, 'house',
-    { show: showHouseOverlay, setShow: setShowHouseOverlay, rendererSet: (v) => rendererRef.current?.setShowHouseOverlay(v), settingsKey: 'showHouseOverlay' },
-    { show: showHousePalette, setShow: setShowHousePalette, settingsKey: 'showHousePalette' },
-    setEditorSettings,
-  )
+  useToolAutoToggle(tools.activeTool, 'zone', 'showZoneOverlay', 'showZonePalette', editorSettings, updateSetting)
+  useToolAutoToggle(tools.activeTool, 'house', 'showHouseOverlay', 'showHousePalette', editorSettings, updateSetting)
 
   useEffect(() => {
     if (rendererReady) {
@@ -266,9 +286,8 @@ function App() {
   }, [rendererReady, tools, mapData])
 
   const handleClosePalette = useCallback(() => {
-    setShowPalette(false)
-    setEditorSettings(s => { const u = { ...s, showPalette: false }; saveSettings(u); return u })
-  }, [])
+    updateSetting('showPalette', false)
+  }, [updateSetting])
 
   const handleZoomIn = useCallback(() => { rendererRef.current?.zoomIn() }, [rendererRef])
   const handleZoomOut = useCallback(() => { rendererRef.current?.zoomOut() }, [rendererRef])
@@ -278,17 +297,10 @@ function App() {
     setEditorSettings(next)
     const r = rendererRef.current
     if (r) {
-      r.setShowLights(next.showLights)
-      r.setShowSelectionBorder(next.selectionBorder)
-      r.setShowZoneOverlay(next.showZoneOverlay)
-      r.setShowHouseOverlay(next.showHouseOverlay)
+      for (const [key, sync] of Object.entries(RENDERER_SYNC)) {
+        sync(r, next[key as keyof EditorSettings] as boolean)
+      }
     }
-    setShowPalette(next.showPalette)
-    setShowLights(next.showLights)
-    setShowZonePalette(next.showZonePalette)
-    setShowZoneOverlay(next.showZoneOverlay)
-    setShowHousePalette(next.showHousePalette)
-    setShowHouseOverlay(next.showHouseOverlay)
     saveSettings(next)
   }, [rendererRef])
 
@@ -322,13 +334,10 @@ function App() {
   const { borderizeCurrentSelection, randomizeCurrentSelection } = useKeyboardShortcuts({
     toolsRef, mutatorRef, rendererRef,
     handleSave, handleFloorChange,
-    showPalette, setShowPalette,
-    showLights, setShowLights,
+    editorSettings, toggleSetting,
     showGoToDialog, setShowGoToDialog,
     showFindItem, setShowFindItem,
     showReplaceItems, setShowReplaceItems,
-    showZonePalette,
-    setEditorSettings,
     selectedTilePos, setSelectedTilePos,
     contextMenu, setContextMenu,
     placingHouseExit, setPlacingHouseExit,
@@ -412,23 +421,6 @@ function App() {
           onOpenMapProperties={() => setShowMapProperties(true)}
           onOpenEditTowns={() => setShowEditTowns(true)}
           hasMap={!!mapData}
-          showPalette={showPalette}
-          onTogglePalette={() => {
-            setShowPalette(prev => {
-              const next = !prev
-              setEditorSettings(s => { const u = { ...s, showPalette: next }; saveSettings(u); return u })
-              return next
-            })
-          }}
-          showLights={showLights}
-          onToggleLights={() => {
-            setShowLights(prev => {
-              const next = !prev
-              rendererRef.current?.setShowLights(next)
-              setEditorSettings(s => { const u = { ...s, showLights: next }; saveSettings(u); return u })
-              return next
-            })
-          }}
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onResetZoom={handleResetZoom}
@@ -442,23 +434,6 @@ function App() {
           onDoorTypeChange={tools.setActiveDoorType}
           onSave={handleSave}
           canSave={!!mapData}
-          showZonePalette={showZonePalette}
-          onToggleZonePalette={() => {
-            setShowZonePalette(prev => {
-              const next = !prev
-              setEditorSettings(s => { const u = { ...s, showZonePalette: next }; saveSettings(u); return u })
-              return next
-            })
-          }}
-          showZoneOverlay={showZoneOverlay}
-          onToggleZoneOverlay={() => {
-            setShowZoneOverlay(prev => {
-              const next = !prev
-              rendererRef.current?.setShowZoneOverlay(next)
-              setEditorSettings(s => { const u = { ...s, showZoneOverlay: next }; saveSettings(u); return u })
-              return next
-            })
-          }}
           selectedZone={tools.selectedZone}
           onZoneSelect={(zone) => {
             tools.setSelectedZone(zone)
@@ -466,25 +441,10 @@ function App() {
           }}
           onExportZones={handleExportZones}
           onImportZones={handleImportZones}
-          showHousePalette={showHousePalette}
-          onToggleHousePalette={() => {
-            setShowHousePalette(prev => {
-              const next = !prev
-              setEditorSettings(s => { const u = { ...s, showHousePalette: next }; saveSettings(u); return u })
-              return next
-            })
-          }}
-          showHouseOverlay={showHouseOverlay}
-          onToggleHouseOverlay={() => {
-            setShowHouseOverlay(prev => {
-              const next = !prev
-              rendererRef.current?.setShowHouseOverlay(next)
-              setEditorSettings(s => { const u = { ...s, showHouseOverlay: next }; saveSettings(u); return u })
-              return next
-            })
-          }}
           onExportHouses={handleExportHouses}
           onImportHouses={handleImportHouses}
+          editorSettings={editorSettings}
+          onToggleSetting={toggleSetting}
         />
       )}
 
@@ -519,7 +479,7 @@ function App() {
           selectedItems={tools.selectedItems}
           onNavigate={handleGoToPosition}
           onClose={() => setShowFindItem(false)}
-          left={computeLeftOffset(showPalette, !!selectedTilePos, false, false)}
+          left={computeLeftOffset(editorSettings.showPalette, !!selectedTilePos, false, false)}
         />
       )}
 
@@ -533,7 +493,7 @@ function App() {
           hasSelection={tools.hasSelection}
           selectedItems={tools.selectedItems}
           onClose={() => setShowReplaceItems(false)}
-          left={computeLeftOffset(showPalette, !!selectedTilePos, false, false)}
+          left={computeLeftOffset(editorSettings.showPalette, !!selectedTilePos, false, false)}
         />
       )}
 
@@ -567,7 +527,7 @@ function App() {
       )}
 
       {/* Brush palette — left side */}
-      {!loading && showPalette && itemRegistry && appearancesData && (
+      {!loading && editorSettings.showPalette && itemRegistry && appearancesData && (
         <BrushPalette
           ref={paletteRef}
           tilesets={tilesets}
@@ -583,7 +543,7 @@ function App() {
       )}
 
       {/* Zone palette — right side */}
-      {!loading && showZonePalette && (
+      {!loading && editorSettings.showZonePalette && (
         <ZonePalette
           sidecars={sidecarsData}
           onSidecarsChange={setSidecarsData}
@@ -616,17 +576,14 @@ function App() {
           }}
           onExportZones={handleExportZones}
           onImportZones={handleImportZones}
-          onClose={() => {
-            setShowZonePalette(false)
-            setEditorSettings(s => { const u = { ...s, showZonePalette: false }; saveSettings(u); return u })
-          }}
+          onClose={() => updateSetting('showZonePalette', false)}
         />
       )}
 
       {/* House palette — right side */}
-      {!loading && showHousePalette && (
+      {!loading && editorSettings.showHousePalette && (
         <HousePalette
-          className={showZonePalette ? 'right-[336px]' : undefined}
+          className={editorSettings.showZonePalette ? 'right-[336px]' : undefined}
           sidecars={sidecarsData}
           onSidecarsChange={setSidecarsData}
           mapData={mapData}
@@ -659,10 +616,7 @@ function App() {
           }}
           onExportHouses={handleExportHouses}
           onImportHouses={handleImportHouses}
-          onClose={() => {
-            setShowHousePalette(false)
-            setEditorSettings(s => { const u = { ...s, showHousePalette: false }; saveSettings(u); return u })
-          }}
+          onClose={() => updateSetting('showHousePalette', false)}
         />
       )}
 
@@ -688,7 +642,7 @@ function App() {
           onSelectAsBrush={handleSelectAsBrush}
           selectedItems={tools.selectedItems}
           onItemSelectionChange={handleItemSelectionChange}
-          offset={showPalette}
+          offset={editorSettings.showPalette}
           onEditItem={handleRequestEditItem}
           onDragToMap={(itemId) => { if (rendererRef.current) rendererRef.current.dragPreviewItemId = itemId }}
           onDragToMapEnd={() => { if (rendererRef.current) { rendererRef.current.dragPreviewItemId = null; rendererRef.current.clearGhostPreview() } }}
@@ -712,7 +666,7 @@ function App() {
       {!loading && (
         <div
           className="panel absolute bottom-4 z-10 flex h-[48px] items-center gap-6 px-5 pointer-events-auto select-none transition-[left] duration-[180ms] ease-out"
-          style={{ left: computeLeftOffset(showPalette, !!selectedTilePos, showFindItem, showReplaceItems) }}
+          style={{ left: computeLeftOffset(editorSettings.showPalette, !!selectedTilePos, showFindItem, showReplaceItems) }}
         >
           <HudField label="POS" value={tools.cursorPos ? `${tools.cursorPos.x}, ${tools.cursorPos.y}, ${tools.cursorPos.z}` : '—'} />
           <div className="h-[16px] w-px shrink-0 bg-border-subtle" />

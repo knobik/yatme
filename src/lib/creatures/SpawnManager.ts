@@ -4,8 +4,8 @@ import type { Position } from './types'
 export class SpawnManager {
   readonly monsterSpawns = new Set<string>()
   readonly npcSpawns = new Set<string>()
-  private monsterSpawnCounts = new Map<string, number>()
-  private npcSpawnCounts = new Map<string, number>()
+  readonly monsterSpawnCounts = new Map<string, number>()
+  readonly npcSpawnCounts = new Map<string, number>()
 
   getTilesInRadius(cx: number, cy: number, cz: number, radius: number): Position[] {
     const tiles: Position[] = []
