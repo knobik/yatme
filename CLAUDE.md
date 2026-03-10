@@ -132,7 +132,7 @@ All CSS variables and base classes: `src/styles/theme.css`
 **PRD**: `docs/PRD-creatures.md` — Full requirements for monsters, NPCs, spawn zones.
 **Progress**: `docs/PROGRESS-creatures.md` — Task-level checklist with 17 phases and dependency graph.
 
-**Current phase**: Phase 9 (Creature Brushes)
+**Current phase**: Phase 11 (Creature Palette UI)
 
 When resuming work on the creature system:
 1. Read `docs/PROGRESS-creatures.md` to find the current phase and next unchecked task.

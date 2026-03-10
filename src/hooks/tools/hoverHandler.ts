@@ -1,5 +1,5 @@
 import type { ToolContext, TilePos } from './types'
-import { getSelectionPreviewId, getTilesInBrush, getCopyBufferFootprint } from './types'
+import { getSelectionPreviewId, getTilesInBrush, getCopyBufferFootprint, BRUSH_SIZE_TOOLS } from './types'
 
 export function createHoverHandler(ctx: ToolContext) {
   function onHover(pos: TilePos) {
@@ -15,7 +15,7 @@ export function createHoverHandler(ctx: ToolContext) {
     }
 
     const tool = ctx.activeToolRef.current
-    const size = (tool === 'draw' || tool === 'erase' || tool === 'door' || tool === 'zone' || tool === 'house') ? ctx.brushSizeRef.current : 0
+    const size = BRUSH_SIZE_TOOLS.has(tool) ? ctx.brushSizeRef.current : 0
     // Fill tool always uses single-tile cursor
     const shape = ctx.brushShapeRef.current
     const tiles = getTilesInBrush(pos.x, pos.y, size, shape)

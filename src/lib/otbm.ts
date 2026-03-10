@@ -59,6 +59,9 @@ export const MAP_MAX_HEIGHT = 65000
 export const MAP_MIN_LAYER = 0
 export const MAP_MAX_LAYER = 15
 
+/** Tile flag: Protection Zone */
+export const PZ_FLAG = 0x0001
+
 /** Check whether a tile coordinate is within the valid map range. */
 export function tileKey(x: number, y: number, z: number): string {
   return `${x},${y},${z}`

@@ -1,7 +1,6 @@
 import type { OtbmTile } from './otbm'
+import { PZ_FLAG } from './otbm'
 import type { HouseData } from './sidecars'
-
-const PZ_FLAG = 0x0001
 
 /**
  * Remove a house ID from all tiles in the map.

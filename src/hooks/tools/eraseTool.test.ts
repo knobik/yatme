@@ -74,4 +74,77 @@ describe('eraseTool', () => {
       expect(mutator.removeTopItem).toHaveBeenCalledWith(7, 5, 7)
     })
   })
+
+  describe('creature and spawn erasure', () => {
+    it('removes monsters from tile', () => {
+      const mapData = {
+        version: 2, width: 1024, height: 1024, description: '', spawnFile: '', houseFile: '',
+        tiles: new Map([['5,5,7', { x: 5, y: 5, z: 7, flags: 0, items: [], monsters: [{ name: 'Rat', direction: 2, spawnTime: 60, isNpc: false }] }]]),
+        towns: [], waypoints: [],
+      }
+      const { ctx, mutator } = makeToolContext({ mapData: mapData as any })
+      const { onDown } = createEraseHandlers(ctx)
+      onDown({ x: 5, y: 5, z: 7 })
+
+      expect(mutator.removeCreature).toHaveBeenCalledWith(5, 5, 7, 'Rat', false)
+    })
+
+    it('removes NPC from tile', () => {
+      const mapData = {
+        version: 2, width: 1024, height: 1024, description: '', spawnFile: '', houseFile: '',
+        tiles: new Map([['5,5,7', { x: 5, y: 5, z: 7, flags: 0, items: [], npc: { name: 'Shopkeeper', direction: 2, spawnTime: 60, isNpc: true } }]]),
+        towns: [], waypoints: [],
+      }
+      const { ctx, mutator } = makeToolContext({ mapData: mapData as any })
+      const { onDown } = createEraseHandlers(ctx)
+      onDown({ x: 5, y: 5, z: 7 })
+
+      expect(mutator.removeCreature).toHaveBeenCalledWith(5, 5, 7, 'Shopkeeper', true)
+    })
+
+    it('removes spawn zones from tile', () => {
+      const mapData = {
+        version: 2, width: 1024, height: 1024, description: '', spawnFile: '', houseFile: '',
+        tiles: new Map([['5,5,7', { x: 5, y: 5, z: 7, flags: 0, items: [], spawnMonster: { radius: 3 }, spawnNpc: { radius: 2 } }]]),
+        towns: [], waypoints: [],
+      }
+      const { ctx, mutator } = makeToolContext({ mapData: mapData as any })
+      const { onDown } = createEraseHandlers(ctx)
+      onDown({ x: 5, y: 5, z: 7 })
+
+      expect(mutator.removeSpawnZone).toHaveBeenCalledWith(5, 5, 7, 'monster')
+      expect(mutator.removeSpawnZone).toHaveBeenCalledWith(5, 5, 7, 'npc')
+    })
+
+    it('erases items, creatures, and spawns together', () => {
+      const mapData = {
+        version: 2, width: 1024, height: 1024, description: '', spawnFile: '', houseFile: '',
+        tiles: new Map([['5,5,7', {
+          x: 5, y: 5, z: 7, flags: 0, items: [{ id: 100 }],
+          monsters: [{ name: 'Rat', direction: 2, spawnTime: 60, isNpc: false }],
+          npc: { name: 'Shopkeeper', direction: 2, spawnTime: 60, isNpc: true },
+          spawnMonster: { radius: 3 },
+        }]]),
+        towns: [], waypoints: [],
+      }
+      const { ctx, mutator } = makeToolContext({ mapData: mapData as any })
+      const { onDown } = createEraseHandlers(ctx)
+      onDown({ x: 5, y: 5, z: 7 })
+
+      expect(mutator.removeTopItem).toHaveBeenCalledWith(5, 5, 7)
+      expect(mutator.removeCreature).toHaveBeenCalledWith(5, 5, 7, 'Rat', false)
+      expect(mutator.removeCreature).toHaveBeenCalledWith(5, 5, 7, 'Shopkeeper', true)
+      expect(mutator.removeSpawnZone).toHaveBeenCalledWith(5, 5, 7, 'monster')
+    })
+
+    it('does not call creature/spawn removal for tiles without them', () => {
+      const { ctx, mutator } = makeToolContext()
+      const { onDown } = createEraseHandlers(ctx)
+      onDown({ x: 5, y: 5, z: 7 })
+
+      // mapData has no tiles at 5,5,7 so no creature/spawn removal
+      expect(mutator.removeCreature).not.toHaveBeenCalled()
+      expect(mutator.removeSpawnZone).not.toHaveBeenCalled()
+    })
+  })
 })

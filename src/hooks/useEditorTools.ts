@@ -17,6 +17,7 @@ import { createSelectHandlers } from './tools/selectTool'
 import { createFillHandlers } from './tools/fillTool'
 import { createZoneHandlers } from './tools/zoneTool'
 import { createHouseHandlers } from './tools/houseTool'
+import { createCreatureHandlers } from './tools/creatureTool'
 import { createHoverHandler } from './tools/hoverHandler'
 
 // Re-export types for consumers
@@ -150,6 +151,7 @@ export function useEditorTools(
       activeToolRef,
       selectedZoneRef,
       selectedHouseRef,
+      settingsRef,
     }
 
     const draw = createDrawHandlers(ctx)
@@ -158,6 +160,7 @@ export function useEditorTools(
     const fill = createFillHandlers(ctx)
     const zone = createZoneHandlers(ctx)
     const house = createHouseHandlers(ctx)
+    const creature = createCreatureHandlers(ctx)
     const select = createSelectHandlers(ctx)
     const hover = createHoverHandler(ctx)
 
@@ -175,6 +178,7 @@ export function useEditorTools(
         case 'fill': fill.onDown(pos); break
         case 'zone': zone.onDown(pos, event); break
         case 'house': house.onDown(pos, event); break
+        case 'creature': creature.onDown(pos, event); break
         case 'select': select.onDown(pos, event); break
       }
     }
@@ -187,6 +191,7 @@ export function useEditorTools(
         case 'door': door.onMove(pos); break
         case 'zone': zone.onMove(pos); break
         case 'house': house.onMove(pos); break
+        case 'creature': creature.onMove(pos); break
         case 'select': select.onMove(pos); break
       }
     }
@@ -203,6 +208,8 @@ export function useEditorTools(
         zone.onUp()
       } else if (tool === 'house') {
         house.onUp()
+      } else if (tool === 'creature') {
+        creature.onUp()
       } else if (tool === 'select') {
         select.onUp(pos)
       }
@@ -252,6 +259,7 @@ export function useEditorTools(
       case 'fill': renderer.setCursorStyle('crosshair'); break
       case 'zone': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
       case 'house': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
+      case 'creature': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
     }
   }, [renderer, activeTool])
 

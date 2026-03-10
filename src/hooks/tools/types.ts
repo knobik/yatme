@@ -8,9 +8,13 @@ import type { CarpetBrush, TableBrush } from '../../lib/brushes/CarpetTypes'
 import type { DoodadBrush } from '../../lib/brushes/DoodadTypes'
 import type { SelectedItemInfo } from '../useSelection'
 import type { CopyBuffer } from '../../lib/CopyBuffer'
+import type { EditorSettings } from '../../lib/EditorSettings'
 
-export type EditorTool = 'select' | 'draw' | 'erase' | 'door' | 'fill' | 'zone' | 'house'
+export type EditorTool = 'select' | 'draw' | 'erase' | 'door' | 'fill' | 'zone' | 'house' | 'creature'
 export type BrushShape = 'square' | 'circle'
+
+/** Tools that support variable brush size (shown in toolbar + used for hover cursor). */
+export const BRUSH_SIZE_TOOLS: ReadonlySet<EditorTool> = new Set(['draw', 'erase', 'door', 'zone', 'house', 'creature'])
 
 export type ZoneSelection =
   | { type: 'flag'; flag: number; label: string }
@@ -31,6 +35,8 @@ export type BrushSelectionBrushType = 'ground' | 'wall' | 'carpet' | 'table' | '
 export type BrushSelection =
   | { mode: 'brush'; brushType: BrushSelectionBrushType; brushName: string }
   | { mode: 'raw'; itemId: number }
+  | { mode: 'creature'; creatureName: string; isNpc: boolean }
+  | { mode: 'spawn'; spawnType: 'monster' | 'npc' }
 
 export interface TilePos {
   x: number
@@ -80,6 +86,8 @@ export interface ToolContext {
   selectedZoneRef: React.RefObject<ZoneSelection | null>
   // House tool
   selectedHouseRef: React.RefObject<number | null>
+  // Settings ref (for creature tool autoCreateSpawn, etc.)
+  settingsRef: React.MutableRefObject<EditorSettings>
 }
 
 // ── Brush resolution ─────────────────────────────────────────────────
@@ -94,6 +102,9 @@ export type ResolvedBrush =
   | { type: 'raw'; itemId: number }
 
 export function resolveBrush(selection: BrushSelection, registry: BrushRegistry | null): ResolvedBrush {
+  if (selection.mode === 'creature' || selection.mode === 'spawn') {
+    return { type: 'raw', itemId: 0 }
+  }
   if (selection.mode === 'raw') {
     return { type: 'raw', itemId: selection.itemId }
   }
@@ -206,6 +217,7 @@ export function getPreviewItemId(brush: ResolvedBrush, fallbackId: number): numb
 
 /** Get a preview item ID directly from a BrushSelection without full resolution. */
 export function getSelectionPreviewId(selection: BrushSelection, registry: BrushRegistry | null): number {
+  if (selection.mode === 'creature' || selection.mode === 'spawn') return 0
   if (selection.mode === 'raw') return selection.itemId
   if (!registry) return 0
   switch (selection.brushType) {

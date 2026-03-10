@@ -120,27 +120,27 @@
 
 > Brush implementations. Depends on Phase 8 (MapMutator ops) and Phase 4 (autoCreateSpawn setting).
 
-- [ ] Add `{ mode: 'creature'; creatureName: string; isNpc: boolean }` to `BrushSelection` type
-- [ ] Add `{ mode: 'spawn'; spawnType: 'monster' | 'npc' }` to `BrushSelection` type
-- [ ] Implement `MonsterBrush` — `canDraw()`: ground exists, not PZ, has spawn coverage or auto-create. `draw()`: adds monster (skips duplicate same-type)
-- [ ] Implement `NpcBrush` — `canDraw()`: ground exists, has spawn coverage or auto-create. `draw()`: replaces existing NPC
-- [ ] Implement `SpawnMonsterBrush` — `canDraw()`: ground exists, no existing spawnMonster. `draw()`: create spawn zone with brush size as radius
-- [ ] Implement `SpawnNpcBrush` — same pattern as SpawnMonsterBrush for NPCs
-- [ ] Auto-create logic: when placing creature without spawn coverage, create spawn(radius=1) on that tile first
-- [ ] Tests: MonsterBrush (normal, duplicate skip, PZ block, no-spawn block), NpcBrush (normal, replaces existing), SpawnBrushes, auto-create
+- [x] Add `{ mode: 'creature'; creatureName: string; isNpc: boolean }` to `BrushSelection` type
+- [x] Add `{ mode: 'spawn'; spawnType: 'monster' | 'npc' }` to `BrushSelection` type
+- [x] Implement `MonsterBrush` — `canDraw()`: ground exists, not PZ, has spawn coverage or auto-create. `draw()`: adds monster (skips duplicate same-type)
+- [x] Implement `NpcBrush` — `canDraw()`: ground exists, has spawn coverage or auto-create. `draw()`: replaces existing NPC
+- [x] Implement `SpawnMonsterBrush` — `canDraw()`: ground exists, no existing spawnMonster. `draw()`: create spawn zone with brush size as radius
+- [x] Implement `SpawnNpcBrush` — same pattern as SpawnMonsterBrush for NPCs
+- [x] Auto-create logic: when placing creature without spawn coverage, create spawn(radius=1) on that tile first
+- [x] Tests: MonsterBrush (normal, duplicate skip, PZ block, no-spawn block), NpcBrush (normal, replaces existing), SpawnBrushes, auto-create
 
 ## Phase 10: Creature Tool & Erase Extension
 
 > Hook up creature tool to editor tool system. Depends on Phase 9 (brushes).
 
-- [ ] Create `creatureTool.ts` — click handler: place creature or spawn zone via MapMutator
-- [ ] Smear support: drag to place creature on multiple tiles
-- [ ] Update `hoverHandler.ts` — creature tool cursor (brush size for spawn mode, single tile for creature mode)
-- [ ] Update `useEditorTools.ts` — add `'creature'` tool to onDown/onMove/onUp switch cases + cursor style
-- [ ] Update `Toolbar.tsx` — add `'creature'` to `EditorTool` type and TOOLS array
-- [ ] Extend erase tool to remove creatures from tiles
-- [ ] Extend erase tool to remove spawn zones from tiles
-- [ ] Tests: creature tool placement, smear, erase removes creatures + spawns
+- [x] Create `creatureTool.ts` — click handler: place creature or spawn zone via MapMutator
+- [x] Smear support: drag to place creature on multiple tiles
+- [x] Update `hoverHandler.ts` — creature tool cursor (brush size for spawn mode, single tile for creature mode)
+- [x] Update `useEditorTools.ts` — add `'creature'` tool to onDown/onMove/onUp switch cases + cursor style
+- [x] Update `Toolbar.tsx` — add `'creature'` to `EditorTool` type and TOOLS array
+- [x] Extend erase tool to remove creatures from tiles
+- [x] Extend erase tool to remove spawn zones from tiles
+- [x] Tests: creature tool placement, smear, erase removes creatures + spawns
 
 ## Phase 11: Creature Palette UI
 

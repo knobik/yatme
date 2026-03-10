@@ -91,6 +91,10 @@ export class MapMutator {
     this.appearances = appearances
   }
 
+  getAppearances(): AppearanceData {
+    return this.appearances
+  }
+
   set brushRegistry(registry: BrushRegistry | null) {
     this._brushRegistry = registry
   }

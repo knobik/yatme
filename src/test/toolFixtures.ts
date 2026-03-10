@@ -5,6 +5,8 @@ import type { ToolContext, TilePos, BrushSelection, BrushShape, EditorTool } fro
 import type { OtbmMap } from '../lib/otbm'
 import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
 import type { SelectedItemInfo } from '../hooks/useSelection'
+import type { EditorSettings } from '../lib/EditorSettings'
+import { DEFAULT_SETTINGS } from '../lib/EditorSettings'
 
 export function makeMockMutator(overrides: Record<string, unknown> = {}) {
   return {
@@ -29,6 +31,16 @@ export function makeMockMutator(overrides: Record<string, unknown> = {}) {
     mergePasteItems: vi.fn(),
     getOrCreateTile: vi.fn(),
     getTile: vi.fn(),
+    placeCreature: vi.fn(),
+    removeCreature: vi.fn(),
+    placeSpawnZone: vi.fn(),
+    removeSpawnZone: vi.fn(),
+    setTileFlag: vi.fn(),
+    clearTileFlag: vi.fn(),
+    addTileZone: vi.fn(),
+    removeTileZone: vi.fn(),
+    getAppearances: vi.fn(() => ({ objects: new Map() })),
+    spawnManager: null,
     ...overrides,
   }
 }
@@ -60,6 +72,7 @@ export interface MakeToolContextOptions {
   registry?: BrushRegistry | null
   activeDoorType?: number
   activeTool?: EditorTool
+  settings?: Partial<EditorSettings>
   isPasting?: boolean
   copyBuffer?: { canPaste: () => boolean; getTiles: () => unknown[] }
   selectedItems?: SelectedItemInfo[]
@@ -99,6 +112,9 @@ export function makeToolContext(opts: MakeToolContextOptions = {}) {
     executePasteAt: vi.fn(),
     cancelPaste: vi.fn(),
     activeToolRef: { current: opts.activeTool ?? 'draw' as EditorTool },
+    selectedZoneRef: { current: null },
+    selectedHouseRef: { current: null },
+    settingsRef: { current: { ...DEFAULT_SETTINGS, ...opts.settings } },
   } as unknown as ToolContext
 
   return { ctx, mutator, renderer }
