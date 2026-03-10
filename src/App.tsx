@@ -5,7 +5,6 @@ import type { OtbmMap, OtbmTown } from './lib/otbm'
 import type { MapRenderer, FloorViewMode } from './lib/MapRenderer'
 import { MapMutator } from './lib/MapMutator'
 import type { ItemRegistry } from './lib/items'
-import type { CreatureDatabase } from './lib/creatures'
 import { useEditorTools, deriveHighlights } from './hooks/useEditorTools'
 import type { BrushRegistry } from './lib/brushes/BrushRegistry'
 import { Inspector } from './components/Inspector'
@@ -65,7 +64,6 @@ function App() {
   const [selectedTilePos, setSelectedTilePos] = useState<{ x: number; y: number; z: number } | null>(null)
   const [tileVersion, setTileVersion] = useState(0)
   const [itemRegistry, setItemRegistry] = useState<ItemRegistry | null>(null)
-  const [creatureDb, setCreatureDb] = useState<CreatureDatabase | null>(null)
   const [appearancesData, setAppearancesData] = useState<AppearanceData | null>(null)
   const [initialSettings] = useState(() => loadSettings())
   const [showPalette, setShowPalette] = useState(initialSettings.showPalette)
@@ -117,7 +115,7 @@ function App() {
   // ── Editor Init ────────────────────────────────────────────────────
   const { rendererRef, mutatorRef, storageRef } = useEditorInit(containerRef, {
     setLoadingStatus, setLoadingProgress, setLoading, setError,
-    setAppearancesData, setItemRegistry, setCreatureDb, setMapInfo, setBrushRegistryState,
+    setAppearancesData, setItemRegistry, setMapInfo, setBrushRegistryState,
     setTilesets, setMapFilename, setMapData, setSidecarsData,
     setRendererReady, setMutatorReady,
     setCamera, setSelectedTilePos, setContextMenu: (menu) => setContextMenu(menu),
@@ -711,15 +709,13 @@ function App() {
       )}
 
       {/* Monster palette — right side */}
-      {!loading && showMonsterPalette && appearancesData && (
+      {!loading && showMonsterPalette && (
         <MonsterPalette
           className={clsx(
             showZonePalette && showHousePalette ? 'right-[622px]' :
             showZonePalette || showHousePalette ? 'right-[336px]' : undefined,
           )}
           sidecars={sidecarsData}
-          creatureDb={creatureDb}
-          appearances={appearancesData}
           selectedMonster={tools.selectedMonster}
           onMonsterSelect={(monster) => {
             tools.setSelectedMonster(monster)

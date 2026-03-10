@@ -5,7 +5,6 @@ import type { ResolvedTileset, ResolvedPaletteEntry, ResolvedItemEntry, Category
 import type { BrushSelection } from '../hooks/tools/types'
 import { getItemDisplayName } from '../lib/items'
 import type { ItemRegistry } from '../lib/items'
-import { useDebounce } from '../hooks/useDebounce'
 import { ItemSprite } from './ItemSprite'
 import { MIME_TIBIA_ITEM, setCanvasDragImage } from '../lib/dragUtils'
 import { XIcon, CaretDownIcon, PencilSimpleIcon } from '@phosphor-icons/react'
@@ -73,7 +72,8 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
   const [search, setSearch] = useState('')
   const [scrollTop, setScrollTop] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const debouncedSearch = useDebounce(search, 150)
+  const searchTimerRef = useRef<number>(0)
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Expose navigation API to parent
@@ -82,6 +82,7 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
       setActiveCategory(category)
       setSelectedTileset(tilesetName)
       setSearch('')
+      setDebouncedSearch('')
       setTilesetSearch('')
       setTilesetOpen(false)
     },
@@ -100,6 +101,14 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
     return () => document.removeEventListener('mousedown', handleClick)
   }, [tilesetOpen])
 
+  // Debounce search input
+  const handleSearch = useCallback((value: string) => {
+    setSearch(value)
+    clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = window.setTimeout(() => {
+      setDebouncedSearch(value)
+    }, 150)
+  }, [])
 
   // Build the "ALL" entry list (all items as raw entries, for when no category filter)
   const allEntries = useMemo((): ResolvedPaletteEntry[] => {
@@ -319,7 +328,7 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
           type="text"
           placeholder="Search brushes..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => handleSearch(e.target.value)}
         />
       </div>
 

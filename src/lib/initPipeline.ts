@@ -5,7 +5,6 @@ import { parseOtbm, createEmptyMap, createItemNeedsCount, type OtbmMap } from '.
 import { parseSidecars, emptySidecars, type MapSidecars } from './sidecars'
 import type { MapStorageProvider } from './storage'
 import { loadItems, type ItemRegistry } from './items'
-import { loadCreatures, type CreatureDatabase } from './creatures'
 import { loadBrushData } from './brushes/BrushLoader'
 import { parseWallBrushesXml } from './brushes/WallLoader'
 import { parseCarpetBrushesXml } from './brushes/CarpetLoader'
@@ -27,7 +26,6 @@ export interface InitResult {
   mapData: OtbmMap
   sidecars: MapSidecars
   registry: ItemRegistry
-  creatureDb: CreatureDatabase
   brushRegistry: BrushRegistry | null
   tilesets: ResolvedTileset[]
   mapFilename: string
@@ -43,8 +41,8 @@ export async function loadAssets(
   signal: { destroyed: boolean },
   provider: MapStorageProvider,
 ): Promise<InitResult | null> {
-  // Weights: pixi, catalog, appearances, items, creatures, brushes, tilesets, map data, editor setup
-  const stepWeights = [2, 15, 3, 12, 3, 8, 3, 50, 5]
+  // Weights: pixi, catalog, appearances, items, brushes, tilesets, map data, editor setup
+  const stepWeights = [2, 15, 3, 12, 8, 3, 50, 5]
   const totalWeight = stepWeights.reduce((a, b) => a + b, 0)
   let currentStep = 0
   const stepStarts: number[] = []
@@ -106,14 +104,7 @@ export async function loadAssets(
   if (signal.destroyed) return null
   nextStep()
 
-  // Step 5: Creature database
-  progress.setStatus('Loading creature data...')
-  const creatureDb = await loadCreatures(stepProgress)
-  console.log(`[Creatures] Loaded ${creatureDb.size} creatures`)
-  if (signal.destroyed) return null
-  nextStep()
-
-  // Step 6: Brushes
+  // Step 5: Brushes
   progress.setStatus('Loading brush data...')
   let brushRegistry: BrushRegistry | null = null
   try {
@@ -150,7 +141,7 @@ export async function loadAssets(
   if (signal.destroyed) return null
   nextStep()
 
-  // Step 7: Tilesets
+  // Step 6: Tilesets
   progress.setStatus('Loading tilesets...')
   let tilesets: ResolvedTileset[] = []
   try {
@@ -165,7 +156,7 @@ export async function loadAssets(
   if (signal.destroyed) return null
   nextStep()
 
-  // Step 8: Map data (heaviest step)
+  // Step 7: Map data (heaviest step)
   progress.setStatus('Loading map data...')
   const bundle = await provider.loadMap((f) => stepProgress(f * 0.4))
   stepProgress(0.4)
@@ -209,10 +200,10 @@ export async function loadAssets(
   if (signal.destroyed) return null
   nextStep()
 
-  // Step 9: Signal editor setup phase
+  // Step 8: Signal editor setup phase
   progress.setStatus('Initializing editor...')
   // Yield so the UI can paint the status update before setupEditor blocks
   await new Promise(r => setTimeout(r, 0))
 
-  return { app, appearances, mapData, sidecars, registry, creatureDb, brushRegistry, tilesets, mapFilename: bundle.filename }
+  return { app, appearances, mapData, sidecars, registry, brushRegistry, tilesets, mapFilename: bundle.filename }
 }

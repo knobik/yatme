@@ -10,7 +10,6 @@ import { MapMutator } from '../lib/MapMutator'
 import type { AppearanceData } from '../lib/appearances'
 import type { OtbmMap } from '../lib/otbm'
 import type { ItemRegistry } from '../lib/items'
-import type { CreatureDatabase } from '../lib/creatures'
 import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
 import type { ResolvedTileset } from '../lib/tilesets/TilesetTypes'
 import type { MapSidecars } from '../lib/sidecars'
@@ -36,7 +35,6 @@ export interface UseEditorInitOptions {
   // Data state setters
   setAppearancesData: (data: AppearanceData) => void
   setItemRegistry: (registry: ItemRegistry) => void
-  setCreatureDb: (db: CreatureDatabase) => void
   setMapInfo: (info: { tiles: number; towns: string[] }) => void
   setBrushRegistryState: (registry: BrushRegistry) => void
   setTilesets: (tilesets: ResolvedTileset[]) => void
@@ -76,7 +74,6 @@ export function useEditorInit(
     setError,
     setAppearancesData,
     setItemRegistry,
-    setCreatureDb,
     setMapInfo,
     setBrushRegistryState,
     setTilesets,
@@ -114,7 +111,7 @@ export function useEditorInit(
       }, signal, provider)
       if (!result) return
 
-      const { app, appearances, mapData, sidecars, registry, creatureDb, brushRegistry, tilesets, mapFilename: filename } = result
+      const { app, appearances, mapData, sidecars, registry, brushRegistry, tilesets, mapFilename: filename } = result
       setMapFilename(filename)
       appInstance = app
       appRef.current = app
@@ -122,7 +119,6 @@ export function useEditorInit(
       // Update React state with loaded data
       setAppearancesData(appearances)
       setItemRegistry(registry)
-      setCreatureDb(creatureDb)
       setMapInfo({
         tiles: mapData.tiles.size,
         towns: mapData.towns.map((t) => t.name),

@@ -4,7 +4,6 @@ import type { ItemRegistry } from '../lib/items'
 import type { AppearanceData } from '../lib/appearances'
 import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
 import { getItemDisplayName } from '../lib/items'
-import { useDebounce } from '../hooks/useDebounce'
 import { ItemSprite } from './ItemSprite'
 import { MIME_TIBIA_ITEM, setCanvasDragImage } from '../lib/dragUtils'
 import { itemCategory } from '../proto/appearances'
@@ -82,7 +81,17 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
   const [search, setSearch] = useState('')
   const [scrollTop, setScrollTop] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const debouncedSearch = useDebounce(search, 150)
+  const searchTimerRef = useRef<number>(0)
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+
+  // Debounce search input
+  const handleSearch = useCallback((value: string) => {
+    setSearch(value)
+    clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = window.setTimeout(() => {
+      setDebouncedSearch(value)
+    }, 150)
+  }, [])
 
   // Build the full item list with category assignments (cached)
   const allItems = useMemo(() => {
@@ -194,7 +203,7 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
           type="text"
           placeholder="Search items..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => handleSearch(e.target.value)}
         />
       </div>
 
