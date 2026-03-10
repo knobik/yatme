@@ -81,7 +81,6 @@ export const BrushPalette = forwardRef<BrushPaletteHandle, BrushPaletteProps>(fu
       setActiveCategory(category)
       setSelectedTileset(tilesetName)
       setSearch('')
-      setDebouncedSearch('')
       setTilesetSearch('')
       setTilesetOpen(false)
     },

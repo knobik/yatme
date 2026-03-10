@@ -184,24 +184,24 @@
 
 > Context menu entries + inspector creature display. Depends on Phase 12 (selection) and Phase 13 (modals).
 
-- [ ] Add "Properties..." context menu entry for creatures → opens creature modal
-- [ ] Add "Properties..." context menu entry for spawn zone centers → opens spawn modal
-- [ ] Add "Delete" context menu entry for creatures → calls `MapMutator.removeCreature()`
-- [ ] Add "Delete" context menu entry for spawn zones → calls `MapMutator.removeSpawnZone()`
-- [ ] Add "Rotate" context menu entry for creatures (cycles direction N→E→S→W)
-- [ ] Show creatures on tile in inspector panel (below items)
-- [ ] Display creature name + type (monster/NPC) + direction indicator in inspector
+- [x] Add "Properties..." context menu entry for creatures → opens creature modal
+- [x] Add "Properties..." context menu entry for spawn zone centers → opens spawn modal
+- [x] Add "Delete" context menu entry for creatures → calls `MapMutator.removeCreature()`
+- [x] Add "Delete" context menu entry for spawn zones → calls `MapMutator.removeSpawnZone()`
+- [x] Add "Rotate" context menu entry for creatures (cycles direction N→E→S→W)
+- [x] Show creatures on tile in inspector panel (below items)
+- [x] Display creature name + type (monster/NPC) + direction indicator in inspector
 
 ## Phase 15: Serialization — Write on Save
 
 > Write sidecar XML files when saving OTBM. Depends on Phase 2 (SpawnManager) and Phase 3 (parser for round-trip tests).
 
-- [ ] Implement `writeMonsterSpawnXml(mapData, spawnManager)` in `src/lib/creatures/spawnXmlWriter.ts`
-- [ ] Iterate monster spawn centers, collect creatures within radius, generate XML with relative offsets
-- [ ] Implement `writeNpcSpawnXml(mapData, spawnManager)` — same for NPC spawns
-- [ ] Warn on orphan creatures (outside any spawn zone) — log but don't crash
-- [ ] Hook into OTBM save flow to write sidecar files alongside .otbm
-- [ ] Tests: write monster spawn XML (round-trip with parser), NPC XML, relative offset calculation, orphan warning
+- [x] Implement `writeMonsterSpawnXml(mapData, spawnManager)` in `src/lib/creatures/spawnXmlWriter.ts`
+- [x] Iterate monster spawn centers, collect creatures within radius, generate XML with relative offsets
+- [x] Implement `writeNpcSpawnXml(mapData, spawnManager)` — same for NPC spawns
+- [x] Warn on orphan creatures (outside any spawn zone) — log but don't crash
+- [x] Hook into OTBM save flow to write sidecar files alongside .otbm
+- [x] Tests: write monster spawn XML (round-trip with parser), NPC XML, relative offset calculation, orphan warning
 
 ## Phase 16: Standalone Import/Export
 

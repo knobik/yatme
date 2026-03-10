@@ -13,6 +13,8 @@ import type { MapStorageProvider } from '../lib/storage'
 import { updateAllHouseSizes } from '../lib/houseCleanup'
 import { triggerDownload } from '../lib/triggerDownload'
 import type { SavePhase } from '../components/SaveToast'
+import type { SpawnManager } from '../lib/creatures/SpawnManager'
+import { collectMonsterSpawns, collectNpcSpawns } from '../lib/creatures/spawnXmlWriter'
 
 /** Open a file picker, read the selected XML file, and pass parsed results to the updater. */
 function importXmlFile<T>(
@@ -45,6 +47,7 @@ interface UseSaveExportOptions {
   sidecarsData: MapSidecars
   setSidecarsData: React.Dispatch<React.SetStateAction<MapSidecars>>
   storageRef: React.RefObject<MapStorageProvider | null>
+  spawnManager: SpawnManager | null
 }
 
 export function useSaveExport({
@@ -53,6 +56,7 @@ export function useSaveExport({
   sidecarsData,
   setSidecarsData,
   storageRef,
+  spawnManager,
 }: UseSaveExportOptions) {
   const [saveProgress, setSaveProgress] = useState<number | null>(null)
   const [savePhase, setSavePhase] = useState<SavePhase>('serialize')
@@ -69,8 +73,27 @@ export function useSaveExport({
     try {
       // Ensure house sizes are up-to-date and houseFile is set
       updateAllHouseSizes(md.tiles, sidecarsData.houses)
+      const sidecarName = (suffix: string) => mapFilename.replace(/\.otbm$/, `-${suffix}.xml`)
       if (sidecarsData.houses.length > 0 && !md.houseFile) {
-        md.houseFile = mapFilename.replace(/\.otbm$/, '-house.xml')
+        md.houseFile = sidecarName('house')
+      }
+
+      // Rebuild spawn data from current tile state
+      if (spawnManager) {
+        const monsterResult = collectMonsterSpawns(md, spawnManager)
+        const npcResult = collectNpcSpawns(md, spawnManager)
+        sidecarsData.monsterSpawns = monsterResult.spawns
+        sidecarsData.npcSpawns = npcResult.spawns
+        for (const o of monsterResult.orphans) console.warn(`[Save] Orphan creature skipped: ${o}`)
+        for (const o of npcResult.orphans) console.warn(`[Save] Orphan creature skipped: ${o}`)
+      }
+
+      // Auto-generate sidecar filenames if creatures exist but filenames aren't set
+      if (sidecarsData.monsterSpawns.length > 0 && !md.spawnFile) {
+        md.spawnFile = sidecarName('monster')
+      }
+      if (sidecarsData.npcSpawns.length > 0 && !md.npcFile) {
+        md.npcFile = sidecarName('npc')
       }
 
       setSavePhase('serialize')
@@ -101,7 +124,7 @@ export function useSaveExport({
       saveInProgressRef.current = false
       setSaveProgress(null)
     }
-  }, [mapData, mapFilename, sidecarsData, storageRef])
+  }, [mapData, mapFilename, sidecarsData, storageRef, spawnManager])
 
   const handleExportZones = useCallback(() => {
     triggerDownload(serializeZonesXml(sidecarsData.zones), 'zones.xml', 'application/xml')

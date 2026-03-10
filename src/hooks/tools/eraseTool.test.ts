@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createEraseHandlers } from './eraseTool'
 import { makeToolContext } from '../../test/toolFixtures'
+import type { OtbmMap } from '../../lib/otbm'
 
 describe('eraseTool', () => {
   describe('onDown', () => {
@@ -82,7 +83,7 @@ describe('eraseTool', () => {
         tiles: new Map([['5,5,7', { x: 5, y: 5, z: 7, flags: 0, items: [], monsters: [{ name: 'Rat', direction: 2, spawnTime: 60, isNpc: false }] }]]),
         towns: [], waypoints: [],
       }
-      const { ctx, mutator } = makeToolContext({ mapData: mapData as any })
+      const { ctx, mutator } = makeToolContext({ mapData: mapData as unknown as OtbmMap })
       const { onDown } = createEraseHandlers(ctx)
       onDown({ x: 5, y: 5, z: 7 })
 
@@ -95,7 +96,7 @@ describe('eraseTool', () => {
         tiles: new Map([['5,5,7', { x: 5, y: 5, z: 7, flags: 0, items: [], npc: { name: 'Shopkeeper', direction: 2, spawnTime: 60, isNpc: true } }]]),
         towns: [], waypoints: [],
       }
-      const { ctx, mutator } = makeToolContext({ mapData: mapData as any })
+      const { ctx, mutator } = makeToolContext({ mapData: mapData as unknown as OtbmMap })
       const { onDown } = createEraseHandlers(ctx)
       onDown({ x: 5, y: 5, z: 7 })
 
@@ -108,7 +109,7 @@ describe('eraseTool', () => {
         tiles: new Map([['5,5,7', { x: 5, y: 5, z: 7, flags: 0, items: [], spawnMonster: { radius: 3 }, spawnNpc: { radius: 2 } }]]),
         towns: [], waypoints: [],
       }
-      const { ctx, mutator } = makeToolContext({ mapData: mapData as any })
+      const { ctx, mutator } = makeToolContext({ mapData: mapData as unknown as OtbmMap })
       const { onDown } = createEraseHandlers(ctx)
       onDown({ x: 5, y: 5, z: 7 })
 
@@ -127,7 +128,7 @@ describe('eraseTool', () => {
         }]]),
         towns: [], waypoints: [],
       }
-      const { ctx, mutator } = makeToolContext({ mapData: mapData as any })
+      const { ctx, mutator } = makeToolContext({ mapData: mapData as unknown as OtbmMap })
       const { onDown } = createEraseHandlers(ctx)
       onDown({ x: 5, y: 5, z: 7 })
 

@@ -240,6 +240,7 @@ function App() {
   // ── Save / Export / Import ─────────────────────────────────────────
   const { saveProgress, savePhase, handleSave, handleExportZones, handleImportZones, handleExportHouses, handleImportHouses } = useSaveExport({
     mapData, mapFilename, sidecarsData, setSidecarsData, storageRef,
+    spawnManager: mutatorReady?.spawnManager ?? null,
   })
 
   // ── Auto-toggle overlay/palette when zone or house tool is active ───
@@ -721,6 +722,10 @@ function App() {
           onDragToMap={(itemId) => { if (rendererRef.current) rendererRef.current.dragPreviewItemId = itemId }}
           onDragToMapEnd={() => { if (rendererRef.current) { rendererRef.current.dragPreviewItemId = null; rendererRef.current.clearGhostPreview() } }}
           houseName={inspectedHouseName}
+          onEditCreature={(x, y, z, name, isNpc) => setEditingCreature({ x, y, z, creatureName: name, isNpc })}
+          onEditSpawn={(x, y, z, spawnType) => setEditingSpawn({ x, y, z, spawnType })}
+          onDeleteCreature={(x, y, z, name, isNpc) => mutatorReady?.removeCreature(x, y, z, name, isNpc)}
+          onDeleteSpawn={(x, y, z, spawnType) => mutatorReady?.removeSpawnZone(x, y, z, spawnType)}
         />
       )}
 

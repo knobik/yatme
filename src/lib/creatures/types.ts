@@ -13,6 +13,10 @@ export const Direction = {
 
 export type Direction = (typeof Direction)[keyof typeof Direction]
 
+export function nextDirection(d: Direction): Direction {
+  return ((d + 1) % 4) as Direction
+}
+
 export interface TileCreature {
   name: string
   direction: Direction

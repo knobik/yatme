@@ -39,7 +39,7 @@ vi.mock('./SpriteResolver', () => ({
 import { TileRenderer } from './TileRenderer'
 import { getTextureSync } from './TextureManager'
 import { getItemSpriteId } from './SpriteResolver'
-import { Container } from 'pixi.js'
+import { Container, Sprite } from 'pixi.js'
 
 const mockedGetTextureSync = vi.mocked(getTextureSync)
 const mockedGetItemSpriteId = vi.mocked(getItemSpriteId)
@@ -159,9 +159,9 @@ describe('TileRenderer', () => {
     // item + monster + NPC = 3 children
     expect(parent.children.length).toBe(3)
     // Last child should use NPC texture
-    expect((parent.children[2] as any).texture).toBe(npcTexture)
+    expect((parent.children[2] as Sprite).texture).toBe(npcTexture)
     // Monster is before NPC
-    expect((parent.children[1] as any).texture).toBe(ratTexture)
+    expect((parent.children[1] as Sprite).texture).toBe(ratTexture)
   })
 
   it('skips unknown creature names gracefully', () => {

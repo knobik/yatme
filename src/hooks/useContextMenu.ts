@@ -8,6 +8,7 @@ import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
 import type { MapMutator } from '../lib/MapMutator'
 import type { MapRenderer } from '../lib/MapRenderer'
 import type { EditorToolsState } from './useEditorTools'
+import { nextDirection } from '../lib/creatures/types'
 
 export interface ContextMenuState {
   x: number
@@ -137,11 +138,19 @@ export function useContextMenu(options: UseContextMenuOptions) {
           label: 'Monster Spawn Properties',
           onClick: () => setEditingSpawn({ x: tilePos.x, y: tilePos.y, z: tilePos.z, spawnType: 'monster' }),
         })
+        creaturePropsItems.push({
+          label: 'Delete Monster Spawn',
+          onClick: () => mutatorReady?.removeSpawnZone(tilePos.x, tilePos.y, tilePos.z, 'monster'),
+        })
       }
       if (tile.spawnNpc) {
         creaturePropsItems.push({
           label: 'NPC Spawn Properties',
           onClick: () => setEditingSpawn({ x: tilePos.x, y: tilePos.y, z: tilePos.z, spawnType: 'npc' }),
+        })
+        creaturePropsItems.push({
+          label: 'Delete NPC Spawn',
+          onClick: () => mutatorReady?.removeSpawnZone(tilePos.x, tilePos.y, tilePos.z, 'npc'),
         })
       }
       if (tile.monsters && tile.monsters.length > 0) {
@@ -150,11 +159,27 @@ export function useContextMenu(options: UseContextMenuOptions) {
           label: `Monster Properties (${topMonster.name})`,
           onClick: () => setEditingCreature({ x: tilePos.x, y: tilePos.y, z: tilePos.z, creatureName: topMonster.name, isNpc: false }),
         })
+        creaturePropsItems.push({
+          label: `Rotate Monster (${topMonster.name})`,
+          onClick: () => mutatorReady?.updateCreatureProperties(tilePos.x, tilePos.y, tilePos.z, topMonster.name, false, { direction: nextDirection(topMonster.direction) }),
+        })
+        creaturePropsItems.push({
+          label: `Delete Monster (${topMonster.name})`,
+          onClick: () => mutatorReady?.removeCreature(tilePos.x, tilePos.y, tilePos.z, topMonster.name, false),
+        })
       }
       if (tile.npc) {
         creaturePropsItems.push({
           label: `NPC Properties (${tile.npc.name})`,
           onClick: () => setEditingCreature({ x: tilePos.x, y: tilePos.y, z: tilePos.z, creatureName: tile.npc!.name, isNpc: true }),
+        })
+        creaturePropsItems.push({
+          label: `Rotate NPC (${tile.npc.name})`,
+          onClick: () => mutatorReady?.updateCreatureProperties(tilePos.x, tilePos.y, tilePos.z, tile.npc!.name, true, { direction: nextDirection(tile.npc!.direction) }),
+        })
+        creaturePropsItems.push({
+          label: `Delete NPC (${tile.npc.name})`,
+          onClick: () => mutatorReady?.removeCreature(tilePos.x, tilePos.y, tilePos.z, tile.npc!.name, true),
         })
       }
     }
