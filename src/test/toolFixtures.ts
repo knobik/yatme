@@ -25,6 +25,7 @@ export function makeMockMutator(overrides: Record<string, unknown> = {}) {
     eraseTable: vi.fn(),
     removeTopItem: vi.fn(),
     eraseAllItems: vi.fn(),
+    reborderAfterErase: vi.fn(),
     clearAllTileFlags: vi.fn(),
     clearAllTileZones: vi.fn(),
     removeBrushItems: vi.fn(),

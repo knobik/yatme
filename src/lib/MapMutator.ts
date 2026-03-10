@@ -1379,8 +1379,8 @@ export class MapMutator {
   }
 
   /** Remove all non-ground items from a tile. If leaveUnique is true, preserve items with attributes and border items.
-   *  When automagic is true and a brush registry is available, reborders the tile and its neighbors. */
-  eraseAllItems(x: number, y: number, z: number, options: { leaveUnique: boolean; automagic?: boolean }): void {
+   *  If cleanBorders is true, removes border items before filtering (for automagic reborder pass). */
+  eraseAllItems(x: number, y: number, z: number, options: { leaveUnique: boolean; cleanBorders?: boolean }): void {
     this.autoBatch('Erase all items', () => {
       const tile = this.mapData.tiles.get(tileKey(x, y, z))
       if (!tile || tile.items.length === 0) return
@@ -1389,7 +1389,7 @@ export class MapMutator {
       const oldItems = deepCloneItems(tile.items)
 
       // When automagic is on, clean borders first (RME: cleanBorders before erase)
-      if (options.automagic && registry) {
+      if (options.cleanBorders && registry) {
         this.removeBorderItems(tile, registry)
       }
 
@@ -1405,20 +1405,6 @@ export class MapMutator {
       })
       tile.items = newItems
 
-      // When automagic is on, recalculate borders/walls/carpets/tables on this tile
-      if (options.automagic && registry) {
-        // Wallize, tableize, carpetize the erased tile (RME does this for eraser)
-        const wallItems = doWalls(x, y, z, this.mapData, registry)
-        this.replaceWallItems(tile, wallItems, registry)
-        const carpetItems = doCarpets(x, y, z, this.mapData, registry)
-        this.replaceBrushItems(tile, carpetItems, registry, 'carpet')
-        const tableItems = doTables(x, y, z, this.mapData, registry)
-        this.replaceBrushItems(tile, tableItems, registry, 'table')
-        // Reborderize this tile
-        const centerBorders = computeBorders(x, y, z, this.mapData, registry)
-        this.insertBorderItems(tile, centerBorders)
-      }
-
       if (!this.itemsEqual(oldItems, tile.items)) {
         this.recordAction({
           type: 'setTileItems', x, y, z,
@@ -1427,13 +1413,68 @@ export class MapMutator {
         })
         this.onTileChanged?.(x, y, z)
       }
+    })
+  }
 
-      // Reborder neighbors
-      if (options.automagic && registry) {
-        this.reborderNeighbors(x, y, z)
-        this.realignWallNeighbors(x, y, z)
-        this.updateNeighborBrush(x, y, z, registry, 'carpet')
-        this.updateNeighborBrush(x, y, z, registry, 'table')
+  /** RME-style two-pass reborder after erasing: recalculate walls, carpets, tables, and borders
+   *  on the given positions AND their surrounding tiles. Must be called AFTER all tiles are erased. */
+  reborderAfterErase(positions: { x: number; y: number; z: number }[]): void {
+    const registry = this._brushRegistry
+    if (!registry || positions.length === 0) return
+
+    this.autoBatch('Reborder after erase', () => {
+      // Collect all affected tiles: erased positions + their 8-neighbors (deduped)
+      const tilesToUpdate = new Map<string, { x: number; y: number; z: number }>()
+      for (const pos of positions) {
+        const key = tileKey(pos.x, pos.y, pos.z)
+        if (!tilesToUpdate.has(key)) tilesToUpdate.set(key, pos)
+        for (const [dx, dy] of OFFSETS_8) {
+          const nx = pos.x + dx
+          const ny = pos.y + dy
+          if (nx < 0 || ny < 0) continue
+          const nk = tileKey(nx, ny, pos.z)
+          if (!tilesToUpdate.has(nk)) tilesToUpdate.set(nk, { x: nx, y: ny, z: pos.z })
+        }
+      }
+
+      // Single pass: wallize, tableize, carpetize, then borderize each tile
+      for (const pos of tilesToUpdate.values()) {
+        const tile = this.mapData.tiles.get(tileKey(pos.x, pos.y, pos.z))
+        if (!tile) continue
+
+        const oldItems = deepCloneItems(tile.items)
+
+        // Realign walls, carpets, tables (no-op on tiles where those were erased)
+        if (tile.items.some(item => registry.isWallItem(item.id))) {
+          const wallItems = doWalls(pos.x, pos.y, pos.z, this.mapData, registry)
+          this.replaceWallItems(tile, wallItems, registry)
+        }
+        if (tile.items.some(item => registry.isCarpetItem(item.id))) {
+          const carpetItems = doCarpets(pos.x, pos.y, pos.z, this.mapData, registry)
+          this.replaceBrushItems(tile, carpetItems, registry, 'carpet')
+        }
+        if (tile.items.some(item => registry.isTableItem(item.id))) {
+          const tableItems = doTables(pos.x, pos.y, pos.z, this.mapData, registry)
+          this.replaceBrushItems(tile, tableItems, registry, 'table')
+        }
+
+        // Reborderize
+        const hasGround = tile.items.some(it => classifyItem(it.id, this.appearances) === 'ground')
+        if (hasGround) {
+          this.removeBorderItems(tile, registry)
+          const borders = computeBorders(pos.x, pos.y, pos.z, this.mapData, registry)
+          this.insertBorderItems(tile, borders)
+        }
+
+        if (!this.itemsEqual(oldItems, tile.items)) {
+          this.recordAction({
+            type: 'setTileItems',
+            x: pos.x, y: pos.y, z: pos.z,
+            oldItems,
+            newItems: deepCloneItems(tile.items),
+          })
+          this.onTileChanged?.(pos.x, pos.y, pos.z)
+        }
       }
     })
   }

@@ -11,7 +11,7 @@ describe('eraseTool', () => {
       onDown({ x: 5, y: 5, z: 7 })
 
       expect(mutator.beginBatch).toHaveBeenCalledWith('Erase items')
-      expect(mutator.eraseAllItems).toHaveBeenCalledWith(5, 5, 7, { leaveUnique: true, automagic: true })
+      expect(mutator.eraseAllItems).toHaveBeenCalledWith(5, 5, 7, { leaveUnique: true, cleanBorders: true })
       expect(mutator.eraseAllItems).toHaveBeenCalledTimes(1)
     })
 
@@ -22,6 +22,22 @@ describe('eraseTool', () => {
 
       // size=1 square = 9 tiles
       expect(mutator.eraseAllItems).toHaveBeenCalledTimes(9)
+    })
+
+    it('calls reborderAfterErase after erasing all tiles when autoMagic is on', () => {
+      const { ctx, mutator } = makeToolContext()
+      const { onDown } = createEraseHandlers(ctx)
+      onDown({ x: 5, y: 5, z: 7 })
+
+      expect(mutator.reborderAfterErase).toHaveBeenCalledWith([{ x: 5, y: 5, z: 7 }])
+    })
+
+    it('does not call reborderAfterErase when autoMagic is off', () => {
+      const { ctx, mutator } = makeToolContext({ settings: { autoMagic: false } })
+      const { onDown } = createEraseHandlers(ctx)
+      onDown({ x: 5, y: 5, z: 7 })
+
+      expect(mutator.reborderAfterErase).not.toHaveBeenCalled()
     })
 
     it('calls flushChunkUpdates after erasing', () => {
@@ -73,6 +89,17 @@ describe('eraseTool', () => {
       expect(mutator.eraseAllItems).toHaveBeenCalledWith(5, 5, 7, expect.any(Object))
       expect(mutator.eraseAllItems).toHaveBeenCalledWith(6, 5, 7, expect.any(Object))
       expect(mutator.eraseAllItems).toHaveBeenCalledWith(7, 5, 7, expect.any(Object))
+    })
+
+    it('calls reborderAfterErase for each onMove batch', () => {
+      const { ctx, mutator } = makeToolContext()
+      const { onDown, onMove } = createEraseHandlers(ctx)
+
+      onDown({ x: 5, y: 5, z: 7 })
+      onMove({ x: 6, y: 5, z: 7 })
+
+      expect(mutator.reborderAfterErase).toHaveBeenCalledTimes(2)
+      expect(mutator.reborderAfterErase).toHaveBeenCalledWith([{ x: 6, y: 5, z: 7 }])
     })
   })
 
@@ -155,7 +182,7 @@ describe('eraseTool', () => {
       const { onDown } = createEraseHandlers(ctx)
       onDown({ x: 5, y: 5, z: 7 })
 
-      expect(mutator.eraseAllItems).toHaveBeenCalledWith(5, 5, 7, { leaveUnique: true, automagic: true })
+      expect(mutator.eraseAllItems).toHaveBeenCalledWith(5, 5, 7, { leaveUnique: true, cleanBorders: true })
     })
 
     it('passes leaveUnique=false when setting is off', () => {
@@ -163,7 +190,7 @@ describe('eraseTool', () => {
       const { onDown } = createEraseHandlers(ctx)
       onDown({ x: 5, y: 5, z: 7 })
 
-      expect(mutator.eraseAllItems).toHaveBeenCalledWith(5, 5, 7, { leaveUnique: false, automagic: true })
+      expect(mutator.eraseAllItems).toHaveBeenCalledWith(5, 5, 7, { leaveUnique: false, cleanBorders: true })
     })
 
     it('does not remove creatures/spawns/zones when eraserKeepZones is true', () => {
