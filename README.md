@@ -153,6 +153,16 @@ maps/
 └── ...
 ```
 
+### Sprite Conversion
+
+Convert the `.bmp.lzma` sprite sheets to PNG (required once, or after updating assets):
+
+```bash
+npm run convert-sprites
+```
+
+This reads from `tibia/sprites/` and writes PNGs to `tibia/sprites-png/`.
+
 ### Dev Server
 
 ```bash
