@@ -8,6 +8,8 @@ import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
 import type { MapMutator } from '../lib/MapMutator'
 import type { MapRenderer } from '../lib/MapRenderer'
 import type { EditorToolsState } from './useEditorTools'
+import { nextDirection } from '../lib/creatures/types'
+import { useLatestRef } from './useLatestRef'
 
 export interface ContextMenuState {
   x: number
@@ -27,29 +29,28 @@ export interface UseContextMenuOptions {
   handleSelectAsBrush: (itemId: number) => void
   setSelectedTilePos: (pos: { x: number; y: number; z: number }) => void
   setEditingItem: (item: { x: number; y: number; z: number; index: number } | null) => void
+  setEditingCreature: (creature: { x: number; y: number; z: number; creatureName: string; isNpc: boolean } | null) => void
+  setEditingSpawn: (spawn: { x: number; y: number; z: number; spawnType: 'monster' | 'npc' } | null) => void
 }
 
 export function useContextMenu(options: UseContextMenuOptions) {
-  const {
-    toolsRef,
-    mutatorReady,
-    brushRegistryState,
-    itemRegistry,
-    appearancesData,
-    rendererRef,
-    handleSelectAsRaw,
-    handleSelectAsBrush,
-    setSelectedTilePos,
-    setEditingItem,
-  } = options
+  // Keep a ref to the full options object to avoid stale closures — setContextMenu is
+  // captured once in useEditorInit's mount effect, so buildContextMenuGroups must read
+  // current values via this ref rather than the initial closure.
+  const optionsRef = useLatestRef(options)
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [contextMenuGroups, setContextMenuGroups] = useState<ContextMenuGroup[]>([])
 
   function buildContextMenuGroups(menu: ContextMenuState): ContextMenuGroup[] {
     const { tilePos, tile } = menu
-    const renderer = rendererRef.current
-    const currentTools = toolsRef.current
+    const opts = optionsRef.current
+    const renderer = opts.rendererRef.current
+    const currentTools = opts.toolsRef.current
+    const mutator = opts.mutatorReady
+    const registry = opts.brushRegistryState
+    const items = opts.itemRegistry
+    const appearances = opts.appearancesData
 
     const isInSelection = currentTools.selectedItems.some(
       i => i.x === tilePos.x && i.y === tilePos.y && i.z === tilePos.z
@@ -109,14 +110,14 @@ export function useContextMenu(options: UseContextMenuOptions) {
               {
                 label: 'Browse Tile',
                 onClick: () => {
-                  setSelectedTilePos({ x: tilePos.x, y: tilePos.y, z: tilePos.z })
+                  opts.setSelectedTilePos({ x: tilePos.x, y: tilePos.y, z: tilePos.z })
                 },
               },
               ...(tile.items && tile.items.length > 0
                 ? [{
                     label: 'Properties',
                     onClick: () => {
-                      setEditingItem({ x: tilePos.x, y: tilePos.y, z: tilePos.z, index: tile.items!.length - 1 })
+                      opts.setEditingItem({ x: tilePos.x, y: tilePos.y, z: tilePos.z, index: tile.items!.length - 1 })
                     },
                   }]
                 : []),
@@ -125,9 +126,64 @@ export function useContextMenu(options: UseContextMenuOptions) {
       ],
     }
 
+    // Creature/spawn properties group
+    const creaturePropsItems: ContextMenuAction[] = []
+    if (tile) {
+      if (tile.spawnMonster) {
+        creaturePropsItems.push({
+          label: 'Monster Spawn Properties',
+          onClick: () => opts.setEditingSpawn({ x: tilePos.x, y: tilePos.y, z: tilePos.z, spawnType: 'monster' }),
+        })
+        creaturePropsItems.push({
+          label: 'Delete Monster Spawn',
+          onClick: () => mutator?.removeSpawnZone(tilePos.x, tilePos.y, tilePos.z, 'monster'),
+        })
+      }
+      if (tile.spawnNpc) {
+        creaturePropsItems.push({
+          label: 'NPC Spawn Properties',
+          onClick: () => opts.setEditingSpawn({ x: tilePos.x, y: tilePos.y, z: tilePos.z, spawnType: 'npc' }),
+        })
+        creaturePropsItems.push({
+          label: 'Delete NPC Spawn',
+          onClick: () => mutator?.removeSpawnZone(tilePos.x, tilePos.y, tilePos.z, 'npc'),
+        })
+      }
+      if (tile.monsters && tile.monsters.length > 0) {
+        const topMonster = tile.monsters[tile.monsters.length - 1]
+        creaturePropsItems.push({
+          label: `Monster Properties (${topMonster.name})`,
+          onClick: () => opts.setEditingCreature({ x: tilePos.x, y: tilePos.y, z: tilePos.z, creatureName: topMonster.name, isNpc: false }),
+        })
+        creaturePropsItems.push({
+          label: `Rotate Monster (${topMonster.name})`,
+          onClick: () => mutator?.updateCreatureProperties(tilePos.x, tilePos.y, tilePos.z, topMonster.name, false, { direction: nextDirection(topMonster.direction) }),
+        })
+        creaturePropsItems.push({
+          label: `Delete Monster (${topMonster.name})`,
+          onClick: () => mutator?.removeCreature(tilePos.x, tilePos.y, tilePos.z, topMonster.name, false),
+        })
+      }
+      if (tile.npc) {
+        creaturePropsItems.push({
+          label: `NPC Properties (${tile.npc.name})`,
+          onClick: () => opts.setEditingCreature({ x: tilePos.x, y: tilePos.y, z: tilePos.z, creatureName: tile.npc!.name, isNpc: true }),
+        })
+        creaturePropsItems.push({
+          label: `Rotate NPC (${tile.npc.name})`,
+          onClick: () => mutator?.updateCreatureProperties(tilePos.x, tilePos.y, tilePos.z, tile.npc!.name, true, { direction: nextDirection(tile.npc!.direction) }),
+        })
+        creaturePropsItems.push({
+          label: `Delete NPC (${tile.npc.name})`,
+          onClick: () => mutator?.removeCreature(tilePos.x, tilePos.y, tilePos.z, tile.npc!.name, true),
+        })
+      }
+    }
+    const creaturePropsGroup: ContextMenuGroup = { items: creaturePropsItems }
+
     const topItem = tile?.items?.[tile.items.length - 1]
     const itemInfoGroup: ContextMenuGroup = {
-      items: topItem && itemRegistry && appearancesData
+      items: topItem && items && appearances
         ? [
             {
               label: 'Copy Top Item ID',
@@ -139,7 +195,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
               label: 'Copy Top Item Name',
               onClick: () => {
                 navigator.clipboard.writeText(
-                  getItemDisplayName(topItem.id, itemRegistry!, appearancesData!),
+                  getItemDisplayName(topItem.id, items!, appearances!),
                 )
               },
             },
@@ -148,26 +204,26 @@ export function useContextMenu(options: UseContextMenuOptions) {
     }
 
     const doorGroup: ContextMenuGroup = {
-      items: topItem && brushRegistryState?.isDoorItem(topItem.id)
+      items: topItem && registry?.isDoorItem(topItem.id)
         ? [{
-            label: brushRegistryState.getDoorInfo(topItem.id)?.open ? 'Close Door' : 'Open Door',
+            label: registry.getDoorInfo(topItem.id)?.open ? 'Close Door' : 'Open Door',
             onClick: () => {
-              if (!mutatorReady || !brushRegistryState || !tile) return
+              if (!mutator || !registry || !tile) return
               const idx = tile.items.length - 1
-              mutatorReady.switchDoorItem(tilePos.x, tilePos.y, tilePos.z, idx)
+              mutator.switchDoorItem(tilePos.x, tilePos.y, tilePos.z, idx)
             },
           }]
         : [],
     }
 
     const rotateGroup: ContextMenuGroup = {
-      items: topItem && itemRegistry?.get(topItem.id)?.rotateTo
+      items: topItem && items?.get(topItem.id)?.rotateTo
         ? [{
             label: 'Rotate Item',
             shortcut: 'Ctrl+R',
             onClick: () => {
-              if (!mutatorReady || !tile) return
-              mutatorReady.rotateItem(tilePos.x, tilePos.y, tilePos.z, -1)
+              if (!mutator || !tile) return
+              mutator.rotateItem(tilePos.x, tilePos.y, tilePos.z, -1)
             },
           }]
         : [],
@@ -178,22 +234,20 @@ export function useContextMenu(options: UseContextMenuOptions) {
     if (topItem) {
       brushSelectItems.push({
         label: 'Select RAW',
-        onClick: () => handleSelectAsRaw(topItem.id),
+        onClick: () => opts.handleSelectAsRaw(topItem.id),
       })
     }
 
-    if (tile?.items && brushRegistryState) {
-      const registry = brushRegistryState
-
+    if (tile?.items && registry) {
       // Ground brush — from the ground item (first item with bank flag)
       const groundItem = tile.items.find(i => {
-        const app = appearancesData?.objects.get(i.id)
+        const app = appearances?.objects.get(i.id)
         return !!app?.flags?.bank
       })
       if (groundItem && registry.getBrushForItem(groundItem.id)) {
         brushSelectItems.push({
           label: 'Select Ground Brush',
-          onClick: () => handleSelectAsBrush(groundItem.id),
+          onClick: () => opts.handleSelectAsBrush(groundItem.id),
         })
       }
 
@@ -202,7 +256,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
       if (wallItem) {
         brushSelectItems.push({
           label: 'Select Wall Brush',
-          onClick: () => handleSelectAsBrush(wallItem.id),
+          onClick: () => opts.handleSelectAsBrush(wallItem.id),
         })
       }
 
@@ -211,7 +265,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
       if (carpetItem) {
         brushSelectItems.push({
           label: 'Select Carpet Brush',
-          onClick: () => handleSelectAsBrush(carpetItem.id),
+          onClick: () => opts.handleSelectAsBrush(carpetItem.id),
         })
       }
 
@@ -220,7 +274,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
       if (tableItem) {
         brushSelectItems.push({
           label: 'Select Table Brush',
-          onClick: () => handleSelectAsBrush(tableItem.id),
+          onClick: () => opts.handleSelectAsBrush(tableItem.id),
         })
       }
 
@@ -228,7 +282,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
       if (topItem && registry.getDoodadBrushForItem(topItem.id)) {
         brushSelectItems.push({
           label: 'Select Doodad Brush',
-          onClick: () => handleSelectAsBrush(topItem.id),
+          onClick: () => opts.handleSelectAsBrush(topItem.id),
         })
       }
 
@@ -244,7 +298,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
           if (wallBrush) {
             brushSelectItems.push({
               label: 'Select Door Brush',
-              onClick: () => handleSelectAsBrush(topItem.id),
+              onClick: () => opts.handleSelectAsBrush(topItem.id),
             })
           }
         }
@@ -275,7 +329,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
         : [],
     }
 
-    return [clipboardGroup, positionGroup, itemInfoGroup, brushSelectGroup, doorGroup, rotateGroup, teleportGroup]
+    return [clipboardGroup, positionGroup, creaturePropsGroup, itemInfoGroup, brushSelectGroup, doorGroup, rotateGroup, teleportGroup]
   }
 
   const handleSetContextMenu = (menu: ContextMenuState | null) => {

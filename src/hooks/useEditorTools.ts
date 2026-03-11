@@ -3,24 +3,26 @@ import type { MapRenderer } from '../lib/MapRenderer'
 import type { MapMutator } from '../lib/MapMutator'
 import type { OtbmMap } from '../lib/otbm'
 import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
+import { useLatestRef } from './useLatestRef'
 import { DOOR_NORMAL } from '../lib/brushes/WallTypes'
 import type { SelectedItemInfo } from './useSelection'
 import { useSelection } from './useSelection'
 import { useClipboard } from './useClipboard'
 import type { EditorSettings } from '../lib/EditorSettings'
 import type { HouseData } from '../lib/sidecars'
-import type { EditorTool, BrushShape, BrushSelection, ToolContext, TilePos, ZoneSelection } from './tools/types'
+import type { EditorTool, BrushShape, BrushSelection, ToolContext, TilePos, ZoneSelection, SelectedCreatureInfo } from './tools/types'
 import { createDrawHandlers } from './tools/drawTool'
 import { createEraseHandlers } from './tools/eraseTool'
 import { createDoorHandlers } from './tools/doorTool'
-import { createSelectHandlers } from './tools/selectTool'
+import { createSelectHandlers, findSelectableOnTile } from './tools/selectTool'
 import { createFillHandlers } from './tools/fillTool'
 import { createZoneHandlers } from './tools/zoneTool'
 import { createHouseHandlers } from './tools/houseTool'
+import { createCreatureHandlers } from './tools/creatureTool'
 import { createHoverHandler } from './tools/hoverHandler'
 
 // Re-export types for consumers
-export type { EditorTool, BrushShape, BrushSelection, TilePos, ZoneSelection }
+export type { EditorTool, BrushShape, BrushSelection, TilePos, ZoneSelection, SelectedCreatureInfo }
 export type { HouseData }
 export type { SelectedItemInfo }
 export { deriveHighlights } from './useSelection'
@@ -55,6 +57,14 @@ export interface EditorToolsState {
   setSelectedZone: (zone: ZoneSelection | null) => void
   selectedHouse: HouseData | null
   setSelectedHouse: (house: HouseData | null) => void
+  creatureSpawnTime: number
+  setCreatureSpawnTime: (time: number) => void
+  creatureWeight: number
+  setCreatureWeight: (weight: number) => void
+  spawnRadius: number
+  setSpawnRadius: (radius: number) => void
+  selectedCreature: SelectedCreatureInfo | null
+  cursorPos: { x: number; y: number; z: number } | null
 }
 
 export function useEditorTools(
@@ -63,6 +73,8 @@ export function useEditorTools(
   mapData: OtbmMap | null,
   brushRegistry: BrushRegistry | null,
   onRequestEditItem: ((x: number, y: number, z: number, itemIndex: number) => void) | undefined,
+  onRequestEditCreature: ((x: number, y: number, z: number, creatureName: string, isNpc: boolean) => void) | undefined,
+  onRequestEditSpawn: ((x: number, y: number, z: number, spawnType: 'monster' | 'npc') => void) | undefined,
   clickToInspect: boolean,
   settingsRef: React.MutableRefObject<EditorSettings>,
 ): EditorToolsState {
@@ -76,30 +88,27 @@ export function useEditorTools(
   const [activeDoorType, setActiveDoorType] = useState<number>(DOOR_NORMAL)
   const [selectedZone, setSelectedZone] = useState<ZoneSelection | null>(null)
   const [selectedHouse, setSelectedHouse] = useState<HouseData | null>(null)
+  const [creatureSpawnTime, setCreatureSpawnTime] = useState(60)
+  const [creatureWeight, setCreatureWeight] = useState(100)
+  const [spawnRadius, setSpawnRadius] = useState(1)
+  const [selectedCreature, setSelectedCreature] = useState<SelectedCreatureInfo | null>(null)
 
   // ── Refs (avoid stale closures in pointer handlers) ──────────────
-  const activeToolRef = useRef(activeTool)
-  const selectedBrushRef = useRef(selectedBrush)
-  const brushSizeRef = useRef(brushSize)
-  const brushShapeRef = useRef(brushShape)
-  const brushRegistryRef = useRef(brushRegistry)
-  const activeDoorTypeRef = useRef(activeDoorType)
-  const selectedZoneRef = useRef(selectedZone)
-  const selectedHouseRef = useRef<number | null>(selectedHouse?.id ?? null)
-  const onRequestEditItemRef = useRef(onRequestEditItem)
-  const clickToInspectRef = useRef(clickToInspect)
-  useEffect(() => {
-    activeToolRef.current = activeTool
-    selectedBrushRef.current = selectedBrush
-    brushSizeRef.current = brushSize
-    brushShapeRef.current = brushShape
-    brushRegistryRef.current = brushRegistry
-    activeDoorTypeRef.current = activeDoorType
-    selectedZoneRef.current = selectedZone
-    selectedHouseRef.current = selectedHouse?.id ?? null
-    onRequestEditItemRef.current = onRequestEditItem
-    clickToInspectRef.current = clickToInspect
-  })
+  const activeToolRef = useLatestRef(activeTool)
+  const selectedBrushRef = useLatestRef(selectedBrush)
+  const brushSizeRef = useLatestRef(brushSize)
+  const brushShapeRef = useLatestRef(brushShape)
+  const brushRegistryRef = useLatestRef(brushRegistry)
+  const activeDoorTypeRef = useLatestRef(activeDoorType)
+  const selectedZoneRef = useLatestRef(selectedZone)
+  const selectedHouseRef = useLatestRef<number | null>(selectedHouse?.id ?? null)
+  const creatureSpawnTimeRef = useLatestRef(creatureSpawnTime)
+  const creatureWeightRef = useLatestRef(creatureWeight)
+  const spawnRadiusRef = useLatestRef(spawnRadius)
+  const onRequestEditItemRef = useLatestRef(onRequestEditItem)
+  const onRequestEditCreatureRef = useLatestRef(onRequestEditCreature)
+  const onRequestEditSpawnRef = useLatestRef(onRequestEditSpawn)
+  const clickToInspectRef = useLatestRef(clickToInspect)
 
   // Drag state refs
   const paintedTilesRef = useRef(new Set<string>())
@@ -112,6 +121,8 @@ export function useEditorTools(
   const dragMoveOriginRef = useRef<TilePos | null>(null)
   const dragMoveLastPosRef = useRef<TilePos | null>(null)
   const hoverPosRef = useRef<TilePos | null>(null)
+  const selectedCreatureRef = useRef<SelectedCreatureInfo | null>(null)
+  const isCreatureDragRef = useRef(false)
   const [cursorPos, setCursorPos] = useState<TilePos | null>(null)
 
   // ── Compose sub-hooks ────────────────────────────────────────────
@@ -141,7 +152,7 @@ export function useEditorTools(
       applyHighlights: selection.applyHighlights,
       selectStartRef, isShiftDragRef, isCtrlDragRef, selectedItemsSnapshotRef,
       isDragMovingRef, dragMoveOriginRef, dragMoveLastPosRef, hoverPosRef,
-      onRequestEditItemRef, clickToInspectRef,
+      onRequestEditItemRef, onRequestEditCreatureRef, onRequestEditSpawnRef, clickToInspectRef,
       isPastingRef: clipboard.isPastingRef,
       copyBufferRef: clipboard.copyBufferRef,
       executePasteAt: clipboard.executePasteAt,
@@ -149,6 +160,13 @@ export function useEditorTools(
       activeToolRef,
       selectedZoneRef,
       selectedHouseRef,
+      creatureSpawnTimeRef,
+      creatureWeightRef,
+      spawnRadiusRef,
+      selectedCreatureRef,
+      setSelectedCreature,
+      isCreatureDragRef,
+      settingsRef,
     }
 
     const draw = createDrawHandlers(ctx)
@@ -157,6 +175,7 @@ export function useEditorTools(
     const fill = createFillHandlers(ctx)
     const zone = createZoneHandlers(ctx)
     const house = createHouseHandlers(ctx)
+    const creature = createCreatureHandlers(ctx)
     const select = createSelectHandlers(ctx)
     const hover = createHoverHandler(ctx)
 
@@ -174,6 +193,7 @@ export function useEditorTools(
         case 'fill': fill.onDown(pos); break
         case 'zone': zone.onDown(pos, event); break
         case 'house': house.onDown(pos, event); break
+        case 'creature': creature.onDown(pos, event); break
         case 'select': select.onDown(pos, event); break
       }
     }
@@ -186,6 +206,7 @@ export function useEditorTools(
         case 'door': door.onMove(pos); break
         case 'zone': zone.onMove(pos); break
         case 'house': house.onMove(pos); break
+        case 'creature': creature.onMove(pos); break
         case 'select': select.onMove(pos); break
       }
     }
@@ -202,6 +223,8 @@ export function useEditorTools(
         zone.onUp()
       } else if (tool === 'house') {
         house.onUp()
+      } else if (tool === 'creature') {
+        creature.onUp()
       } else if (tool === 'select') {
         select.onUp(pos)
       }
@@ -219,7 +242,21 @@ export function useEditorTools(
       if (activeToolRef.current !== 'select') return
       const key = `${pos.x},${pos.y},${pos.z}`
       const tile = mapData.tiles.get(key) ?? null
-      if (!tile || tile.items.length === 0) return
+      if (!tile) return
+
+      // Check for creature/spawn first (same priority as selection)
+      const creatureHit = findSelectableOnTile(tile, settingsRef.current)
+      if (creatureHit) {
+        if (creatureHit.type === 'creature') {
+          onRequestEditCreatureRef.current?.(pos.x, pos.y, pos.z, creatureHit.creatureName, creatureHit.isNpc)
+        } else {
+          onRequestEditSpawnRef.current?.(pos.x, pos.y, pos.z, creatureHit.spawnType)
+        }
+        return
+      }
+
+      // Fallback: item properties
+      if (tile.items.length === 0) return
       const topIdx = tile.items.length - 1
 
       const newSel: SelectedItemInfo = { x: pos.x, y: pos.y, z: pos.z, itemIndex: topIdx }
@@ -251,6 +288,7 @@ export function useEditorTools(
       case 'fill': renderer.setCursorStyle('crosshair'); break
       case 'zone': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
       case 'house': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
+      case 'creature': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
     }
   }, [renderer, activeTool])
 
@@ -263,6 +301,8 @@ export function useEditorTools(
     if (activeTool !== 'select') {
       selection.setSelectedItems([])
       renderer?.clearItemHighlight()
+      setSelectedCreature(null)
+      selectedCreatureRef.current = null
     }
     if (clipboard.isPastingRef.current) {
       clipboard.cancelPaste()
@@ -304,6 +344,13 @@ export function useEditorTools(
     setSelectedZone,
     selectedHouse,
     setSelectedHouse,
+    creatureSpawnTime,
+    setCreatureSpawnTime,
+    creatureWeight,
+    setCreatureWeight,
+    spawnRadius,
+    setSpawnRadius,
+    selectedCreature,
     cursorPos,
   }
 }

@@ -8,10 +8,11 @@ import type { MapMutator } from '../lib/MapMutator'
 import { classifyItem } from '../lib/MapMutator'
 import { getItemDisplayName } from '../lib/items'
 import { ItemSprite } from './ItemSprite'
-import { XIcon, DotsSixVerticalIcon, CrosshairIcon, FadersIcon, TrashIcon } from '@phosphor-icons/react'
+import { XIcon, DotsSixVerticalIcon, CrosshairIcon, FadersIcon, TrashIcon, ArrowUpIcon, ArrowRightIcon, ArrowDownIcon, ArrowLeftIcon } from '@phosphor-icons/react'
 import { MIME_TIBIA_ITEM, MIME_TIBIA_INSPECTOR } from '../lib/dragUtils'
 import type { SelectedItemInfo } from '../hooks/useSelection'
 import { zoneColorCSS } from '../lib/zoneColors'
+import { Direction } from '../lib/creatures/types'
 
 interface InspectorProps {
   tilePos: { x: number; y: number; z: number } | null
@@ -29,6 +30,10 @@ interface InspectorProps {
   onDragToMap?: (itemId: number) => void
   onDragToMapEnd?: () => void
   houseName?: string | null
+  onEditCreature?: (x: number, y: number, z: number, creatureName: string, isNpc: boolean) => void
+  onEditSpawn?: (x: number, y: number, z: number, spawnType: 'monster' | 'npc') => void
+  onDeleteCreature?: (x: number, y: number, z: number, creatureName: string, isNpc: boolean) => void
+  onDeleteSpawn?: (x: number, y: number, z: number, spawnType: 'monster' | 'npc') => void
 }
 
 export function Inspector({
@@ -47,6 +52,10 @@ export function Inspector({
   onDragToMap,
   onDragToMapEnd,
   houseName,
+  onEditCreature,
+  onEditSpawn,
+  onDeleteCreature,
+  onDeleteSpawn,
 }: InspectorProps) {
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
@@ -338,6 +347,117 @@ export function Inspector({
           })
         )}
       </div>
+
+      {/* Creatures & Spawns */}
+      {tile && (tile.spawnMonster || tile.spawnNpc || (tile.monsters && tile.monsters.length > 0) || tile.npc) && (
+        <>
+          <div className="h-px w-full bg-border-subtle" />
+          <div className="px-6 py-4">
+            <span className="label text-base">CREATURES</span>
+          </div>
+          <div className="overflow-y-auto">
+            {tile.spawnMonster && (
+              <CreatureRow
+                label={`Monster Spawn (radius: ${tile.spawnMonster.radius})`}
+                badge="SPAWN"
+                badgeColor="accent"
+                onProperties={() => onEditSpawn?.(tilePos.x, tilePos.y, tilePos.z, 'monster')}
+                onDelete={() => onDeleteSpawn?.(tilePos.x, tilePos.y, tilePos.z, 'monster')}
+              />
+            )}
+            {tile.spawnNpc && (
+              <CreatureRow
+                label={`NPC Spawn (radius: ${tile.spawnNpc.radius})`}
+                badge="SPAWN"
+                badgeColor="info"
+                onProperties={() => onEditSpawn?.(tilePos.x, tilePos.y, tilePos.z, 'npc')}
+                onDelete={() => onDeleteSpawn?.(tilePos.x, tilePos.y, tilePos.z, 'npc')}
+              />
+            )}
+            {tile.monsters?.map((monster, i) => (
+              <CreatureRow
+                key={`monster-${i}`}
+                label={monster.name}
+                badge="MONSTER"
+                badgeColor="accent"
+                direction={monster.direction}
+                onProperties={() => onEditCreature?.(tilePos.x, tilePos.y, tilePos.z, monster.name, false)}
+                onDelete={() => onDeleteCreature?.(tilePos.x, tilePos.y, tilePos.z, monster.name, false)}
+              />
+            ))}
+            {tile.npc && (
+              <CreatureRow
+                label={tile.npc.name}
+                badge="NPC"
+                badgeColor="info"
+                direction={tile.npc.direction}
+                onProperties={() => onEditCreature?.(tilePos.x, tilePos.y, tilePos.z, tile.npc!.name, true)}
+                onDelete={() => onDeleteCreature?.(tilePos.x, tilePos.y, tilePos.z, tile.npc!.name, true)}
+              />
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── CreatureRow ──────────────────────────────────────────────────
+
+const DIRECTION_ICONS = {
+  [Direction.NORTH]: ArrowUpIcon,
+  [Direction.EAST]: ArrowRightIcon,
+  [Direction.SOUTH]: ArrowDownIcon,
+  [Direction.WEST]: ArrowLeftIcon,
+} as const
+
+function CreatureRow({
+  label,
+  badge,
+  badgeColor,
+  direction,
+  onProperties,
+  onDelete,
+}: {
+  label: string
+  badge: string
+  badgeColor: 'accent' | 'info'
+  direction?: Direction
+  onProperties?: () => void
+  onDelete?: () => void
+}) {
+  const DirIcon = direction != null ? DIRECTION_ICONS[direction] : null
+  return (
+    <div className="group flex items-center gap-4 border-b border-border-subtle px-5 py-4 last:border-b-0 hover:bg-panel-hover">
+      {DirIcon ? (
+        <div className="flex w-[36px] h-[36px] shrink-0 items-center justify-center text-fg-faint">
+          <DirIcon size={18} weight="bold" />
+        </div>
+      ) : (
+        <div className="w-[36px] h-[36px] shrink-0" />
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-ui text-md font-medium text-fg">{label}</div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2 opacity-0 transition-opacity duration-100 ease-out group-hover:opacity-100">
+        {onProperties && (
+          <button className="item-action-btn" onClick={onProperties} title="Properties">
+            <SlidersIcon />
+          </button>
+        )}
+        {onDelete && (
+          <button className="item-action-btn danger" onClick={onDelete} title="Delete">
+            <DeleteIcon />
+          </button>
+        )}
+      </div>
+      <span className={clsx(
+        'shrink-0 rounded-sm px-3 py-[2px] font-display text-xs font-semibold tracking-wide uppercase',
+        badgeColor === 'accent' && 'bg-accent-subtle text-accent-fg',
+        badgeColor === 'info' && 'bg-info-subtle text-info-fg',
+      )}>
+        {badge}
+      </span>
     </div>
   )
 }

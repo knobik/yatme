@@ -534,6 +534,8 @@ export class ChunkManager {
 
   private preloadAndRebuild(container: Container, tiles: OtbmTile[], chunkKey: string): void {
     const spriteIds: number[] = []
+    const resolver = this.tileRenderer.creatureSpriteResolver
+    const creatureDb = this.tileRenderer.creatureDb
     for (const tile of tiles) {
       for (const item of tile.items) {
         const appearance = this.appearances.objects.get(item.id)
@@ -544,6 +546,25 @@ export class ChunkManager {
         for (let phase = 0; phase < phaseCount; phase++) {
           const sid = getItemSpriteId(appearance, item, tile, 0, phase)
           if (sid != null && sid !== 0) spriteIds.push(sid)
+        }
+      }
+      // Collect creature sprite IDs for preloading
+      if (resolver && creatureDb) {
+        if (this.tileRenderer.showMonsters && tile.monsters) {
+          for (const m of tile.monsters) {
+            const ct = creatureDb.getByName(m.name)
+            if (ct) {
+              const sid = resolver.resolve(ct, m.direction)
+              if (sid != null) spriteIds.push(sid)
+            }
+          }
+        }
+        if (this.tileRenderer.showNpcs && tile.npc) {
+          const ct = creatureDb.getByName(tile.npc.name)
+          if (ct) {
+            const sid = resolver.resolve(ct, tile.npc.direction)
+            if (sid != null) spriteIds.push(sid)
+          }
         }
       }
     }

@@ -2,8 +2,7 @@ import { useEffect, useCallback, type RefObject } from 'react'
 import type { MapRenderer } from '../lib/MapRenderer'
 import type { MapMutator } from '../lib/MapMutator'
 import type { EditorToolsState } from './useEditorTools'
-import type { EditorSettings } from '../lib/EditorSettings'
-import { saveSettings } from '../lib/EditorSettings'
+import type { EditorSettings, BooleanSettingKey } from '../lib/EditorSettings'
 import type { ContextMenuState } from './useContextMenu'
 
 interface UseKeyboardShortcutsOptions {
@@ -12,22 +11,18 @@ interface UseKeyboardShortcutsOptions {
   rendererRef: RefObject<MapRenderer | null>
   handleSave: () => void
   handleFloorChange: (delta: number) => void
-  showPalette: boolean
-  setShowPalette: React.Dispatch<React.SetStateAction<boolean>>
-  showLights: boolean
-  setShowLights: React.Dispatch<React.SetStateAction<boolean>>
+  editorSettings: EditorSettings
+  toggleSetting: (key: BooleanSettingKey) => void
   showGoToDialog: boolean
   setShowGoToDialog: React.Dispatch<React.SetStateAction<boolean>>
   showFindItem: boolean
   setShowFindItem: React.Dispatch<React.SetStateAction<boolean>>
   showReplaceItems: boolean
   setShowReplaceItems: React.Dispatch<React.SetStateAction<boolean>>
-  showZonePalette: boolean
-  setEditorSettings: React.Dispatch<React.SetStateAction<EditorSettings>>
   selectedTilePos: { x: number; y: number; z: number } | null
   setSelectedTilePos: React.Dispatch<React.SetStateAction<{ x: number; y: number; z: number } | null>>
   contextMenu: ContextMenuState | null
-  setContextMenu: React.Dispatch<React.SetStateAction<ContextMenuState | null>>
+  setContextMenu: (menu: ContextMenuState | null) => void
   placingHouseExit: number | null
   setPlacingHouseExit: React.Dispatch<React.SetStateAction<number | null>>
 }
@@ -39,17 +34,14 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
     rendererRef,
     handleSave,
     handleFloorChange,
-    showPalette,
-    setShowPalette,
-    setShowLights,
+    editorSettings,
+    toggleSetting,
     showGoToDialog,
     setShowGoToDialog,
     showFindItem,
     setShowFindItem,
     showReplaceItems,
     setShowReplaceItems,
-    showZonePalette,
-    setEditorSettings,
     selectedTilePos,
     setSelectedTilePos,
     contextMenu,
@@ -166,6 +158,16 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
           rendererRef.current?.resetZoom()
           return
         }
+        if (e.key === 'm') {
+          e.preventDefault()
+          toggleSetting('showMonsterSpawns')
+          return
+        }
+        if (e.key === 'n') {
+          e.preventDefault()
+          toggleSetting('showNpcSpawns')
+          return
+        }
         return
       }
 
@@ -192,8 +194,8 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
           setShowReplaceItems(false)
         } else if (contextMenu) {
           setContextMenu(null)
-        } else if (showPalette) {
-          setShowPalette(false)
+        } else if (editorSettings.showPalette) {
+          toggleSetting('showPalette')
         } else if (selectedTilePos) {
           setSelectedTilePos(null)
           rendererRef.current?.deselectTile()
@@ -202,19 +204,10 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
         }
       } else if (e.key === 'p' || e.key === 'P') {
         e.preventDefault()
-        setShowPalette(prev => {
-          const next = !prev
-          setEditorSettings(s => { const u = { ...s, showPalette: next }; saveSettings(u); return u })
-          return next
-        })
+        toggleSetting('showPalette')
       } else if (e.key === 'l' || e.key === 'L') {
         e.preventDefault()
-        setShowLights(prev => {
-          const next = !prev
-          rendererRef.current?.setShowLights(next)
-          setEditorSettings(s => { const u = { ...s, showLights: next }; saveSettings(u); return u })
-          return next
-        })
+        toggleSetting('showLights')
       } else if (e.key === 's' && !e.ctrlKey) {
         e.preventDefault()
         toolsRef.current.setActiveTool('select')
@@ -236,6 +229,15 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
       } else if (e.key === 'h' && !e.ctrlKey) {
         e.preventDefault()
         toolsRef.current.setActiveTool('house')
+      } else if (e.key === 'c' && !e.ctrlKey) {
+        e.preventDefault()
+        toolsRef.current.setActiveTool('creature')
+      } else if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey) {
+        e.preventDefault()
+        toggleSetting('showMonsters')
+      } else if ((e.key === 'n' || e.key === 'N') && !e.ctrlKey) {
+        e.preventDefault()
+        toggleSetting('showNpcs')
       } else if (e.key === ']') {
         e.preventDefault()
         const cur = toolsRef.current.brushSize
@@ -248,7 +250,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [handleFloorChange, handleSave, showPalette, showZonePalette, selectedTilePos, contextMenu, showGoToDialog, showFindItem, showReplaceItems, placingHouseExit, borderizeCurrentSelection, mutatorRef, randomizeCurrentSelection, rendererRef, setContextMenu, setEditorSettings, setPlacingHouseExit, setSelectedTilePos, setShowFindItem, setShowGoToDialog, setShowLights, setShowPalette, setShowReplaceItems, toolsRef])
+  }, [handleFloorChange, handleSave, editorSettings, toggleSetting, selectedTilePos, contextMenu, showGoToDialog, showFindItem, showReplaceItems, placingHouseExit, borderizeCurrentSelection, mutatorRef, randomizeCurrentSelection, rendererRef, setContextMenu, setPlacingHouseExit, setSelectedTilePos, setShowFindItem, setShowGoToDialog, setShowReplaceItems, toolsRef])
 
   return { borderizeCurrentSelection, randomizeCurrentSelection }
 }

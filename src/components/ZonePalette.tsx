@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import clsx from 'clsx'
 import type { MapSidecars, ZoneData } from '../lib/sidecars'
 import type { OtbmMap } from '../lib/otbm'
@@ -67,11 +67,8 @@ export function ZonePalette({
     setEditingId(null)
   }
 
-  const zoneTileCounts = useTileCounts(
-    mapData,
-    tile => tile.zones ?? [],
-    [sidecars],
-  )
+  const zoneExtractor = useCallback((tile: { zones?: number[] }) => tile.zones ?? [], [])
+  const zoneTileCounts = useTileCounts(mapData, zoneExtractor, sidecars)
 
   const isZoneSelected = (zoneId: number) =>
     selectedZone?.type === 'zone' && selectedZone.zoneId === zoneId

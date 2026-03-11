@@ -1,4 +1,6 @@
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { useVirtualScroll } from '../hooks/useVirtualScroll'
 import clsx from 'clsx'
 import type { ItemRegistry } from '../lib/items'
 import type { AppearanceData } from '../lib/appearances'
@@ -79,19 +81,7 @@ function getItemCategory(id: number, appearances: AppearanceData, registry: Item
 export function ItemPalette({ registry, appearances, brushRegistry, onClose, selectedItemId, onItemSelect }: ItemPaletteProps) {
   const [activeCategory, setActiveCategory] = useState<Category>('ALL')
   const [search, setSearch] = useState('')
-  const [scrollTop, setScrollTop] = useState(0)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const searchTimerRef = useRef<number>(0)
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-
-  // Debounce search input
-  const handleSearch = useCallback((value: string) => {
-    setSearch(value)
-    clearTimeout(searchTimerRef.current)
-    searchTimerRef.current = window.setTimeout(() => {
-      setDebouncedSearch(value)
-    }, 150)
-  }, [])
+  const debouncedSearch = useDebouncedValue(search, 150)
 
   // Build the full item list with category assignments (cached)
   const allItems = useMemo(() => {
@@ -139,46 +129,20 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
     return items
   }, [allItems, activeCategory, debouncedSearch])
 
-  // Reset scroll when filter changes — adjust state during render (React-recommended pattern)
-  const [prevScrollDeps, setPrevScrollDeps] = useState({ activeCategory, debouncedSearch })
-  const [scrollResetKey, setScrollResetKey] = useState(0)
-  if (
-    prevScrollDeps.activeCategory !== activeCategory ||
-    prevScrollDeps.debouncedSearch !== debouncedSearch
-  ) {
-    setPrevScrollDeps({ activeCategory, debouncedSearch })
-    setScrollTop(0)
-    setScrollResetKey(k => k + 1)
-  }
+  const { scrollRef, totalHeight, startIndex, endIndex, handleScroll, resetScroll } = useVirtualScroll({
+    totalItems: filteredItems.length,
+    itemHeight: CELL_HEIGHT,
+    bufferItems: BUFFER_ROWS,
+    columns: COLS,
+  })
+
+  // Reset scroll when filter changes
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = 0
-  }, [scrollResetKey])
+    resetScroll()
+  }, [activeCategory, debouncedSearch, resetScroll])
 
-  // Virtual scrolling calculations
-  const totalRows = Math.ceil(filteredItems.length / COLS)
-  const totalHeight = totalRows * CELL_HEIGHT
-  const [viewportHeight, setViewportHeight] = useState(400)
-
-  const handleScroll = useCallback(() => {
-    if (scrollRef.current) {
-      setScrollTop(scrollRef.current.scrollTop)
-      setViewportHeight(scrollRef.current.clientHeight)
-    }
-  }, [])
-
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    setViewportHeight(el.clientHeight)
-    const observer = new ResizeObserver(() => setViewportHeight(el.clientHeight))
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
-
-  // Calculate visible range
-  const startRow = Math.max(0, Math.floor(scrollTop / CELL_HEIGHT) - BUFFER_ROWS)
-  const endRow = Math.min(totalRows, Math.ceil((scrollTop + viewportHeight) / CELL_HEIGHT) + BUFFER_ROWS)
-  const visibleItems = filteredItems.slice(startRow * COLS, endRow * COLS)
+  const startRow = Math.floor(startIndex / COLS)
+  const visibleItems = filteredItems.slice(startIndex, endIndex)
 
   return (
     <div className="panel absolute left-4 top-4 bottom-4 z-10 flex w-[320px] flex-col pointer-events-auto">
@@ -203,7 +167,7 @@ export function ItemPalette({ registry, appearances, brushRegistry, onClose, sel
           type="text"
           placeholder="Search items..."
           value={search}
-          onChange={(e) => handleSearch(e.target.value)}
+          onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 

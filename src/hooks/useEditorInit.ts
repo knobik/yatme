@@ -13,6 +13,7 @@ import type { ItemRegistry } from '../lib/items'
 import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
 import type { ResolvedTileset } from '../lib/tilesets/TilesetTypes'
 import type { MapSidecars } from '../lib/sidecars'
+import type { CreatureDatabase } from '../lib/creatures/CreatureDatabase'
 import type { EditorToolsState } from './useEditorTools'
 import type { ContextMenuState } from './useContextMenu'
 
@@ -54,6 +55,8 @@ export interface UseEditorInitOptions {
   setPlacingHouseExit: (id: number | null) => void
   placingHouseExitRef: RefObject<number | null>
 
+  // Creature database
+  setCreatureDb: (db: CreatureDatabase) => void
   // Tools ref for accessing current tools state in callbacks
   toolsRef: RefObject<EditorToolsState>
 }
@@ -88,6 +91,7 @@ export function useEditorInit(
     setTileVersion,
     setPlacingHouseExit,
     placingHouseExitRef,
+    setCreatureDb,
     toolsRef,
   } = options
 
@@ -111,7 +115,7 @@ export function useEditorInit(
       }, signal, provider)
       if (!result) return
 
-      const { app, appearances, mapData, sidecars, registry, brushRegistry, tilesets, mapFilename: filename } = result
+      const { app, appearances, mapData, sidecars, registry, brushRegistry, tilesets, creatureDb, spawnManager, mapFilename: filename } = result
       setMapFilename(filename)
       appInstance = app
       appRef.current = app
@@ -125,10 +129,11 @@ export function useEditorInit(
       })
       if (brushRegistry) setBrushRegistryState(brushRegistry)
       setTilesets(tilesets)
+      if (creatureDb) setCreatureDb(creatureDb)
 
       // Build renderer + mutator
       setSidecarsData(sidecars)
-      const { renderer, mutator } = setupEditor(app, appearances, mapData, brushRegistry, registry, sidecars)
+      const { renderer, mutator } = setupEditor(app, appearances, mapData, brushRegistry, registry, sidecars, spawnManager, creatureDb)
       rendererRef.current = renderer
       mutatorRef.current = mutator
 
@@ -179,7 +184,7 @@ export function useEditorInit(
           return
         }
         const currentTool = toolsRef.current.activeTool
-        if (currentTool === 'draw' || currentTool === 'erase') {
+        if (currentTool === 'draw' || currentTool === 'erase' || currentTool === 'creature') {
           toolsRef.current.setActiveTool('select')
         }
         // Select the top item (like left-click) if tile not already in selection
@@ -242,6 +247,10 @@ export function useEditorInit(
       renderer.setShowSelectionBorder(savedSettings.selectionBorder)
       renderer.setShowZoneOverlay(savedSettings.showZoneOverlay)
       renderer.setShowHouseOverlay(savedSettings.showHouseOverlay)
+      renderer.setShowMonsterSpawnOverlay(savedSettings.showMonsterSpawns)
+      renderer.setShowNpcSpawnOverlay(savedSettings.showNpcSpawns)
+      renderer.setShowMonsters(savedSettings.showMonsters)
+      renderer.setShowNpcs(savedSettings.showNpcs)
 
       setLoadingProgress(1)
       setLoadingStatus('Ready')

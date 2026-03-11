@@ -5,6 +5,8 @@ import type { ToolContext, TilePos, BrushSelection, BrushShape, EditorTool } fro
 import type { OtbmMap } from '../lib/otbm'
 import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
 import type { SelectedItemInfo } from '../hooks/useSelection'
+import type { EditorSettings } from '../lib/EditorSettings'
+import { DEFAULT_SETTINGS } from '../lib/EditorSettings'
 
 export function makeMockMutator(overrides: Record<string, unknown> = {}) {
   return {
@@ -22,6 +24,10 @@ export function makeMockMutator(overrides: Record<string, unknown> = {}) {
     eraseCarpet: vi.fn(),
     eraseTable: vi.fn(),
     removeTopItem: vi.fn(),
+    eraseAllItems: vi.fn(),
+    reborderAfterErase: vi.fn(),
+    clearAllTileFlags: vi.fn(),
+    clearAllTileZones: vi.fn(),
     removeBrushItems: vi.fn(),
     removeItem: vi.fn(),
     addItem: vi.fn(),
@@ -29,6 +35,17 @@ export function makeMockMutator(overrides: Record<string, unknown> = {}) {
     mergePasteItems: vi.fn(),
     getOrCreateTile: vi.fn(),
     getTile: vi.fn(),
+    placeCreature: vi.fn(),
+    removeCreature: vi.fn(),
+    moveCreature: vi.fn(),
+    placeSpawnZone: vi.fn(),
+    removeSpawnZone: vi.fn(),
+    setTileFlag: vi.fn(),
+    clearTileFlag: vi.fn(),
+    addTileZone: vi.fn(),
+    removeTileZone: vi.fn(),
+    getAppearances: vi.fn(() => ({ objects: new Map() })),
+    spawnManager: null,
     ...overrides,
   }
 }
@@ -57,9 +74,11 @@ export interface MakeToolContextOptions {
   selectedBrush?: BrushSelection | null
   brushSize?: number
   brushShape?: BrushShape
+  spawnRadius?: number
   registry?: BrushRegistry | null
   activeDoorType?: number
   activeTool?: EditorTool
+  settings?: Partial<EditorSettings>
   isPasting?: boolean
   copyBuffer?: { canPaste: () => boolean; getTiles: () => unknown[] }
   selectedItems?: SelectedItemInfo[]
@@ -93,12 +112,23 @@ export function makeToolContext(opts: MakeToolContextOptions = {}) {
     dragMoveLastPosRef: { current: null as TilePos | null },
     hoverPosRef: { current: null as TilePos | null },
     onRequestEditItemRef: { current: undefined as ((x: number, y: number, z: number, idx: number) => void) | undefined },
+    onRequestEditCreatureRef: { current: undefined as ((x: number, y: number, z: number, name: string, isNpc: boolean) => void) | undefined },
+    onRequestEditSpawnRef: { current: undefined as ((x: number, y: number, z: number, spawnType: 'monster' | 'npc') => void) | undefined },
     clickToInspectRef: { current: opts.clickToInspect ?? false },
     isPastingRef: { current: opts.isPasting ?? false },
     copyBufferRef: { current: opts.copyBuffer ?? { canPaste: () => false, getTiles: () => [] } },
     executePasteAt: vi.fn(),
     cancelPaste: vi.fn(),
     activeToolRef: { current: opts.activeTool ?? 'draw' as EditorTool },
+    selectedZoneRef: { current: null },
+    selectedHouseRef: { current: null },
+    creatureSpawnTimeRef: { current: 60 },
+    creatureWeightRef: { current: 100 },
+    spawnRadiusRef: { current: opts.spawnRadius ?? 1 },
+    selectedCreatureRef: { current: null },
+    setSelectedCreature: vi.fn(),
+    isCreatureDragRef: { current: false },
+    settingsRef: { current: { ...DEFAULT_SETTINGS, ...opts.settings } },
   } as unknown as ToolContext
 
   return { ctx, mutator, renderer }

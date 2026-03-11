@@ -1,24 +1,89 @@
-import type { OtbmItem } from '../../lib/otbm'
+import type { OtbmItem, OtbmTile } from '../../lib/otbm'
 import { deepCloneItem } from '../../lib/otbm'
 import type { SelectedItemInfo } from '../useSelection'
 import { toggleItemInSelection, selectAllItemsOnTiles, mergeItemSelections } from '../useSelection'
-import type { ToolContext, TilePos } from './types'
+import type { ToolContext, TilePos, SelectedCreatureInfo } from './types'
+import type { EditorSettings } from '../../lib/EditorSettings'
+
+/** Find the highest-priority selectable creature or spawn zone on a tile. */
+export function findSelectableOnTile(tile: OtbmTile | null, settings: EditorSettings): SelectedCreatureInfo | null {
+  if (!tile) return null
+  const { x, y, z } = tile
+
+  // Priority 1: spawnMonster center
+  if (settings.showMonsterSpawns && tile.spawnMonster) {
+    return { type: 'spawnZone', x, y, z, spawnType: 'monster' }
+  }
+
+  // Priority 2: top monster
+  if (settings.showMonsters && tile.monsters && tile.monsters.length > 0) {
+    const top = tile.monsters[tile.monsters.length - 1]
+    return { type: 'creature', x, y, z, creatureName: top.name, isNpc: false }
+  }
+
+  // Priority 3: spawnNpc center
+  if (settings.showNpcSpawns && tile.spawnNpc) {
+    return { type: 'spawnZone', x, y, z, spawnType: 'npc' }
+  }
+
+  // Priority 4: NPC
+  if (settings.showNpcs && tile.npc) {
+    return { type: 'creature', x, y, z, creatureName: tile.npc.name, isNpc: true }
+  }
+
+  return null
+}
 
 export function createSelectHandlers(ctx: ToolContext) {
+  function clearCreatureSelection() {
+    ctx.selectedCreatureRef.current = null
+    ctx.setSelectedCreature(null)
+  }
+
+  /** Set a full-tile highlight on a single position (used for creature/spawn selection). */
+  function highlightTile(pos: TilePos) {
+    ctx.renderer.setHighlights([{ pos: { x: pos.x, y: pos.y, z: pos.z }, indices: null }])
+  }
+
   function onDown(pos: TilePos, event: PointerEvent) {
     const ctrlKey = event.ctrlKey || event.metaKey
     ctx.selectStartRef.current = pos
     ctx.isShiftDragRef.current = event.shiftKey
     ctx.isCtrlDragRef.current = ctrlKey
 
-    // Plain click (no modifiers): select top item immediately and begin drag-move
+    // Plain click (no modifiers): check creatures first, then items
     if (!event.shiftKey && !ctrlKey) {
       const tileKey = `${pos.x},${pos.y},${pos.z}`
       const tile = ctx.mapData.tiles.get(tileKey) ?? null
 
+      // Try creature/spawn selection first
+      const creatureHit = findSelectableOnTile(tile, ctx.settingsRef.current)
+      if (creatureHit) {
+        // Select this creature/spawn, clear item selection
+        ctx.selectedCreatureRef.current = creatureHit
+        ctx.setSelectedCreature(creatureHit)
+        ctx.setSelectedItems([])
+        ctx.selectedItemsRef.current = []
+        ctx.renderer.clearItemHighlight()
+        highlightTile(pos)
+
+        // Enable drag-move for creatures and spawn zones
+        ctx.isDragMovingRef.current = true
+        ctx.isCreatureDragRef.current = true
+        ctx.dragMoveOriginRef.current = pos
+        ctx.dragMoveLastPosRef.current = pos
+        return
+      }
+
+      // No creature hit — fall through to item selection
       const isAlreadySelected = ctx.selectedItemsRef.current.some(
         s => s.x === pos.x && s.y === pos.y && s.z === pos.z
       )
+
+      // Clear any creature selection when selecting items
+      if (ctx.selectedCreatureRef.current) {
+        clearCreatureSelection()
+      }
 
       if (!isAlreadySelected && tile && tile.items.length > 0) {
         const topIdx = tile.items.length - 1
@@ -57,6 +122,10 @@ export function createSelectHandlers(ctx: ToolContext) {
     // Drag-move: track target position and show ghost preview
     if (ctx.isDragMovingRef.current) {
       ctx.dragMoveLastPosRef.current = pos
+
+      // Creature drag: just track position, no ghost preview
+      if (ctx.isCreatureDragRef.current) return
+
       const origin = ctx.dragMoveOriginRef.current
       if (origin) {
         const dx = pos.x - origin.x
@@ -115,12 +184,58 @@ export function createSelectHandlers(ctx: ToolContext) {
   function commitDragMove(pos: TilePos) {
     const origin = ctx.dragMoveOriginRef.current
     const target = ctx.dragMoveLastPosRef.current
+    const wasCreatureDrag = ctx.isCreatureDragRef.current
     ctx.isDragMovingRef.current = false
     ctx.dragMoveOriginRef.current = null
     ctx.dragMoveLastPosRef.current = null
+    ctx.isCreatureDragRef.current = false
     ctx.renderer.clearDragPreview()
 
     const didMove = origin && target && (origin.x !== target.x || origin.y !== target.y)
+
+    // Creature / spawn zone drag-move
+    if (wasCreatureDrag) {
+      if (didMove) {
+        const sel = ctx.selectedCreatureRef.current
+        if (sel && sel.type === 'creature') {
+          ctx.mutator.moveCreature(
+            origin.x, origin.y, origin.z,
+            target.x, target.y, target.z,
+            sel.creatureName, sel.isNpc,
+          )
+          // Update selection to new position
+          const updated: SelectedCreatureInfo = { ...sel, x: target.x, y: target.y, z: target.z }
+          ctx.selectedCreatureRef.current = updated
+          ctx.setSelectedCreature(updated)
+          highlightTile(target)
+        } else if (sel && sel.type === 'spawnZone') {
+          // Move spawn zone: remove from source, place at destination
+          const srcKey = `${origin.x},${origin.y},${origin.z}`
+          const srcTile = ctx.mapData.tiles.get(srcKey)
+          const spawnData = sel.spawnType === 'monster' ? srcTile?.spawnMonster : srcTile?.spawnNpc
+          if (spawnData) {
+            ctx.mutator.beginBatch('Move spawn zone')
+            ctx.mutator.removeSpawnZone(origin.x, origin.y, origin.z, sel.spawnType)
+            ctx.mutator.placeSpawnZone(target.x, target.y, target.z, sel.spawnType, spawnData.radius)
+            ctx.mutator.commitBatch()
+            const updated: SelectedCreatureInfo = { ...sel, x: target.x, y: target.y, z: target.z }
+            ctx.selectedCreatureRef.current = updated
+            ctx.setSelectedCreature(updated)
+            highlightTile(target)
+          }
+        }
+      }
+      ctx.selectStartRef.current = null
+      ctx.isShiftDragRef.current = false
+      ctx.isCtrlDragRef.current = false
+
+      if (!didMove && ctx.clickToInspectRef.current) {
+        const key = `${pos.x},${pos.y},${pos.z}`
+        const tile = ctx.mapData.tiles.get(key) ?? null
+        ctx.renderer.onTileClick?.(tile, pos.x, pos.y)
+      }
+      return
+    }
 
     if (didMove) {
       const dx = target.x - origin.x
@@ -238,9 +353,12 @@ export function createSelectHandlers(ctx: ToolContext) {
       const tile = ctx.mapData.tiles.get(key) ?? null
 
       if (!tile || tile.items.length === 0) {
-        ctx.setSelectedItems([])
-        ctx.selectedItemsRef.current = []
-        ctx.renderer.clearItemHighlight()
+        // Also clear creature selection when clicking truly empty tile
+        if (!ctx.selectedCreatureRef.current) {
+          ctx.setSelectedItems([])
+          ctx.selectedItemsRef.current = []
+          ctx.renderer.clearItemHighlight()
+        }
       }
 
       if (ctx.clickToInspectRef.current) {

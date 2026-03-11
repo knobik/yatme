@@ -4,41 +4,71 @@ import { getTextureSync, preloadSheets } from '../lib/TextureManager'
 import type { AppearanceData } from '../lib/appearances'
 import { getItemPreviewSpriteId } from '../lib/SpriteResolver'
 
-interface ItemSpriteProps {
+type Anchor = 'bottom-right' | 'bottom-center'
+
+interface ItemSpriteByIdProps {
   itemId: number
   appearances: AppearanceData
+  spriteId?: never
   size?: number
   /** Count/charges — affects sprite pattern for stackable and liquid items */
   count?: number
+  /** Anchor point for sprites smaller than the canvas. Default: 'bottom-right' */
+  anchor?: Anchor
 }
 
-export function ItemSprite({ itemId, appearances, size = 32, count }: ItemSpriteProps) {
+interface ItemSpriteByRawIdProps {
+  spriteId: number | null
+  itemId?: never
+  appearances?: never
+  size?: number
+  count?: never
+  anchor?: Anchor
+}
+
+type ItemSpriteProps = ItemSpriteByIdProps | ItemSpriteByRawIdProps
+
+export function ItemSprite(props: ItemSpriteProps) {
+  const { size = 32, anchor = 'bottom-right' } = props
   const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  // Resolve the sprite ID from either direct prop or item lookup
+  const resolvedSpriteId = 'spriteId' in props && props.spriteId !== undefined
+    ? props.spriteId
+    : (() => {
+        if (!props.appearances) return null
+        const appearance = props.appearances.objects.get(props.itemId!)
+        if (!appearance) return null
+        return getItemPreviewSpriteId(appearance, props.count) ?? null
+      })()
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const appearance = appearances.objects.get(itemId)
-    if (!appearance) return
-
-    const spriteId = getItemPreviewSpriteId(appearance, count)
-    if (!spriteId) return
-
-    const texture = getTextureSync(spriteId)
-    if (texture) {
-      drawTexture(canvas, texture, size)
+    if (resolvedSpriteId == null) {
+      const ctx = canvas.getContext('2d')
+      ctx?.clearRect(0, 0, size, size)
       return
     }
 
-    // Texture not yet loaded — trigger load and re-render
-    preloadSheets([spriteId]).then(() => {
-      const tex = getTextureSync(spriteId)
+    const texture = getTextureSync(resolvedSpriteId)
+    if (texture) {
+      drawTexture(canvas, texture, size, anchor)
+      return
+    }
+
+    // Texture not yet loaded — trigger load and draw when ready
+    let cancelled = false
+    preloadSheets([resolvedSpriteId]).then(() => {
+      if (cancelled) return
+      const tex = getTextureSync(resolvedSpriteId)
       if (tex && canvasRef.current) {
-        drawTexture(canvasRef.current, tex, size)
+        drawTexture(canvasRef.current, tex, size, anchor)
       }
     })
-  }, [itemId, appearances, size, count])
+    return () => { cancelled = true }
+  }, [resolvedSpriteId, size, anchor])
 
   return (
     <canvas
@@ -55,7 +85,7 @@ export function ItemSprite({ itemId, appearances, size = 32, count }: ItemSprite
   )
 }
 
-function drawTexture(canvas: HTMLCanvasElement, texture: Texture, size: number): void {
+function drawTexture(canvas: HTMLCanvasElement, texture: Texture, size: number, anchor: Anchor): void {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
@@ -69,11 +99,11 @@ function drawTexture(canvas: HTMLCanvasElement, texture: Texture, size: number):
   const sw = frame.width
   const sh = frame.height
 
-  // Scale to fit, anchored at bottom-right (matching Tibia's item rendering)
+  // Scale to fit, anchored at the specified position
   const scale = Math.min(size / sw, size / sh)
   const dw = sw * scale
   const dh = sh * scale
-  const dx = size - dw
+  const dx = anchor === 'bottom-center' ? (size - dw) / 2 : size - dw
   const dy = size - dh
 
   ctx.imageSmoothingEnabled = false

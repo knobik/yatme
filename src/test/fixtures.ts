@@ -1,6 +1,7 @@
 import type { OtbmItem, OtbmTile, OtbmMap } from '../lib/otbm'
 import type { AppearanceData } from '../lib/appearances'
 import type { Appearance, AppearanceFlags, SpriteInfo, SpriteAnimation } from '../proto/appearances'
+import { Direction, type TileCreature } from '../lib/creatures/types'
 
 export function makeItem(overrides: Partial<OtbmItem> = {}): OtbmItem {
   return { id: 1, ...overrides }
@@ -83,6 +84,25 @@ export function makeSpriteInfo(overrides: Partial<SpriteInfo> = {}): SpriteInfo 
     ...overrides,
   }
 }
+
+// ── Creature test helpers ────────────────────────────────────────────
+
+export const GROUND_ID = 100
+export const creatureAppearances = makeAppearanceData([[GROUND_ID, { bank: { waypoints: 0 } }]])
+
+export function groundTile(x: number, y: number, z: number) {
+  return makeTile(x, y, z, [makeItem({ id: GROUND_ID })])
+}
+
+export function makeMonster(name: string, overrides: Partial<TileCreature> = {}): TileCreature {
+  return { name, direction: Direction.SOUTH, spawnTime: 60, isNpc: false, ...overrides }
+}
+
+export function makeNpc(name: string, overrides: Partial<TileCreature> = {}): TileCreature {
+  return { name, direction: Direction.NORTH, spawnTime: 60, isNpc: true, ...overrides }
+}
+
+// ── Sprite helpers ──────────────────────────────────────────────────
 
 export function makeSpriteAnimation(phases: number, loopType: number = 0): SpriteAnimation {
   const spritePhase = Array.from({ length: phases }, () => ({

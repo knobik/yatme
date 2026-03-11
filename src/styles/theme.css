@@ -879,4 +879,27 @@
   margin: 0;
 }
 
+/* ── Menu bar labels ─────────────────────────────────────────────── */
+
+.menu-label {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-fg-muted);
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  transition: color 100ms, background 100ms;
+}
+
+.menu-label:hover,
+.menu-label-active {
+  color: var(--color-fg);
+  background: var(--color-panel-hover);
+}
+
 } /* end @layer components */

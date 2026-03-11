@@ -8,6 +8,8 @@ import { useEditorTools, deriveHighlights } from './hooks/useEditorTools'
 import type { BrushRegistry } from './lib/brushes/BrushRegistry'
 import { Inspector } from './components/Inspector'
 import { ItemPropertiesModal } from './components/ItemPropertiesModal'
+import { CreaturePropertiesModal } from './components/CreaturePropertiesModal'
+import { SpawnPropertiesModal } from './components/SpawnPropertiesModal'
 import type { OtbmItem } from './lib/otbm'
 import { applyItemProperties } from './lib/otbm'
 import { BrushPalette, type BrushPaletteHandle } from './components/BrushPalette'
@@ -21,13 +23,16 @@ import { SettingsModal } from './components/SettingsModal'
 import { MapPropertiesModal, type MapPropertiesPatch } from './components/MapPropertiesModal'
 import { EditTownsModal } from './components/EditTownsModal'
 import { SaveToast } from './components/SaveToast'
-import { loadSettings, saveSettings, type EditorSettings } from './lib/EditorSettings'
+import { loadSettings, saveSettings, type EditorSettings, type BooleanSettingKey } from './lib/EditorSettings'
+import type { MapRenderer as MapRendererType } from './lib/MapRenderer'
 import { findEntryInTilesets } from './lib/tilesets/TilesetLoader'
 import { ZONE_FLAG_DEFS, type BrushSelection } from './hooks/tools/types'
 import { scrubZoneFromTiles } from './lib/zoneCleanup'
 import { scrubHouseFromTiles } from './lib/houseCleanup'
 import { ZonePalette } from './components/ZonePalette'
 import { HousePalette } from './components/HousePalette'
+import { CreaturePalette } from './components/CreaturePalette'
+import type { CreatureDatabase } from './lib/creatures/CreatureDatabase'
 import type { CategoryType } from './lib/tilesets/TilesetTypes'
 import { emptySidecars, type MapSidecars } from './lib/sidecars'
 import { useEditorInit, type CameraState } from './hooks/useEditorInit'
@@ -38,6 +43,18 @@ import { useToolAutoToggle } from './hooks/useToolAutoToggle'
 import { FloorSelector } from './components/FloorSelector'
 import { LoadingOverlay } from './components/LoadingOverlay'
 import { HudField } from './components/HudField'
+
+/** Maps boolean setting keys to their corresponding MapRenderer method calls. */
+const RENDERER_SYNC: Partial<Record<BooleanSettingKey, (r: MapRendererType, v: boolean) => void>> = {
+  showLights: (r, v) => r.setShowLights(v),
+  selectionBorder: (r, v) => r.setShowSelectionBorder(v),
+  showZoneOverlay: (r, v) => r.setShowZoneOverlay(v),
+  showHouseOverlay: (r, v) => r.setShowHouseOverlay(v),
+  showMonsterSpawns: (r, v) => r.setShowMonsterSpawnOverlay(v),
+  showNpcSpawns: (r, v) => r.setShowNpcSpawnOverlay(v),
+  showMonsters: (r, v) => r.setShowMonsters(v),
+  showNpcs: (r, v) => r.setShowNpcs(v),
+}
 
 /** Compute left offset for elements that need to dodge all left-side panels. */
 function computeLeftOffset(palette: boolean, inspector: boolean, findItem: boolean, replaceItems: boolean): string {
@@ -64,12 +81,6 @@ function App() {
   const [itemRegistry, setItemRegistry] = useState<ItemRegistry | null>(null)
   const [appearancesData, setAppearancesData] = useState<AppearanceData | null>(null)
   const [initialSettings] = useState(() => loadSettings())
-  const [showPalette, setShowPalette] = useState(initialSettings.showPalette)
-  const [showLights, setShowLights] = useState(initialSettings.showLights)
-  const [showZonePalette, setShowZonePalette] = useState(initialSettings.showZonePalette)
-  const [showZoneOverlay, setShowZoneOverlay] = useState(initialSettings.showZoneOverlay)
-  const [showHousePalette, setShowHousePalette] = useState(initialSettings.showHousePalette)
-  const [showHouseOverlay, setShowHouseOverlay] = useState(initialSettings.showHouseOverlay)
   const [placingHouseExit, setPlacingHouseExit] = useState<number | null>(null)
   const placingHouseExitRef = useRef<number | null>(null)
 
@@ -86,6 +97,7 @@ function App() {
   const [showEditTowns, setShowEditTowns] = useState(false)
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(initialSettings)
   const [brushRegistryState, setBrushRegistryState] = useState<BrushRegistry | null>(null)
+  const [creatureDb, setCreatureDb] = useState<CreatureDatabase | null>(null)
   const [tilesets, setTilesets] = useState<ResolvedTileset[]>([])
   const [mapFilename, setMapFilename] = useState('map.otbm')
 
@@ -93,12 +105,20 @@ function App() {
   const editorSettingsRef = useRef(editorSettings)
 
   const [editingItem, setEditingItem] = useState<{ x: number; y: number; z: number; index: number } | null>(null)
+  const [editingCreature, setEditingCreature] = useState<{ x: number; y: number; z: number; creatureName: string; isNpc: boolean } | null>(null)
+  const [editingSpawn, setEditingSpawn] = useState<{ x: number; y: number; z: number; spawnType: 'monster' | 'npc' } | null>(null)
 
   const handleRequestEditItem = useCallback((x: number, y: number, z: number, itemIndex: number) => {
     setEditingItem({ x, y, z, index: itemIndex })
   }, [])
+  const handleRequestEditCreature = useCallback((x: number, y: number, z: number, creatureName: string, isNpc: boolean) => {
+    setEditingCreature({ x, y, z, creatureName, isNpc })
+  }, [])
+  const handleRequestEditSpawn = useCallback((x: number, y: number, z: number, spawnType: 'monster' | 'npc') => {
+    setEditingSpawn({ x, y, z, spawnType })
+  }, [])
 
-  const tools = useEditorTools(rendererReady, mutatorReady, mapData, brushRegistryState, handleRequestEditItem, editorSettings.clickToInspect, editorSettingsRef)
+  const tools = useEditorTools(rendererReady, mutatorReady, mapData, brushRegistryState, handleRequestEditItem, handleRequestEditCreature, handleRequestEditSpawn, editorSettings.clickToInspect, editorSettingsRef)
   const toolsRef = useRef(tools)
 
   useEffect(() => {
@@ -114,8 +134,32 @@ function App() {
     setTilesets, setMapFilename, setMapData, setSidecarsData,
     setRendererReady, setMutatorReady,
     setCamera, setSelectedTilePos, setContextMenu: (menu) => setContextMenu(menu),
-    setTileVersion, setPlacingHouseExit, placingHouseExitRef, toolsRef,
+    setTileVersion, setPlacingHouseExit, placingHouseExitRef, setCreatureDb, toolsRef,
   })
+
+  // ── Settings helpers ─────────────────────────────────────────────
+  /** Update a single boolean setting, sync renderer if applicable, and persist. */
+  const updateSetting = useCallback((key: BooleanSettingKey, value: boolean) => {
+    setEditorSettings(prev => {
+      const next = { ...prev, [key]: value }
+      const r = rendererRef.current
+      if (r) RENDERER_SYNC[key]?.(r, value)
+      saveSettings(next)
+      return next
+    })
+  }, [rendererRef])
+
+  /** Toggle a boolean setting, sync renderer if applicable, and persist. */
+  const toggleSetting = useCallback((key: BooleanSettingKey) => {
+    setEditorSettings(prev => {
+      const value = !prev[key]
+      const next = { ...prev, [key]: value }
+      const r = rendererRef.current
+      if (r) RENDERER_SYNC[key]?.(r, value)
+      saveSettings(next)
+      return next
+    })
+  }, [rendererRef])
 
   // ── Context Menu ───────────────────────────────────────────────────
   const navigatePaletteAndDraw = useCallback((selection: BrushSelection, primaryCategory: CategoryType) => {
@@ -138,9 +182,8 @@ function App() {
       paletteRef.current?.navigateTo('all', 'ALL')
     }
 
-    setShowPalette(true)
-    setEditorSettings(s => { const u = { ...s, showPalette: true }; saveSettings(u); return u })
-  }, [tools, tilesets])
+    updateSetting('showPalette', true)
+  }, [tools, tilesets, updateSetting])
 
   const handleSelectAsRaw = useCallback((itemId: number) => {
     navigatePaletteAndDraw({ mode: 'raw', itemId }, 'items')
@@ -191,32 +234,36 @@ function App() {
   const { contextMenuGroups, contextMenu, setContextMenu } = useContextMenu({
     toolsRef, mutatorReady, brushRegistryState, itemRegistry, appearancesData,
     rendererRef, handleSelectAsRaw, handleSelectAsBrush, setSelectedTilePos, setEditingItem,
+    setEditingCreature, setEditingSpawn,
   })
 
   // ── Save / Export / Import ─────────────────────────────────────────
-  const { saveProgress, savePhase, handleSave, handleExportZones, handleImportZones, handleExportHouses, handleImportHouses } = useSaveExport({
+  const {
+    saveProgress, savePhase, handleSave,
+    handleExportZones, handleImportZones,
+    handleExportHouses, handleImportHouses,
+    handleExportMonsterSpawns, handleExportNpcSpawns,
+    handleImportMonsterSpawns, handleImportNpcSpawns,
+  } = useSaveExport({
     mapData, mapFilename, sidecarsData, setSidecarsData, storageRef,
+    spawnManager: mutatorReady?.spawnManager ?? null,
+    creatureDb,
+    renderer: rendererReady,
   })
 
   // ── Auto-toggle overlay/palette when zone or house tool is active ───
-  useToolAutoToggle(
-    tools.activeTool, 'zone',
-    { show: showZoneOverlay, setShow: setShowZoneOverlay, rendererSet: (v) => rendererRef.current?.setShowZoneOverlay(v), settingsKey: 'showZoneOverlay' },
-    { show: showZonePalette, setShow: setShowZonePalette, settingsKey: 'showZonePalette' },
-    setEditorSettings,
-  )
-  useToolAutoToggle(
-    tools.activeTool, 'house',
-    { show: showHouseOverlay, setShow: setShowHouseOverlay, rendererSet: (v) => rendererRef.current?.setShowHouseOverlay(v), settingsKey: 'showHouseOverlay' },
-    { show: showHousePalette, setShow: setShowHousePalette, settingsKey: 'showHousePalette' },
-    setEditorSettings,
-  )
+  useToolAutoToggle(tools.activeTool, 'zone', 'showZoneOverlay', 'showZonePalette', editorSettings, updateSetting)
+  useToolAutoToggle(tools.activeTool, 'house', 'showHouseOverlay', 'showHousePalette', editorSettings, updateSetting)
+  useToolAutoToggle(tools.activeTool, 'creature', 'showMonsterSpawns', 'showCreaturePalette', editorSettings, updateSetting)
 
   useEffect(() => {
     if (rendererReady) {
+      // Skip item highlight sync when a creature/spawn is selected —
+      // creature selection sets its own highlight in selectTool.onDown
+      if (tools.selectedCreature) return
       rendererReady.setHighlights(deriveHighlights(tools.selectedItems, mapData!))
     }
-  }, [tools.selectedItems, rendererReady, mapData])
+  }, [tools.selectedItems, rendererReady, mapData, tools.selectedCreature])
 
   useEffect(() => {
     rendererRef.current?.setActiveZone(tools.selectedZone)
@@ -266,9 +313,8 @@ function App() {
   }, [rendererReady, tools, mapData])
 
   const handleClosePalette = useCallback(() => {
-    setShowPalette(false)
-    setEditorSettings(s => { const u = { ...s, showPalette: false }; saveSettings(u); return u })
-  }, [])
+    updateSetting('showPalette', false)
+  }, [updateSetting])
 
   const handleZoomIn = useCallback(() => { rendererRef.current?.zoomIn() }, [rendererRef])
   const handleZoomOut = useCallback(() => { rendererRef.current?.zoomOut() }, [rendererRef])
@@ -278,17 +324,10 @@ function App() {
     setEditorSettings(next)
     const r = rendererRef.current
     if (r) {
-      r.setShowLights(next.showLights)
-      r.setShowSelectionBorder(next.selectionBorder)
-      r.setShowZoneOverlay(next.showZoneOverlay)
-      r.setShowHouseOverlay(next.showHouseOverlay)
+      for (const [key, sync] of Object.entries(RENDERER_SYNC)) {
+        sync(r, next[key as keyof EditorSettings] as boolean)
+      }
     }
-    setShowPalette(next.showPalette)
-    setShowLights(next.showLights)
-    setShowZonePalette(next.showZonePalette)
-    setShowZoneOverlay(next.showZoneOverlay)
-    setShowHousePalette(next.showHousePalette)
-    setShowHouseOverlay(next.showHouseOverlay)
     saveSettings(next)
   }, [rendererRef])
 
@@ -322,13 +361,10 @@ function App() {
   const { borderizeCurrentSelection, randomizeCurrentSelection } = useKeyboardShortcuts({
     toolsRef, mutatorRef, rendererRef,
     handleSave, handleFloorChange,
-    showPalette, setShowPalette,
-    showLights, setShowLights,
+    editorSettings, toggleSetting,
     showGoToDialog, setShowGoToDialog,
     showFindItem, setShowFindItem,
     showReplaceItems, setShowReplaceItems,
-    showZonePalette,
-    setEditorSettings,
     selectedTilePos, setSelectedTilePos,
     contextMenu, setContextMenu,
     placingHouseExit, setPlacingHouseExit,
@@ -354,6 +390,41 @@ function App() {
     const tile = mapData.tiles.get(`${editingItem.x},${editingItem.y},${editingItem.z}`)
     return tile?.items[editingItem.index] ?? null
   }, [editingItem, mapData])
+
+  // ── Creature Properties Modal ────────────────────────────────────────
+  const editingCreatureData = useMemo(() => {
+    if (!editingCreature || !mapData) return null
+    const tile = mapData.tiles.get(`${editingCreature.x},${editingCreature.y},${editingCreature.z}`)
+    if (!tile) return null
+    if (editingCreature.isNpc) return tile.npc ?? null
+    return tile.monsters?.find(m => m.name === editingCreature.creatureName) ?? null
+  }, [editingCreature, mapData])
+
+  const handleApplyCreatureProperties = useCallback((props: Partial<import('./lib/creatures/types').TileCreature>) => {
+    if (!editingCreature || !mutatorReady) return
+    mutatorReady.updateCreatureProperties(
+      editingCreature.x, editingCreature.y, editingCreature.z,
+      editingCreature.creatureName, editingCreature.isNpc, props,
+    )
+    setEditingCreature(null)
+  }, [editingCreature, mutatorReady])
+
+  // ── Spawn Properties Modal ─────────────────────────────────────────
+  const editingSpawnData = useMemo(() => {
+    if (!editingSpawn || !mapData) return null
+    const tile = mapData.tiles.get(`${editingSpawn.x},${editingSpawn.y},${editingSpawn.z}`)
+    if (!tile) return null
+    return editingSpawn.spawnType === 'monster' ? tile.spawnMonster : tile.spawnNpc
+  }, [editingSpawn, mapData])
+
+  const handleApplySpawnRadius = useCallback((newRadius: number) => {
+    if (!editingSpawn || !mutatorReady) return
+    mutatorReady.updateSpawnRadius(
+      editingSpawn.x, editingSpawn.y, editingSpawn.z,
+      editingSpawn.spawnType, newRadius,
+    )
+    setEditingSpawn(null)
+  }, [editingSpawn, mutatorReady])
 
   // Derive house name for the currently inspected tile
   const inspectedHouseName = (() => {
@@ -412,23 +483,6 @@ function App() {
           onOpenMapProperties={() => setShowMapProperties(true)}
           onOpenEditTowns={() => setShowEditTowns(true)}
           hasMap={!!mapData}
-          showPalette={showPalette}
-          onTogglePalette={() => {
-            setShowPalette(prev => {
-              const next = !prev
-              setEditorSettings(s => { const u = { ...s, showPalette: next }; saveSettings(u); return u })
-              return next
-            })
-          }}
-          showLights={showLights}
-          onToggleLights={() => {
-            setShowLights(prev => {
-              const next = !prev
-              rendererRef.current?.setShowLights(next)
-              setEditorSettings(s => { const u = { ...s, showLights: next }; saveSettings(u); return u })
-              return next
-            })
-          }}
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onResetZoom={handleResetZoom}
@@ -442,23 +496,6 @@ function App() {
           onDoorTypeChange={tools.setActiveDoorType}
           onSave={handleSave}
           canSave={!!mapData}
-          showZonePalette={showZonePalette}
-          onToggleZonePalette={() => {
-            setShowZonePalette(prev => {
-              const next = !prev
-              setEditorSettings(s => { const u = { ...s, showZonePalette: next }; saveSettings(u); return u })
-              return next
-            })
-          }}
-          showZoneOverlay={showZoneOverlay}
-          onToggleZoneOverlay={() => {
-            setShowZoneOverlay(prev => {
-              const next = !prev
-              rendererRef.current?.setShowZoneOverlay(next)
-              setEditorSettings(s => { const u = { ...s, showZoneOverlay: next }; saveSettings(u); return u })
-              return next
-            })
-          }}
           selectedZone={tools.selectedZone}
           onZoneSelect={(zone) => {
             tools.setSelectedZone(zone)
@@ -466,25 +503,14 @@ function App() {
           }}
           onExportZones={handleExportZones}
           onImportZones={handleImportZones}
-          showHousePalette={showHousePalette}
-          onToggleHousePalette={() => {
-            setShowHousePalette(prev => {
-              const next = !prev
-              setEditorSettings(s => { const u = { ...s, showHousePalette: next }; saveSettings(u); return u })
-              return next
-            })
-          }}
-          showHouseOverlay={showHouseOverlay}
-          onToggleHouseOverlay={() => {
-            setShowHouseOverlay(prev => {
-              const next = !prev
-              rendererRef.current?.setShowHouseOverlay(next)
-              setEditorSettings(s => { const u = { ...s, showHouseOverlay: next }; saveSettings(u); return u })
-              return next
-            })
-          }}
           onExportHouses={handleExportHouses}
           onImportHouses={handleImportHouses}
+          onExportMonsterSpawns={handleExportMonsterSpawns}
+          onImportMonsterSpawns={handleImportMonsterSpawns}
+          onExportNpcSpawns={handleExportNpcSpawns}
+          onImportNpcSpawns={handleImportNpcSpawns}
+          editorSettings={editorSettings}
+          onToggleSetting={toggleSetting}
         />
       )}
 
@@ -519,7 +545,7 @@ function App() {
           selectedItems={tools.selectedItems}
           onNavigate={handleGoToPosition}
           onClose={() => setShowFindItem(false)}
-          left={computeLeftOffset(showPalette, !!selectedTilePos, false, false)}
+          left={computeLeftOffset(editorSettings.showPalette, !!selectedTilePos, false, false)}
         />
       )}
 
@@ -533,7 +559,7 @@ function App() {
           hasSelection={tools.hasSelection}
           selectedItems={tools.selectedItems}
           onClose={() => setShowReplaceItems(false)}
-          left={computeLeftOffset(showPalette, !!selectedTilePos, false, false)}
+          left={computeLeftOffset(editorSettings.showPalette, !!selectedTilePos, false, false)}
         />
       )}
 
@@ -567,7 +593,7 @@ function App() {
       )}
 
       {/* Brush palette — left side */}
-      {!loading && showPalette && itemRegistry && appearancesData && (
+      {!loading && editorSettings.showPalette && itemRegistry && appearancesData && (
         <BrushPalette
           ref={paletteRef}
           tilesets={tilesets}
@@ -583,7 +609,7 @@ function App() {
       )}
 
       {/* Zone palette — right side */}
-      {!loading && showZonePalette && (
+      {!loading && editorSettings.showZonePalette && (
         <ZonePalette
           sidecars={sidecarsData}
           onSidecarsChange={setSidecarsData}
@@ -616,17 +642,14 @@ function App() {
           }}
           onExportZones={handleExportZones}
           onImportZones={handleImportZones}
-          onClose={() => {
-            setShowZonePalette(false)
-            setEditorSettings(s => { const u = { ...s, showZonePalette: false }; saveSettings(u); return u })
-          }}
+          onClose={() => updateSetting('showZonePalette', false)}
         />
       )}
 
       {/* House palette — right side */}
-      {!loading && showHousePalette && (
+      {!loading && editorSettings.showHousePalette && (
         <HousePalette
-          className={showZonePalette ? 'right-[336px]' : undefined}
+          className={editorSettings.showZonePalette ? 'right-[336px]' : undefined}
           sidecars={sidecarsData}
           onSidecarsChange={setSidecarsData}
           mapData={mapData}
@@ -659,10 +682,28 @@ function App() {
           }}
           onExportHouses={handleExportHouses}
           onImportHouses={handleImportHouses}
-          onClose={() => {
-            setShowHousePalette(false)
-            setEditorSettings(s => { const u = { ...s, showHousePalette: false }; saveSettings(u); return u })
+          onClose={() => updateSetting('showHousePalette', false)}
+        />
+      )}
+
+      {/* Creature palette — right side */}
+      {!loading && editorSettings.showCreaturePalette && creatureDb && appearancesData && (
+        <CreaturePalette
+          style={{ right: 68 + (editorSettings.showZonePalette ? 268 : 0) + (editorSettings.showHousePalette ? 268 : 0) }}
+          creatureDb={creatureDb}
+          appearances={appearancesData}
+          selectedBrush={tools.selectedBrush}
+          onCreatureSelect={(sel) => {
+            tools.setSelectedBrush(sel)
+            if (tools.activeTool !== 'creature') tools.setActiveTool('creature')
           }}
+          creatureSpawnTime={tools.creatureSpawnTime}
+          onCreatureSpawnTimeChange={tools.setCreatureSpawnTime}
+          creatureWeight={tools.creatureWeight}
+          onCreatureWeightChange={tools.setCreatureWeight}
+          spawnRadius={tools.spawnRadius}
+          onSpawnRadiusChange={tools.setSpawnRadius}
+          onClose={() => updateSetting('showCreaturePalette', false)}
         />
       )}
 
@@ -688,11 +729,15 @@ function App() {
           onSelectAsBrush={handleSelectAsBrush}
           selectedItems={tools.selectedItems}
           onItemSelectionChange={handleItemSelectionChange}
-          offset={showPalette}
+          offset={editorSettings.showPalette}
           onEditItem={handleRequestEditItem}
           onDragToMap={(itemId) => { if (rendererRef.current) rendererRef.current.dragPreviewItemId = itemId }}
           onDragToMapEnd={() => { if (rendererRef.current) { rendererRef.current.dragPreviewItemId = null; rendererRef.current.clearGhostPreview() } }}
           houseName={inspectedHouseName}
+          onEditCreature={(x, y, z, name, isNpc) => setEditingCreature({ x, y, z, creatureName: name, isNpc })}
+          onEditSpawn={(x, y, z, spawnType) => setEditingSpawn({ x, y, z, spawnType })}
+          onDeleteCreature={(x, y, z, name, isNpc) => mutatorReady?.removeCreature(x, y, z, name, isNpc)}
+          onDeleteSpawn={(x, y, z, spawnType) => mutatorReady?.removeSpawnZone(x, y, z, spawnType)}
         />
       )}
 
@@ -708,11 +753,30 @@ function App() {
         />
       )}
 
+      {/* Creature Properties modal */}
+      {editingCreatureData && (
+        <CreaturePropertiesModal
+          creature={editingCreatureData}
+          onApply={handleApplyCreatureProperties}
+          onCancel={() => setEditingCreature(null)}
+        />
+      )}
+
+      {/* Spawn Properties modal */}
+      {editingSpawnData && editingSpawn && (
+        <SpawnPropertiesModal
+          spawnType={editingSpawn.spawnType}
+          currentRadius={editingSpawnData.radius}
+          onApply={handleApplySpawnRadius}
+          onCancel={() => setEditingSpawn(null)}
+        />
+      )}
+
       {/* HUD — bottom left status bar */}
       {!loading && (
         <div
           className="panel absolute bottom-4 z-10 flex h-[48px] items-center gap-6 px-5 pointer-events-auto select-none transition-[left] duration-[180ms] ease-out"
-          style={{ left: computeLeftOffset(showPalette, !!selectedTilePos, showFindItem, showReplaceItems) }}
+          style={{ left: computeLeftOffset(editorSettings.showPalette, !!selectedTilePos, showFindItem, showReplaceItems) }}
         >
           <HudField label="POS" value={tools.cursorPos ? `${tools.cursorPos.x}, ${tools.cursorPos.y}, ${tools.cursorPos.z}` : '—'} />
           <div className="h-[16px] w-px shrink-0 bg-border-subtle" />

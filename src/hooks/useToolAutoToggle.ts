@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
-import type { EditorSettings } from '../lib/EditorSettings'
-import { saveSettings } from '../lib/EditorSettings'
+import type { EditorSettings, BooleanSettingKey } from '../lib/EditorSettings'
 import type { EditorTool } from './tools/types'
+import { useLatestRef } from './useLatestRef'
 
 /**
  * Auto-toggle an overlay+palette pair when a specific tool is active.
@@ -11,53 +11,33 @@ import type { EditorTool } from './tools/types'
 export function useToolAutoToggle(
   activeTool: EditorTool,
   toolName: EditorTool,
-  overlay: {
-    show: boolean
-    setShow: (v: boolean) => void
-    /** Renderer method to toggle the overlay — null if this toggle has no renderer counterpart. */
-    rendererSet: ((enabled: boolean) => void) | null
-    settingsKey: keyof EditorSettings
-  },
-  palette: {
-    show: boolean
-    setShow: (v: boolean) => void
-    settingsKey: keyof EditorSettings
-  },
-  setEditorSettings: React.Dispatch<React.SetStateAction<EditorSettings>>,
+  overlayKey: BooleanSettingKey,
+  paletteKey: BooleanSettingKey,
+  editorSettings: EditorSettings,
+  updateSetting: (key: BooleanSettingKey, value: boolean) => void,
 ) {
   const overlayBeforeRef = useRef<boolean | null>(null)
   const paletteBeforeRef = useRef<boolean | null>(null)
-  const showOverlayRef = useRef(overlay.show)
-  const showPaletteRef = useRef(palette.show)
-  useEffect(() => {
-    showOverlayRef.current = overlay.show
-    showPaletteRef.current = palette.show
-  })
+  const settingsRef = useLatestRef(editorSettings)
 
   useEffect(() => {
     if (activeTool === toolName) {
-      if (!showOverlayRef.current) {
+      if (!settingsRef.current[overlayKey]) {
         overlayBeforeRef.current = false
-        overlay.setShow(true)
-        overlay.rendererSet?.(true)
-        setEditorSettings(s => { const u = { ...s, [overlay.settingsKey]: true } as EditorSettings; saveSettings(u); return u })
+        updateSetting(overlayKey, true)
       }
-      if (!showPaletteRef.current) {
+      if (!settingsRef.current[paletteKey]) {
         paletteBeforeRef.current = false
-        palette.setShow(true)
-        setEditorSettings(s => { const u = { ...s, [palette.settingsKey]: true } as EditorSettings; saveSettings(u); return u })
+        updateSetting(paletteKey, true)
       }
     } else {
       if (overlayBeforeRef.current === false) {
         overlayBeforeRef.current = null
-        overlay.setShow(false)
-        overlay.rendererSet?.(false)
-        setEditorSettings(s => { const u = { ...s, [overlay.settingsKey]: false } as EditorSettings; saveSettings(u); return u })
+        updateSetting(overlayKey, false)
       }
       if (paletteBeforeRef.current === false) {
         paletteBeforeRef.current = null
-        palette.setShow(false)
-        setEditorSettings(s => { const u = { ...s, [palette.settingsKey]: false } as EditorSettings; saveSettings(u); return u })
+        updateSetting(paletteKey, false)
       }
     }
   }, [activeTool]) // eslint-disable-line react-hooks/exhaustive-deps

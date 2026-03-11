@@ -5,9 +5,9 @@ import type { AppearanceData } from '../lib/appearances'
 import type { BrushRegistry } from '../lib/brushes/BrushRegistry'
 import type { ItemRegistry } from '../lib/items'
 import { getItemDisplayName } from '../lib/items'
-import { getSelectionPreviewId } from '../hooks/tools/types'
+import { getSelectionPreviewId, BRUSH_SIZE_TOOLS } from '../hooks/tools/types'
 import { ItemSprite } from './ItemSprite'
-import { HamburgerMenu, type MenuSection } from './HamburgerMenu'
+import { MenuBar, type MenuSection } from './MenuBar'
 import {
   DOOR_NORMAL, DOOR_LOCKED, DOOR_QUEST, DOOR_MAGIC,
   DOOR_WINDOW, DOOR_HATCH_WINDOW,
@@ -17,7 +17,9 @@ import {
   CursorIcon, PencilSimpleIcon, EraserIcon, DoorIcon, PaintBucketIcon, FlagIcon,
   ArrowCounterClockwiseIcon, ArrowClockwiseIcon, SquareIcon, CircleIcon,
   HouseIcon,
+  PawPrintIcon,
 } from '@phosphor-icons/react'
+import type { EditorSettings, BooleanSettingKey } from '../lib/EditorSettings'
 
 interface ToolbarProps {
   activeTool: EditorTool
@@ -39,10 +41,6 @@ interface ToolbarProps {
   onGoToPosition: () => void
   onFindItem: () => void
   onReplaceItems: () => void
-  showPalette: boolean
-  onTogglePalette: () => void
-  showLights: boolean
-  onToggleLights: () => void
   onOpenSettings: () => void
   onOpenMapProperties: () => void
   hasMap: boolean
@@ -59,21 +57,19 @@ interface ToolbarProps {
   onDoorTypeChange: (type: number) => void
   onSave: () => void
   canSave: boolean
-  showZonePalette: boolean
-  onToggleZonePalette: () => void
-  showZoneOverlay: boolean
-  onToggleZoneOverlay: () => void
   selectedZone: ZoneSelection | null
   onZoneSelect: (zone: ZoneSelection) => void
   onExportZones: () => void
   onImportZones: () => void
-  showHousePalette: boolean
-  onToggleHousePalette: () => void
-  showHouseOverlay: boolean
-  onToggleHouseOverlay: () => void
   onExportHouses: () => void
   onImportHouses: () => void
+  onExportMonsterSpawns: () => void
+  onImportMonsterSpawns: () => void
+  onExportNpcSpawns: () => void
+  onImportNpcSpawns: () => void
   onOpenEditTowns: () => void
+  editorSettings: EditorSettings
+  onToggleSetting: (key: BooleanSettingKey) => void
 }
 
 const BRUSH_SIZES = [
@@ -97,6 +93,7 @@ const TOOLS: { id: EditorTool; label: string; shortcut: string; icon: React.Reac
   { id: 'fill', label: 'Fill', shortcut: 'F', icon: <PaintBucketIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
   { id: 'zone', label: 'Zone', shortcut: 'Z', icon: <FlagIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
   { id: 'house', label: 'House', shortcut: 'H', icon: <HouseIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
+  { id: 'creature', label: 'Creature', shortcut: 'C', icon: <PawPrintIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
 ]
 
 const DOOR_TYPES = [
@@ -107,6 +104,24 @@ const DOOR_TYPES = [
   { value: DOOR_WINDOW, label: 'Window' },
   { value: DOOR_HATCH_WINDOW, label: 'Hatch' },
 ]
+
+function getBrushLabel(sel: BrushSelection, registry: ItemRegistry | null, appearances: AppearanceData | null): string | null {
+  switch (sel.mode) {
+    case 'brush': return sel.brushName.replace(/\b\w/g, c => c.toUpperCase())
+    case 'raw': return registry && appearances ? getItemDisplayName(sel.itemId, registry, appearances) : null
+    case 'creature': return sel.creatureName
+    case 'spawn': return `Spawn ${sel.spawnType}`
+  }
+}
+
+function getBrushSubLabel(sel: BrushSelection): string {
+  switch (sel.mode) {
+    case 'brush': return sel.brushType
+    case 'raw': return `#${sel.itemId}`
+    case 'creature': return sel.isNpc ? 'npc' : 'monster'
+    case 'spawn': return sel.spawnType
+  }
+}
 
 export function Toolbar({
   activeTool,
@@ -131,8 +146,6 @@ export function Toolbar({
   onOpenSettings,
   onOpenMapProperties,
   hasMap,
-  showPalette,
-  onTogglePalette,
   onZoomIn,
   onZoomOut,
   onResetZoom,
@@ -144,32 +157,24 @@ export function Toolbar({
   onBrushShapeChange,
   activeDoorType,
   onDoorTypeChange,
-  showLights,
-  onToggleLights,
   onSave,
   canSave,
-  showZonePalette,
-  onToggleZonePalette,
-  showZoneOverlay,
-  onToggleZoneOverlay,
   selectedZone,
   onZoneSelect,
   onExportZones,
   onImportZones,
-  showHousePalette,
-  onToggleHousePalette,
-  showHouseOverlay,
-  onToggleHouseOverlay,
   onExportHouses,
   onImportHouses,
+  onExportMonsterSpawns,
+  onImportMonsterSpawns,
+  onExportNpcSpawns,
+  onImportNpcSpawns,
   onOpenEditTowns,
+  editorSettings,
+  onToggleSetting,
 }: ToolbarProps) {
   const previewId = selectedBrush ? getSelectionPreviewId(selectedBrush, brushRegistry) : 0
-  const brushLabel = selectedBrush
-    ? selectedBrush.mode === 'brush'
-      ? selectedBrush.brushName.replace(/\b\w/g, c => c.toUpperCase())
-      : (registry && appearances ? getItemDisplayName(selectedBrush.itemId, registry, appearances) : null)
-    : null
+  const brushLabel = selectedBrush ? getBrushLabel(selectedBrush, registry, appearances) : null
 
   const menuSections: MenuSection[] = [
     {
@@ -177,11 +182,22 @@ export function Toolbar({
       items: [
         { label: 'Save Map', shortcut: 'Ctrl+S', disabled: !canSave, onClick: onSave },
         'separator',
-        { label: 'Import Zones...', onClick: onImportZones },
-        { label: 'Export Zones', onClick: onExportZones },
-        'separator',
-        { label: 'Import Houses...', onClick: onImportHouses },
-        { label: 'Export Houses', onClick: onExportHouses },
+        {
+          label: 'Import/Export',
+          items: [
+            { label: 'Import Zones...', onClick: onImportZones },
+            { label: 'Export Zones', onClick: onExportZones },
+            'separator',
+            { label: 'Import Houses...', onClick: onImportHouses },
+            { label: 'Export Houses', onClick: onExportHouses },
+            'separator',
+            { label: 'Import Monster Spawns...', onClick: onImportMonsterSpawns },
+            { label: 'Export Monster Spawns', onClick: onExportMonsterSpawns },
+            'separator',
+            { label: 'Import NPC Spawns...', onClick: onImportNpcSpawns },
+            { label: 'Export NPC Spawns', onClick: onExportNpcSpawns },
+          ],
+        },
       ],
     },
     {
@@ -213,14 +229,21 @@ export function Toolbar({
     {
       title: 'View',
       items: [
-        { label: 'Brush Palette', shortcut: 'P', checked: showPalette, onClick: onTogglePalette },
-        { label: 'Zone Palette', shortcut: 'Z', checked: showZonePalette, onClick: onToggleZonePalette },
-        { label: 'House Palette', shortcut: 'H', checked: showHousePalette, onClick: onToggleHousePalette },
-        'separator',
-        { label: 'Show Zones', checked: showZoneOverlay, onClick: onToggleZoneOverlay },
-        { label: 'Show Houses', checked: showHouseOverlay, onClick: onToggleHouseOverlay },
-        { label: 'Show Lights', shortcut: 'L', checked: showLights, onClick: onToggleLights },
-        'separator',
+        { heading: 'Palettes' },
+        { label: 'Brush Palette', shortcut: 'P', checked: editorSettings.showPalette, onClick: () => onToggleSetting('showPalette') },
+        { label: 'Zone Palette', shortcut: 'Z', checked: editorSettings.showZonePalette, onClick: () => onToggleSetting('showZonePalette') },
+        { label: 'House Palette', shortcut: 'H', checked: editorSettings.showHousePalette, onClick: () => onToggleSetting('showHousePalette') },
+        { label: 'Creature Palette', checked: editorSettings.showCreaturePalette, onClick: () => onToggleSetting('showCreaturePalette') },
+        { heading: 'Overlays' },
+        { label: 'Show Zones', checked: editorSettings.showZoneOverlay, onClick: () => onToggleSetting('showZoneOverlay') },
+        { label: 'Show Houses', checked: editorSettings.showHouseOverlay, onClick: () => onToggleSetting('showHouseOverlay') },
+        { label: 'Show Lights', shortcut: 'L', checked: editorSettings.showLights, onClick: () => onToggleSetting('showLights') },
+        { heading: 'Creatures' },
+        { label: 'Show Monsters', shortcut: 'M', checked: editorSettings.showMonsters, onClick: () => onToggleSetting('showMonsters') },
+        { label: 'Show Monster Spawns', shortcut: 'Ctrl+M', checked: editorSettings.showMonsterSpawns, onClick: () => onToggleSetting('showMonsterSpawns') },
+        { label: 'Show NPCs', shortcut: 'N', checked: editorSettings.showNpcs, onClick: () => onToggleSetting('showNpcs') },
+        { label: 'Show NPC Spawns', shortcut: 'Ctrl+N', checked: editorSettings.showNpcSpawns, onClick: () => onToggleSetting('showNpcSpawns') },
+        { heading: 'Zoom' },
         { label: 'Zoom In', shortcut: 'Ctrl+=', onClick: onZoomIn },
         { label: 'Zoom Out', shortcut: 'Ctrl+-', onClick: onZoomOut },
         { label: 'Reset Zoom', shortcut: 'Ctrl+0', onClick: onResetZoom },
@@ -232,8 +255,8 @@ export function Toolbar({
 
   return (
     <div className="panel absolute top-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-4 px-5 py-3 pointer-events-auto select-none">
-      {/* Hamburger menu */}
-      <HamburgerMenu sections={menuSections} />
+      {/* Menu bar */}
+      <MenuBar sections={menuSections} />
 
       <div className="h-[22px] w-px shrink-0 bg-border-subtle" />
 
@@ -276,7 +299,7 @@ export function Toolbar({
       </div>
 
       {/* Brush size — for draw/erase */}
-      {(activeTool === 'draw' || activeTool === 'erase' || activeTool === 'zone' || activeTool === 'house') && (
+      {BRUSH_SIZE_TOOLS.has(activeTool) && (
         <>
           <div className="h-[22px] w-px shrink-0 bg-border-subtle" />
           <div className="flex gap-1">
@@ -375,7 +398,7 @@ export function Toolbar({
                 {brushLabel}
               </span>
               <span className="font-mono text-xs text-fg-faint">
-                {selectedBrush.mode === 'brush' ? selectedBrush.brushType : `#${selectedBrush.itemId}`}
+                {getBrushSubLabel(selectedBrush)}
               </span>
             </div>
           </div>

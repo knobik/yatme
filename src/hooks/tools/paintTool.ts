@@ -12,6 +12,8 @@ export interface PaintToolConfig {
   applyToTile: (x: number, y: number, z: number, erasing: boolean) => void
   /** If true, call mutator.flushChunkUpdates() after each batch of tile applications. */
   flushChunks?: boolean
+  /** If set, use this fixed brush size instead of ctx.brushSizeRef. */
+  sizeOverride?: number
 }
 
 /**
@@ -26,7 +28,8 @@ export function createPaintToolHandlers(ctx: ToolContext, config: PaintToolConfi
     isErasing = event.button === 2 || (event.button === 0 && (event.ctrlKey || event.metaKey))
     ctx.paintedTilesRef.current.clear()
     ctx.mutator.beginBatch(isErasing ? config.eraseLabel : config.label)
-    const tiles = getTilesInBrush(pos.x, pos.y, ctx.brushSizeRef.current, ctx.brushShapeRef.current)
+    const size = config.sizeOverride ?? ctx.brushSizeRef.current
+    const tiles = getTilesInBrush(pos.x, pos.y, size, ctx.brushShapeRef.current)
     for (const t of tiles) {
       const key = `${t.x},${t.y}`
       ctx.paintedTilesRef.current.add(key)
@@ -37,7 +40,8 @@ export function createPaintToolHandlers(ctx: ToolContext, config: PaintToolConfi
 
   function onMove(pos: TilePos) {
     if (!config.isReady()) return
-    const tiles = getTilesInBrush(pos.x, pos.y, ctx.brushSizeRef.current, ctx.brushShapeRef.current)
+    const size = config.sizeOverride ?? ctx.brushSizeRef.current
+    const tiles = getTilesInBrush(pos.x, pos.y, size, ctx.brushShapeRef.current)
     let any = false
     for (const t of tiles) {
       const key = `${t.x},${t.y}`

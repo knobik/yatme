@@ -2,6 +2,7 @@
 
 import { yieldToMain } from './yieldToMain'
 import type { AppearanceData } from './appearances'
+import type { TileCreature } from './creatures/types'
 
 // Shared encoder/decoder instances (avoid allocating per call)
 const textEncoder = new TextEncoder()
@@ -58,7 +59,14 @@ export const MAP_MAX_HEIGHT = 65000
 export const MAP_MIN_LAYER = 0
 export const MAP_MAX_LAYER = 15
 
+/** Tile flag: Protection Zone */
+export const PZ_FLAG = 0x0001
+
 /** Check whether a tile coordinate is within the valid map range. */
+export function tileKey(x: number, y: number, z: number): string {
+  return `${x},${y},${z}`
+}
+
 export function isPositionValid(x: number, y: number, z: number): boolean {
   return x >= 0 && x <= MAP_MAX_WIDTH
     && y >= 0 && y <= MAP_MAX_HEIGHT
@@ -115,6 +123,10 @@ export interface OtbmTile {
   houseId?: number
   items: OtbmItem[]
   zones?: number[]
+  monsters?: TileCreature[]
+  npc?: TileCreature
+  spawnMonster?: { radius: number }
+  spawnNpc?: { radius: number }
   /** Number of items that were stored as inline OTBM_ATTR_ITEM in the original file */
   inlineItemCount?: number
   /** Original tile order index within its area node (for byte-identical serialization) */
@@ -650,7 +662,7 @@ function processChildren(mapDataNode: BinaryNode, map: OtbmMap, version: number,
           const tileType = tileNode.readU8()
           if (tileType === OTBM_TILE || tileType === OTBM_HOUSETILE) {
             const tile = parseTile(tileNode, tileType, baseX, baseY, baseZ, version, itemNeedsCount)
-            const key = `${tile.x},${tile.y},${tile.z}`
+            const key = tileKey(tile.x, tile.y, tile.z)
             map.tiles.set(key, tile)
             areaEntry.tileKeys.push(key)
           }

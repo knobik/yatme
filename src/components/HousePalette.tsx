@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import clsx from 'clsx'
 import type { MapSidecars, HouseData } from '../lib/sidecars'
 import type { OtbmMap } from '../lib/otbm'
@@ -90,11 +90,8 @@ export function HousePalette({
   }
 
 
-  const houseTileCounts = useTileCounts(
-    mapData,
-    tile => tile.houseId != null ? [tile.houseId] : [],
-    [sidecars],
-  )
+  const houseExtractor = useCallback((tile: { houseId?: number }) => tile.houseId != null ? [tile.houseId] : [], [])
+  const houseTileCounts = useTileCounts(mapData, houseExtractor, sidecars)
 
   const isHouseSelected = (houseId: number) =>
     selectedHouse?.id === houseId

@@ -1,4 +1,5 @@
-import { type OtbmMap, type OtbmTile, type OtbmItem, deepCloneItem, isPositionValid } from './otbm'
+import { type OtbmMap, type OtbmTile, type OtbmItem, deepCloneItem, isPositionValid, tileKey } from './otbm'
+import type { TileCreature } from './creatures/types'
 import type { AppearanceData } from './appearances'
 import type { MapSidecars } from './sidecars'
 import { chunkKeyForTile } from './ChunkManager'
@@ -9,6 +10,8 @@ import type { DoodadBrush, DoodadAlternative, DoodadComposite } from './brushes/
 import { CARPET_CENTER, TABLE_ALONE } from './brushes/CarpetTypes'
 import type { BrushRegistry } from './brushes/BrushRegistry'
 import type { ItemRegistry } from './items'
+import type { SpawnManager } from './creatures/SpawnManager'
+import type { CreatureDatabase } from './creatures/CreatureDatabase'
 import { computeBorders } from './brushes/BorderSystem'
 import { doWalls, getWallAlignment } from './brushes/WallSystem'
 import { findDoorForAlignment, switchDoor } from './brushes/DoorSystem'
@@ -24,10 +27,6 @@ const OFFSETS_8: ReadonlyArray<[number, number]> = [
 const OFFSETS_4: ReadonlyArray<[number, number]> = [
   [0, -1], [-1, 0], [1, 0], [0, 1],
 ]
-
-function tileKey(x: number, y: number, z: number): string {
-  return `${x},${y},${z}`
-}
 
 function deepCloneItems(items: OtbmItem[]): OtbmItem[] {
   return items.map(deepCloneItem)
@@ -45,6 +44,14 @@ export function classifyItem(itemId: number, appearances: AppearanceData): DrawL
   return 'common'
 }
 
+/** Returns true if the item has any special attributes (actionId, uniqueId, text, teleport, etc.) */
+export function isComplexItem(item: OtbmItem): boolean {
+  return !!(
+    item.actionId || item.uniqueId || item.text || item.description ||
+    item.teleportDestination || item.depotId || item.customAttributes || item.items?.length
+  )
+}
+
 // --- Mutation actions ---
 
 type MutationAction =
@@ -56,6 +63,11 @@ type MutationAction =
   | { type: 'setTileFlags'; x: number; y: number; z: number; oldFlags: number; newFlags: number }
   | { type: 'setTileZones'; x: number; y: number; z: number; oldZones: number[]; newZones: number[] }
   | { type: 'setTileHouseId'; x: number; y: number; z: number; oldHouseId: number | undefined; newHouseId: number | undefined }
+  | { type: 'addMonster'; x: number; y: number; z: number; creature: TileCreature; index: number }
+  | { type: 'removeMonster'; x: number; y: number; z: number; creature: TileCreature; index: number }
+  | { type: 'updateMonster'; x: number; y: number; z: number; oldCreature: TileCreature; newCreature: TileCreature; index: number }
+  | { type: 'setNpc'; x: number; y: number; z: number; oldNpc: TileCreature | undefined; newNpc: TileCreature | undefined }
+  | { type: 'setSpawnZone'; x: number; y: number; z: number; spawnType: 'monster' | 'npc'; oldRadius: number | undefined; newRadius: number | undefined }
 
 interface MutationBatch {
   description: string
@@ -71,6 +83,8 @@ export class MapMutator {
   private _brushRegistry: BrushRegistry | null = null
   private _itemRegistry: ItemRegistry | null = null
   private _sidecars: MapSidecars | null = null
+  private _spawnManager: SpawnManager | null = null
+  private _creatureDb: CreatureDatabase | null = null
 
   // Current batch being built (between beginBatch/commitBatch)
   private currentBatch: MutationBatch | null = null
@@ -83,6 +97,10 @@ export class MapMutator {
   constructor(mapData: OtbmMap, appearances: AppearanceData) {
     this.mapData = mapData
     this.appearances = appearances
+  }
+
+  getAppearances(): AppearanceData {
+    return this.appearances
   }
 
   set brushRegistry(registry: BrushRegistry | null) {
@@ -107,6 +125,22 @@ export class MapMutator {
 
   get sidecars(): MapSidecars | null {
     return this._sidecars
+  }
+
+  set spawnManager(manager: SpawnManager | null) {
+    this._spawnManager = manager
+  }
+
+  get spawnManager(): SpawnManager | null {
+    return this._spawnManager
+  }
+
+  set creatureDb(db: CreatureDatabase | null) {
+    this._creatureDb = db
+  }
+
+  get creatureDb(): CreatureDatabase | null {
+    return this._creatureDb
   }
 
   // --- Batch management ---
@@ -353,6 +387,39 @@ export class MapMutator {
         }
         break
       }
+      case 'addMonster': {
+        const tile = this.mapData.tiles.get(key)
+        if (tile?.monsters) tile.monsters.splice(action.index, 1)
+        break
+      }
+      case 'removeMonster': {
+        const tile = this.mapData.tiles.get(key)
+        if (tile) {
+          if (!tile.monsters) tile.monsters = []
+          tile.monsters.splice(action.index, 0, { ...action.creature })
+        }
+        break
+      }
+      case 'updateMonster': {
+        const tile = this.mapData.tiles.get(key)
+        if (tile?.monsters) tile.monsters[action.index] = { ...action.oldCreature }
+        break
+      }
+      case 'setNpc': {
+        const tile = this.mapData.tiles.get(key)
+        if (tile) {
+          if (action.oldNpc) tile.npc = { ...action.oldNpc }
+          else delete tile.npc
+        }
+        break
+      }
+      case 'setSpawnZone': {
+        const tile = this.mapData.tiles.get(key)
+        if (tile) {
+          this.applySpawnZone(tile, action.spawnType, action.newRadius, action.oldRadius)
+        }
+        break
+      }
     }
   }
 
@@ -399,6 +466,60 @@ export class MapMutator {
           else delete tile.houseId
         }
         break
+      }
+      case 'addMonster': {
+        const tile = this.mapData.tiles.get(key)
+        if (tile) {
+          if (!tile.monsters) tile.monsters = []
+          tile.monsters.splice(action.index, 0, { ...action.creature })
+        }
+        break
+      }
+      case 'removeMonster': {
+        const tile = this.mapData.tiles.get(key)
+        if (tile?.monsters) tile.monsters.splice(action.index, 1)
+        break
+      }
+      case 'updateMonster': {
+        const tile = this.mapData.tiles.get(key)
+        if (tile?.monsters) tile.monsters[action.index] = { ...action.newCreature }
+        break
+      }
+      case 'setNpc': {
+        const tile = this.mapData.tiles.get(key)
+        if (tile) {
+          if (action.newNpc) tile.npc = { ...action.newNpc }
+          else delete tile.npc
+        }
+        break
+      }
+      case 'setSpawnZone': {
+        const tile = this.mapData.tiles.get(key)
+        if (tile) {
+          this.applySpawnZone(tile, action.spawnType, action.oldRadius, action.newRadius)
+        }
+        break
+      }
+    }
+  }
+
+  private applySpawnZone(tile: OtbmTile, spawnType: 'monster' | 'npc', removeRadius: number | undefined, addRadius: number | undefined): void {
+    const sm = this._spawnManager
+    if (spawnType === 'monster') {
+      if (removeRadius != null) sm?.removeMonsterSpawn(tile.x, tile.y, tile.z, removeRadius)
+      if (addRadius != null) {
+        tile.spawnMonster = { radius: addRadius }
+        sm?.addMonsterSpawn(tile.x, tile.y, tile.z, addRadius)
+      } else {
+        delete tile.spawnMonster
+      }
+    } else {
+      if (removeRadius != null) sm?.removeNpcSpawn(tile.x, tile.y, tile.z, removeRadius)
+      if (addRadius != null) {
+        tile.spawnNpc = { radius: addRadius }
+        sm?.addNpcSpawn(tile.x, tile.y, tile.z, addRadius)
+      } else {
+        delete tile.spawnNpc
       }
     }
   }
@@ -492,6 +613,141 @@ export class MapMutator {
         this.recordAction({ type: 'setTileFlags', x, y, z, oldFlags, newFlags })
       }
       this.recordAction({ type: 'setTileHouseId', x, y, z, oldHouseId, newHouseId: undefined })
+      this.onTileChanged?.(x, y, z)
+    })
+  }
+
+  // --- Creature mutations ---
+
+  placeCreature(x: number, y: number, z: number, creature: TileCreature): void {
+    this.autoBatch('Place creature', () => {
+      const tile = this.getOrCreateTile(x, y, z)
+      if (!tile) return
+
+      if (creature.isNpc) {
+        const oldNpc = tile.npc ? { ...tile.npc } : undefined
+        tile.npc = { ...creature }
+        this.recordAction({ type: 'setNpc', x, y, z, oldNpc, newNpc: { ...creature } })
+      } else {
+        if (!tile.monsters) tile.monsters = []
+        if (tile.monsters.some(m => m.name === creature.name)) return
+        const index = tile.monsters.length
+        tile.monsters.push({ ...creature })
+        this.recordAction({ type: 'addMonster', x, y, z, creature: { ...creature }, index })
+      }
+      this.onTileChanged?.(x, y, z)
+    })
+  }
+
+  removeCreature(x: number, y: number, z: number, creatureName: string, isNpc: boolean): void {
+    this.autoBatch('Remove creature', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile) return
+
+      if (isNpc) {
+        if (!tile.npc) return
+        const oldNpc = { ...tile.npc }
+        delete tile.npc
+        this.recordAction({ type: 'setNpc', x, y, z, oldNpc, newNpc: undefined })
+      } else {
+        if (!tile.monsters) return
+        const index = tile.monsters.findIndex(m => m.name === creatureName)
+        if (index < 0) return
+        const creature = { ...tile.monsters[index] }
+        tile.monsters.splice(index, 1)
+        this.recordAction({ type: 'removeMonster', x, y, z, creature, index })
+      }
+      this.onTileChanged?.(x, y, z)
+    })
+  }
+
+  moveCreature(fromX: number, fromY: number, fromZ: number, toX: number, toY: number, toZ: number, creatureName: string, isNpc: boolean): void {
+    this.autoBatch('Move creature', () => {
+      const fromTile = this.mapData.tiles.get(tileKey(fromX, fromY, fromZ))
+      if (!fromTile) return
+
+      let creature: TileCreature | undefined
+      if (isNpc) {
+        creature = fromTile.npc
+      } else {
+        creature = fromTile.monsters?.find(m => m.name === creatureName)
+      }
+      if (!creature) return
+
+      const creatureCopy = { ...creature }
+      this.removeCreature(fromX, fromY, fromZ, creatureName, isNpc)
+      this.placeCreature(toX, toY, toZ, creatureCopy)
+    })
+  }
+
+  updateCreatureProperties(x: number, y: number, z: number, creatureName: string, isNpc: boolean, props: Partial<TileCreature>): void {
+    this.autoBatch('Update creature', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile) return
+
+      if (isNpc) {
+        if (!tile.npc) return
+        const oldNpc = { ...tile.npc }
+        const newNpc = { ...oldNpc, ...props }
+        tile.npc = newNpc
+        this.recordAction({ type: 'setNpc', x, y, z, oldNpc, newNpc: { ...newNpc } })
+      } else {
+        if (!tile.monsters) return
+        const index = tile.monsters.findIndex(m => m.name === creatureName)
+        if (index < 0) return
+        const oldCreature = { ...tile.monsters[index] }
+        const newCreature = { ...oldCreature, ...props }
+        tile.monsters[index] = newCreature
+        this.recordAction({ type: 'updateMonster', x, y, z, oldCreature, newCreature: { ...newCreature }, index })
+      }
+      this.onTileChanged?.(x, y, z)
+    })
+  }
+
+  // --- Spawn zone mutations ---
+
+  placeSpawnZone(x: number, y: number, z: number, type: 'monster' | 'npc', radius: number): void {
+    this.autoBatch('Place spawn zone', () => {
+      const tile = this.getOrCreateTile(x, y, z)
+      if (!tile) return
+
+      const existing = type === 'monster' ? tile.spawnMonster : tile.spawnNpc
+      if (existing) return // already has spawn of this type
+
+      this.applySpawnZone(tile, type, undefined, radius)
+      this.recordAction({ type: 'setSpawnZone', x, y, z, spawnType: type, oldRadius: undefined, newRadius: radius })
+      this.onTileChanged?.(x, y, z)
+    })
+  }
+
+  removeSpawnZone(x: number, y: number, z: number, type: 'monster' | 'npc'): void {
+    this.autoBatch('Remove spawn zone', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile) return
+
+      const existing = type === 'monster' ? tile.spawnMonster : tile.spawnNpc
+      if (!existing) return
+
+      const oldRadius = existing.radius
+      this.applySpawnZone(tile, type, oldRadius, undefined)
+      this.recordAction({ type: 'setSpawnZone', x, y, z, spawnType: type, oldRadius, newRadius: undefined })
+      this.onTileChanged?.(x, y, z)
+    })
+  }
+
+  updateSpawnRadius(x: number, y: number, z: number, type: 'monster' | 'npc', newRadius: number): void {
+    this.autoBatch('Update spawn radius', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile) return
+
+      const existing = type === 'monster' ? tile.spawnMonster : tile.spawnNpc
+      if (!existing) return
+
+      const oldRadius = existing.radius
+      if (oldRadius === newRadius) return
+
+      this.applySpawnZone(tile, type, oldRadius, newRadius)
+      this.recordAction({ type: 'setSpawnZone', x, y, z, spawnType: type, oldRadius, newRadius })
       this.onTileChanged?.(x, y, z)
     })
   }
@@ -1119,6 +1375,132 @@ export class MapMutator {
         })
         this.onTileChanged?.(x, y, z)
       }
+    })
+  }
+
+  /** Remove all non-ground items from a tile. If leaveUnique is true, preserve items with attributes and border items.
+   *  If cleanBorders is true, removes border items before filtering (for automagic reborder pass). */
+  eraseAllItems(x: number, y: number, z: number, options: { leaveUnique: boolean; cleanBorders?: boolean }): void {
+    this.autoBatch('Erase all items', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile || tile.items.length === 0) return
+      const registry = this._brushRegistry
+
+      const oldItems = deepCloneItems(tile.items)
+
+      // When automagic is on, clean borders first (RME: cleanBorders before erase)
+      if (options.cleanBorders && registry) {
+        this.removeBorderItems(tile, registry)
+      }
+
+      const newItems = tile.items.filter(item => {
+        // Always keep ground
+        if (classifyItem(item.id, this.appearances) === 'ground') return true
+        // If leaveUnique, keep complex items and border items
+        if (options.leaveUnique) {
+          if (isComplexItem(item)) return true
+          if (registry?.isBorderItem(item.id)) return true
+        }
+        return false
+      })
+      tile.items = newItems
+
+      if (!this.itemsEqual(oldItems, tile.items)) {
+        this.recordAction({
+          type: 'setTileItems', x, y, z,
+          oldItems,
+          newItems: deepCloneItems(tile.items),
+        })
+        this.onTileChanged?.(x, y, z)
+      }
+    })
+  }
+
+  /** RME-style two-pass reborder after erasing: recalculate walls, carpets, tables, and borders
+   *  on the given positions AND their surrounding tiles. Must be called AFTER all tiles are erased. */
+  reborderAfterErase(positions: { x: number; y: number; z: number }[]): void {
+    const registry = this._brushRegistry
+    if (!registry || positions.length === 0) return
+
+    this.autoBatch('Reborder after erase', () => {
+      // Collect all affected tiles: erased positions + their 8-neighbors (deduped)
+      const tilesToUpdate = new Map<string, { x: number; y: number; z: number }>()
+      for (const pos of positions) {
+        const key = tileKey(pos.x, pos.y, pos.z)
+        if (!tilesToUpdate.has(key)) tilesToUpdate.set(key, pos)
+        for (const [dx, dy] of OFFSETS_8) {
+          const nx = pos.x + dx
+          const ny = pos.y + dy
+          if (nx < 0 || ny < 0) continue
+          const nk = tileKey(nx, ny, pos.z)
+          if (!tilesToUpdate.has(nk)) tilesToUpdate.set(nk, { x: nx, y: ny, z: pos.z })
+        }
+      }
+
+      // Single pass: wallize, tableize, carpetize, then borderize each tile
+      for (const pos of tilesToUpdate.values()) {
+        const tile = this.mapData.tiles.get(tileKey(pos.x, pos.y, pos.z))
+        if (!tile) continue
+
+        const oldItems = deepCloneItems(tile.items)
+
+        // Realign walls, carpets, tables (no-op on tiles where those were erased)
+        if (tile.items.some(item => registry.isWallItem(item.id))) {
+          const wallItems = doWalls(pos.x, pos.y, pos.z, this.mapData, registry)
+          this.replaceWallItems(tile, wallItems, registry)
+        }
+        if (tile.items.some(item => registry.isCarpetItem(item.id))) {
+          const carpetItems = doCarpets(pos.x, pos.y, pos.z, this.mapData, registry)
+          this.replaceBrushItems(tile, carpetItems, registry, 'carpet')
+        }
+        if (tile.items.some(item => registry.isTableItem(item.id))) {
+          const tableItems = doTables(pos.x, pos.y, pos.z, this.mapData, registry)
+          this.replaceBrushItems(tile, tableItems, registry, 'table')
+        }
+
+        // Reborderize
+        const hasGround = tile.items.some(it => classifyItem(it.id, this.appearances) === 'ground')
+        if (hasGround) {
+          this.removeBorderItems(tile, registry)
+          const borders = computeBorders(pos.x, pos.y, pos.z, this.mapData, registry)
+          this.insertBorderItems(tile, borders)
+        }
+
+        if (!this.itemsEqual(oldItems, tile.items)) {
+          this.recordAction({
+            type: 'setTileItems',
+            x: pos.x, y: pos.y, z: pos.z,
+            oldItems,
+            newItems: deepCloneItems(tile.items),
+          })
+          this.onTileChanged?.(pos.x, pos.y, pos.z)
+        }
+      }
+    })
+  }
+
+  /** Clear all flags on a tile. */
+  clearAllTileFlags(x: number, y: number, z: number): void {
+    this.autoBatch('Clear all tile flags', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile || tile.flags === 0) return
+      const oldFlags = tile.flags
+      tile.flags = 0
+      this.recordAction({ type: 'setTileFlags', x, y, z, oldFlags, newFlags: 0 })
+      this.onTileChanged?.(x, y, z)
+    })
+  }
+
+  /** Clear all zones on a tile. */
+  clearAllTileZones(x: number, y: number, z: number): void {
+    this.autoBatch('Clear all tile zones', () => {
+      const tile = this.mapData.tiles.get(tileKey(x, y, z))
+      if (!tile) return
+      const oldZones = tile.zones ? [...tile.zones] : []
+      if (oldZones.length === 0) return
+      tile.zones = undefined
+      this.recordAction({ type: 'setTileZones', x, y, z, oldZones, newZones: [] })
+      this.onTileChanged?.(x, y, z)
     })
   }
 

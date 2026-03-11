@@ -113,6 +113,28 @@ export function SettingsModal({ settings, onChange, onClose }: SettingsModalProp
 
         <div className="h-px w-full bg-border-subtle" />
 
+        {/* Eraser section */}
+        <div className="flex flex-col gap-4">
+          <div className="font-display text-xs font-semibold tracking-wide uppercase text-fg-faint">Eraser</div>
+
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-ui text-sm font-normal text-fg-muted">Leave Unique Items</span>
+            <Toggle checked={settings.eraserLeaveUnique} onChange={v => update({ eraserLeaveUnique: v })} />
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-ui text-sm font-normal text-fg-muted">Keep Zones</span>
+            <Toggle checked={settings.eraserKeepZones} onChange={v => update({ eraserKeepZones: v })} />
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-ui text-sm font-normal text-fg-muted">Keep Map Flags</span>
+            <Toggle checked={settings.eraserKeepMapFlags} onChange={v => update({ eraserKeepMapFlags: v })} />
+          </div>
+        </div>
+
+        <div className="h-px w-full bg-border-subtle" />
+
         {/* Data section */}
         <div className="flex flex-col gap-4">
           <div className="font-display text-xs font-semibold tracking-wide uppercase text-fg-faint">Data</div>
