@@ -98,6 +98,7 @@ export class MinimapOverlay {
   private _expandOnHover = true
   private _hovered = false
   private _animating = false
+  private _baseOpacity = 1
 
   // Per-chunk color cache: chunkKey -> Uint8Array(CHUNK_SIZE * CHUNK_SIZE) of automap color indices
   private _chunkColorCache = new Map<string, Uint8Array>()
@@ -202,7 +203,8 @@ export class MinimapOverlay {
   }
 
   setOpacity(alpha: number): void {
-    this._container.alpha = alpha
+    this._baseOpacity = alpha
+    this._container.alpha = this._hovered ? 1 : alpha
   }
 
   get isAnimating(): boolean { return this._animating }
@@ -215,11 +217,16 @@ export class MinimapOverlay {
     this._currentWidth += (this._targetWidth - this._currentWidth) * factor
     this._currentHeight += (this._targetHeight - this._currentHeight) * factor
 
+    // Lerp opacity: 1 when hovered, baseOpacity when not
+    const targetAlpha = this._hovered ? 1 : this._baseOpacity
+    this._container.alpha += (targetAlpha - this._container.alpha) * factor
+
     // Snap when close
     if (Math.abs(this._currentWidth - this._targetWidth) < 0.5 &&
         Math.abs(this._currentHeight - this._targetHeight) < 0.5) {
       this._currentWidth = this._targetWidth
       this._currentHeight = this._targetHeight
+      this._container.alpha = targetAlpha
       this._animating = false
 
       // Resize canvas to final size (e.g. back to base after collapse) and recompute zoom
@@ -369,40 +376,11 @@ export class MinimapOverlay {
   updateViewport(camera: Camera, screenW: number, screenH: number): void {
     if (!this._visible || this._mapWidth === 0) return
 
-    // Lazy-follow: only re-center the minimap when the camera viewport
-    // would extend beyond the current bitmap area, so zooming in/out
-    // doesn't cause the minimap content to shift unnecessarily.
+    // Always center the minimap on the camera position
     if (!this._dragging) {
       const offset = camera.getFloorOffset(camera.floor)
-      const camCenterX = (camera.x + offset) / 32 + screenW / (camera.zoom * 32) / 2
-      const camCenterY = (camera.y + offset) / 32 + screenH / (camera.zoom * 32) / 2
-      const camHalfW = screenW / (camera.zoom * 32) / 2
-      const camHalfH = screenH / (camera.zoom * 32) / 2
-
-      const tpp = this._zoomLevels[this._zoomIdx]
-      const bitmapTilesW = this._canvas.width * tpp
-      const bitmapTilesH = this._canvas.height * tpp
-      const viewHalfW = bitmapTilesW / 2
-      const viewHalfH = bitmapTilesH / 2
-
-      // Check if entire camera viewport fits within current minimap view
-      const viewLeft = this._viewCenterX - viewHalfW
-      const viewRight = this._viewCenterX + viewHalfW
-      const viewTop = this._viewCenterY - viewHalfH
-      const viewBottom = this._viewCenterY + viewHalfH
-
-      const camLeft = camCenterX - camHalfW
-      const camRight = camCenterX + camHalfW
-      const camTop = camCenterY - camHalfH
-      const camBottom = camCenterY + camHalfH
-
-      // Re-center if camera viewport extends outside minimap bitmap area
-      if (camLeft < viewLeft || camRight > viewRight) {
-        this._viewCenterX = camCenterX
-      }
-      if (camTop < viewTop || camBottom > viewBottom) {
-        this._viewCenterY = camCenterY
-      }
+      this._viewCenterX = (camera.x + offset) / 32 + screenW / (camera.zoom * 32) / 2
+      this._viewCenterY = (camera.y + offset) / 32 + screenH / (camera.zoom * 32) / 2
     }
 
     const tpp = this._zoomLevels[this._zoomIdx]
@@ -738,7 +716,10 @@ export class MinimapOverlay {
 
   private _onPointerEnter(): void {
     this._hovered = true
-    if (!this._expandOnHover) return
+    if (!this._expandOnHover) {
+      this._container.alpha = 1
+      return
+    }
     this._targetWidth = this._expandedWidth
     this._targetHeight = this._expandedHeight
     this._animating = true
@@ -750,7 +731,10 @@ export class MinimapOverlay {
 
   private _onPointerLeave(): void {
     this._hovered = false
-    if (!this._expandOnHover || this._dragging) return
+    if (!this._expandOnHover || this._dragging) {
+      this._container.alpha = this._baseOpacity
+      return
+    }
     this._targetWidth = this._baseWidth
     this._targetHeight = this._baseHeight
     this._animating = true
