@@ -1,6 +1,23 @@
 import { Container, Graphics, Sprite, Texture } from 'pixi.js'
 import { TILE_SIZE } from './constants'
 
+// ── Container offset tracking ────────────────────────────────────
+
+/**
+ * Tracks floor offset for a container and applies diagonal positioning.
+ * Shared by all overlays that need floor-relative container offsets.
+ */
+export class FloorOffsetTracker {
+  private _lastFloorOffset = NaN
+
+  updateContainerOffset(container: Container, floorOffset: number): void {
+    if (floorOffset !== this._lastFloorOffset) {
+      container.position.set(-floorOffset, -floorOffset)
+      this._lastFloorOffset = floorOffset
+    }
+  }
+}
+
 // ── Shared icon badge constants ──────────────────────────────────────
 export const ICON_SIZE = 10
 export const BADGE_RADIUS = 7

@@ -267,6 +267,7 @@ export function useEditorInit(
       renderer.setMinimapExpandedSize(savedSettings.minimapExpandedSize)
       renderer.setMinimapExpandOnHover(savedSettings.minimapExpandOnHover)
       renderer.setMinimapOpacity(savedSettings.minimapOpacity)
+      renderer.setShowClientBox(savedSettings.showClientBox)
 
       setLoadingProgress(1)
       setLoadingStatus('Ready')

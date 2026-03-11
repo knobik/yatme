@@ -58,6 +58,7 @@ const RENDERER_SYNC: Partial<Record<BooleanSettingKey, (r: MapRendererType, v: b
   showWaypointOverlay: (r, v) => r.setShowWaypointOverlay(v),
   showMinimap: (r, v) => r.setShowMinimap(v),
   minimapExpandOnHover: (r, v) => r.setMinimapExpandOnHover(v),
+  showClientBox: (r, v) => r.setShowClientBox(v),
 }
 
 /** Compute left offset for elements that need to dodge all left-side panels. */

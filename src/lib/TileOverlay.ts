@@ -1,5 +1,6 @@
 import { Container, Graphics } from 'pixi.js'
 import { TILE_SIZE } from './constants'
+import { FloorOffsetTracker } from './overlayUtils'
 import { chunkKeyForTile, floorFromChunkKey } from './ChunkManager'
 import type { OtbmTile } from './otbm'
 
@@ -24,7 +25,7 @@ export abstract class TileOverlay {
   private _visible = false
   private _fullDirty = true
   private _dirtyChunks = new Set<string>()
-  private _lastFloorOffset = NaN
+  private _offsetTracker = new FloorOffsetTracker()
   private _lastFloor = -1
 
   // chunk key -> Graphics for that chunk
@@ -64,10 +65,7 @@ export abstract class TileOverlay {
   }
 
   updateContainerOffset(floorOffset: number): void {
-    if (floorOffset !== this._lastFloorOffset) {
-      this.container.position.set(-floorOffset, -floorOffset)
-      this._lastFloorOffset = floorOffset
-    }
+    this._offsetTracker.updateContainerOffset(this.container, floorOffset)
   }
 
   rebuild(floor: number, chunkIndex: Map<string, OtbmTile[]>): void {

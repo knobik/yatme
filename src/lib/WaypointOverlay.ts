@@ -2,7 +2,7 @@ import { Assets, Container, Graphics, Text, Texture } from 'pixi.js'
 import { TILE_SIZE } from './constants'
 import type { WaypointManager } from './WaypointManager'
 import type { Camera } from './Camera'
-import { TILE_CENTER, svgToDataUrl, createIconBadge } from './overlayUtils'
+import { TILE_CENTER, svgToDataUrl, createIconBadge, FloorOffsetTracker } from './overlayUtils'
 
 export const MARKER_COLOR = 0x00c800
 /** CSS hex representation of the marker color for UI components. */
@@ -41,7 +41,7 @@ export class WaypointOverlay {
   private _lastFloor = -1
   private _lastKey = ''
   private _selectedWaypoint: string | null = null
-  private _lastFloorOffset = NaN
+  private _offsetTracker = new FloorOffsetTracker()
   private _iconsReady = false
   private _ghostContainer: Container
   private _ghostPos: { x: number; y: number; z: number } | null = null
@@ -109,10 +109,7 @@ export class WaypointOverlay {
   }
 
   updateContainerOffset(floorOffset: number): void {
-    if (floorOffset !== this._lastFloorOffset) {
-      this.container.position.set(-floorOffset, -floorOffset)
-      this._lastFloorOffset = floorOffset
-    }
+    this._offsetTracker.updateContainerOffset(this.container, floorOffset)
   }
 
   rebuild(floor: number, waypointManager: WaypointManager, camera: Camera): void {

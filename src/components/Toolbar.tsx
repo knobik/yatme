@@ -243,6 +243,7 @@ export function Toolbar({
         { label: 'Show Waypoints', checked: editorSettings.showWaypointOverlay, onClick: () => onToggleSetting('showWaypointOverlay') },
         { label: 'Show Lights', shortcut: 'L', checked: editorSettings.showLights, onClick: () => onToggleSetting('showLights') },
         { label: 'Show Minimap', shortcut: 'Shift+M', checked: editorSettings.showMinimap, onClick: () => onToggleSetting('showMinimap') },
+        { label: 'Client Box', checked: editorSettings.showClientBox, onClick: () => onToggleSetting('showClientBox') },
         { heading: 'Creatures' },
         { label: 'Show Monsters', shortcut: 'm', checked: editorSettings.showMonsters, onClick: () => onToggleSetting('showMonsters') },
         { label: 'Show Monster Spawns', shortcut: 'Ctrl+M', checked: editorSettings.showMonsterSpawns, onClick: () => onToggleSetting('showMonsterSpawns') },

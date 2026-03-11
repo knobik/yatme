@@ -1,5 +1,6 @@
 import { Container, Graphics, Sprite, type Texture } from 'pixi.js'
 import { TILE_SIZE } from './constants'
+import { FloorOffsetTracker } from './overlayUtils'
 import { renderTileItems } from './renderTileItems'
 import type { OtbmTile } from './otbm'
 import type { AppearanceData } from './appearances'
@@ -41,7 +42,7 @@ export class SelectionOverlay {
   private _pingY = 0
 
   // Dirty tracking
-  private _lastHighlightOffset = NaN
+  private _offsetTracker: FloorOffsetTracker
 
   constructor() {
     this.container = new Container()
@@ -57,6 +58,7 @@ export class SelectionOverlay {
     this.container.addChild(this._brushCursorGraphics)
     this.container.addChild(this._ghostContainer)
     this.container.addChild(this._pingGraphics)
+    this._offsetTracker = new FloorOffsetTracker()
   }
 
   // ── Selection state ───────────────────────────────────────────
@@ -80,10 +82,7 @@ export class SelectionOverlay {
   // ── Container positioning ────────────────────────────────────
 
   updateContainerOffset(floorOffset: number): void {
-    if (floorOffset !== this._lastHighlightOffset) {
-      this.container.position.set(-floorOffset, -floorOffset)
-      this._lastHighlightOffset = floorOffset
-    }
+    this._offsetTracker.updateContainerOffset(this.container, floorOffset)
   }
 
   // ── Selection border ─────────────────────────────────────────

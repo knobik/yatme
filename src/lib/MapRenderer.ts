@@ -6,6 +6,7 @@ import { SelectionOverlay } from './SelectionOverlay'
 import { ZoneOverlay } from './ZoneOverlay'
 import { HouseOverlay } from './HouseOverlay'
 import { BoundaryOverlay } from './BoundaryOverlay'
+import { ClientBoxOverlay } from './ClientBoxOverlay'
 import { SpawnOverlay } from './creatures/SpawnOverlay'
 import { WaypointOverlay } from './WaypointOverlay'
 import { WaypointManager } from './WaypointManager'
@@ -43,6 +44,7 @@ export class MapRenderer implements InputHost {
   private monsterSpawnOverlay: SpawnOverlay
   private npcSpawnOverlay: SpawnOverlay
   private boundaryOverlay: BoundaryOverlay
+  private clientBoxOverlay: ClientBoxOverlay
   private waypointOverlay: WaypointOverlay
   private _waypointManager: WaypointManager
   private floorManager: FloorManager
@@ -91,6 +93,7 @@ export class MapRenderer implements InputHost {
     this.zoneOverlay = new ZoneOverlay()
     this.houseOverlay = new HouseOverlay()
     this.boundaryOverlay = new BoundaryOverlay(mapData.width, mapData.height)
+    this.clientBoxOverlay = new ClientBoxOverlay()
     this.waypointOverlay = new WaypointOverlay()
     this._waypointManager = waypointManager ?? new WaypointManager([])
 
@@ -135,6 +138,9 @@ export class MapRenderer implements InputHost {
     // Selection overlay (added to mapContainer; FloorManager keeps it on top)
     this.mapContainer.addChild(this.selection.container)
 
+    // Client box overlay (between selection and light engine)
+    this.mapContainer.addChild(this.clientBoxOverlay.container)
+
     // Light engine (multiply-blend overlay on top of everything)
     this.lightEngine = new LightEngine()
     this.mapContainer.addChild(this.lightEngine.container)
@@ -149,6 +155,7 @@ export class MapRenderer implements InputHost {
       this.npcSpawnOverlay.container,
       this.waypointOverlay.container,
       this.selection.container,
+      this.clientBoxOverlay.container,
       this.lightEngine.container,
     )
 
@@ -450,6 +457,12 @@ export class MapRenderer implements InputHost {
     this.minimap.setOpacity(alpha)
   }
 
+  // ── Client box overlay ──────────────────────────────────────────
+
+  setShowClientBox(enabled: boolean): void {
+    this.clientBoxOverlay.setVisible(enabled)
+  }
+
   // ── Selection border ────────────────────────────────────────────
 
   get selectionBorder(): boolean { return this._showSelectionBorder }
@@ -643,6 +656,10 @@ export class MapRenderer implements InputHost {
     this.waypointOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
     this.waypointOverlay.rebuild(this.camera.floor, this._waypointManager, this.camera)
 
+    const clientBoxOffset = this.camera.getFloorOffset(this.camera.floor)
+    this.clientBoxOverlay.updateContainerOffset(clientBoxOffset)
+    this.clientBoxOverlay.update(this.camera, clientBoxOffset, this.app.screen.width, this.app.screen.height)
+
     this.minimap.updateAnimation()
     this.minimap.rebuild(this.camera.floor, this.chunkManager.index, this.appearances)
     this.minimap.updateViewport(this.camera, this.app.screen.width, this.app.screen.height)
@@ -667,6 +684,7 @@ export class MapRenderer implements InputHost {
     this.monsterSpawnOverlay.destroy()
     this.houseOverlay.destroy()
     this.zoneOverlay.destroy()
+    this.clientBoxOverlay.destroy()
     this.boundaryOverlay.destroy()
     this.selection.destroy()
     this.floorManager.destroy()

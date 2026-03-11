@@ -1,5 +1,6 @@
 import { Container, Graphics } from 'pixi.js'
 import { TILE_SIZE, CHUNK_SIZE } from './constants'
+import { FloorOffsetTracker } from './overlayUtils'
 import type { Camera } from './Camera'
 
 const LINE_COLOR = 0xffffff
@@ -21,7 +22,7 @@ export class BoundaryOverlay {
   readonly container: Container
   private _graphics: Graphics
   private _lastKey = ''
-  private _lastFloorOffset = NaN
+  private _offsetTracker = new FloorOffsetTracker()
   private _maxWidth: number
   private _maxHeight: number
 
@@ -42,10 +43,7 @@ export class BoundaryOverlay {
   }
 
   updateContainerOffset(floorOffset: number): void {
-    if (floorOffset !== this._lastFloorOffset) {
-      this.container.position.set(-floorOffset, -floorOffset)
-      this._lastFloorOffset = floorOffset
-    }
+    this._offsetTracker.updateContainerOffset(this.container, floorOffset)
   }
 
   update(camera: Camera): void {

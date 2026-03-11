@@ -39,6 +39,9 @@ export interface EditorSettings {
   minimapExpandedSize: number
   minimapOpacity: number
 
+  // Client Box
+  showClientBox: boolean
+
   // Eraser
   eraserLeaveUnique: boolean
   eraserKeepZones: boolean
@@ -71,6 +74,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   minimapSize: 200,
   minimapExpandedSize: 600,
   minimapOpacity: 1.0,
+  showClientBox: false,
   eraserLeaveUnique: true,
   eraserKeepZones: false,
   eraserKeepMapFlags: false,
