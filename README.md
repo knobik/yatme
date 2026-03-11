@@ -1,6 +1,6 @@
 # YATME — Yet Another Tibia Map Editor
 
-Browser-based Tibia map editor for Tibia 15.00+. Built with React 19, PixiJS 8, TypeScript, and Vite.
+Browser-based OpenTibia map editor for Tibia 15.00+ client data. Built with React 19, PixiJS 8, TypeScript, and Vite.
 
 Renders and edits OTBM map files using sprite data extracted from the Tibia client. Inspired by [Remere's Map Editor](https://github.com/hjnilsson/rme).
 

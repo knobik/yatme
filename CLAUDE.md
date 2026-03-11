@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Browser-based Tibia map editor targeting Tibia 15.00+ (protobuf data format). Built with React 19, PixiJS 8, TypeScript, Vite, and Tailwind CSS 4. Renders and edits OTBM map files using sprite data from the Tibia client.
+Browser-based OpenTibia map editor targeting Tibia 15.00+ client data (protobuf data format). Built with React 19, PixiJS 8, TypeScript, Vite, and Tailwind CSS 4. Renders and edits OTBM map files using sprite data from the Tibia client.
 
 ## Commands
 
