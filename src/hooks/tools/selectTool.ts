@@ -75,6 +75,24 @@ export function createSelectHandlers(ctx: ToolContext) {
         return
       }
 
+      // Try waypoint selection (if overlay visible)
+      if (ctx.renderer.showWaypointOverlay) {
+        const wm = ctx.mutator.waypointManager
+        const wpHit = wm?.getByPosition(pos.x, pos.y, pos.z)
+        if (wpHit) {
+          ctx.onWaypointSelected?.(wpHit.name)
+          ctx.isWaypointDragRef.current = true
+          ctx.dragWaypointNameRef.current = wpHit.name
+          ctx.isDragMovingRef.current = true
+          ctx.dragMoveOriginRef.current = pos
+          ctx.dragMoveLastPosRef.current = pos
+          ctx.setSelectedItems([])
+          ctx.selectedItemsRef.current = []
+          ctx.renderer.clearItemHighlight()
+          return
+        }
+      }
+
       // No creature hit — fall through to item selection
       const isAlreadySelected = ctx.selectedItemsRef.current.some(
         s => s.x === pos.x && s.y === pos.y && s.z === pos.z
@@ -123,8 +141,28 @@ export function createSelectHandlers(ctx: ToolContext) {
     if (ctx.isDragMovingRef.current) {
       ctx.dragMoveLastPosRef.current = pos
 
-      // Creature drag: just track position, no ghost preview
-      if (ctx.isCreatureDragRef.current) return
+      // Creature/spawn drag ghost
+      if (ctx.isCreatureDragRef.current) {
+        const sel = ctx.selectedCreatureRef.current
+        if (sel && sel.type === 'spawnZone') {
+          const origin = ctx.dragMoveOriginRef.current
+          if (origin) {
+            const srcKey = `${origin.x},${origin.y},${origin.z}`
+            const srcTile = ctx.mapData.tiles.get(srcKey)
+            const spawnData = sel.spawnType === 'monster' ? srcTile?.spawnMonster : srcTile?.spawnNpc
+            if (spawnData) {
+              ctx.renderer.setSpawnDragGhost(sel.spawnType, pos.x, pos.y, pos.z, spawnData.radius)
+            }
+          }
+        }
+        return
+      }
+
+      // Waypoint drag ghost
+      if (ctx.isWaypointDragRef.current) {
+        ctx.renderer.setWaypointDragGhost(pos.x, pos.y, pos.z)
+        return
+      }
 
       const origin = ctx.dragMoveOriginRef.current
       if (origin) {
@@ -185,11 +223,19 @@ export function createSelectHandlers(ctx: ToolContext) {
     const origin = ctx.dragMoveOriginRef.current
     const target = ctx.dragMoveLastPosRef.current
     const wasCreatureDrag = ctx.isCreatureDragRef.current
+    const wasWaypointDrag = ctx.isWaypointDragRef.current
+    const draggedWaypointName = ctx.dragWaypointNameRef.current
     ctx.isDragMovingRef.current = false
     ctx.dragMoveOriginRef.current = null
     ctx.dragMoveLastPosRef.current = null
     ctx.isCreatureDragRef.current = false
+    ctx.isWaypointDragRef.current = false
+    ctx.dragWaypointNameRef.current = null
     ctx.renderer.clearDragPreview()
+    ctx.renderer.clearWaypointDragGhost()
+    // Clear spawn drag ghosts for both types
+    ctx.renderer.clearSpawnDragGhost('monster')
+    ctx.renderer.clearSpawnDragGhost('npc')
 
     const didMove = origin && target && (origin.x !== target.x || origin.y !== target.y)
 
@@ -234,6 +280,20 @@ export function createSelectHandlers(ctx: ToolContext) {
         const tile = ctx.mapData.tiles.get(key) ?? null
         ctx.renderer.onTileClick?.(tile, pos.x, pos.y)
       }
+      return
+    }
+
+    // Waypoint drag-move
+    if (wasWaypointDrag && draggedWaypointName) {
+      if (didMove) {
+        const wm = ctx.mutator.waypointManager
+        if (wm && !wm.hasPosition(target.x, target.y, target.z)) {
+          ctx.mutator.moveWaypoint(draggedWaypointName, target.x, target.y, target.z)
+        }
+      }
+      ctx.selectStartRef.current = null
+      ctx.isShiftDragRef.current = false
+      ctx.isCtrlDragRef.current = false
       return
     }
 

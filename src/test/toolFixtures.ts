@@ -46,6 +46,7 @@ export function makeMockMutator(overrides: Record<string, unknown> = {}) {
     removeTileZone: vi.fn(),
     getAppearances: vi.fn(() => ({ objects: new Map() })),
     spawnManager: null,
+    waypointManager: null,
     ...overrides,
   }
 }
@@ -57,12 +58,17 @@ export function makeMockRenderer(overrides: Record<string, unknown> = {}) {
     clearItemHighlight: vi.fn(),
     updateDragPreview: vi.fn(),
     clearDragPreview: vi.fn(),
+    setWaypointDragGhost: vi.fn(),
+    clearWaypointDragGhost: vi.fn(),
+    setSpawnDragGhost: vi.fn(),
+    clearSpawnDragGhost: vi.fn(),
     updateBrushCursor: vi.fn(),
     updateGhostPreview: vi.fn(),
     clearGhostPreview: vi.fn(),
     updatePastePreview: vi.fn(),
     setCursorStyle: vi.fn(),
     onTileClick: vi.fn(),
+    showWaypointOverlay: false,
     ...overrides,
   }
 }
@@ -128,6 +134,8 @@ export function makeToolContext(opts: MakeToolContextOptions = {}) {
     selectedCreatureRef: { current: null },
     setSelectedCreature: vi.fn(),
     isCreatureDragRef: { current: false },
+    isWaypointDragRef: { current: false },
+    dragWaypointNameRef: { current: null as string | null },
     settingsRef: { current: { ...DEFAULT_SETTINGS, ...opts.settings } },
   } as unknown as ToolContext
 

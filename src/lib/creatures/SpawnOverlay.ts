@@ -5,21 +5,13 @@ import { TILE_SIZE } from '../constants'
 import { floorFromChunkKey } from '../ChunkManager'
 import { TileOverlay, ALPHA_NONE } from '../TileOverlay'
 import type { SpawnManager } from './SpawnManager'
-
-const ICON_SIZE = 10
-const BADGE_RADIUS = 7
-const SHADOW_RADIUS = 8
-const TILE_CENTER = TILE_SIZE / 2
+import { TILE_CENTER, svgToDataUrl, createIconBadge } from '../overlayUtils'
 
 // Phosphor Bug Beetle icon (256x256 viewBox, fill white for tinting)
 const BUG_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" fill="white" viewBox="0 0 256 256"><path d="M208,152h16a8,8,0,0,0,0-16H208V120h16a8,8,0,0,0,0-16H207.6a79.76,79.76,0,0,0-21.44-46.85l19.5-19.49a8,8,0,0,0-11.32-11.32l-20.29,20.3a79.74,79.74,0,0,0-92.1,0L61.66,26.34A8,8,0,0,0,50.34,37.66l19.5,19.49A79.76,79.76,0,0,0,48.4,104H32a8,8,0,0,0,0,16H48v16H32a8,8,0,0,0,0,16H48v8c0,2.7.14,5.37.4,8H32a8,8,0,0,0,0,16H51.68a80,80,0,0,0,152.64,0H224a8,8,0,0,0,0-16H207.6c.26-2.63.4-5.3.4-8ZM128,48a64.07,64.07,0,0,1,63.48,56h-127A64.07,64.07,0,0,1,128,48Zm8,175.48V144a8,8,0,0,0-16,0v79.48A64.07,64.07,0,0,1,64,160V120H192v40A64.07,64.07,0,0,1,136,223.48Z"/></svg>`
 
 // Phosphor Chat Circle Text icon (256x256 viewBox, fill white for tinting)
 const CHAT_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" fill="white" viewBox="0 0 256 256"><path d="M168,112a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,112Zm-8,24H96a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16Zm72-8A104,104,0,0,1,79.12,219.82L45.07,231.17a16,16,0,0,1-20.24-20.24l11.35-34.05A104,104,0,1,1,232,128Zm-16,0A88,88,0,1,0,51.81,172.06a8,8,0,0,1,.66,6.54L40,216,77.4,203.53a7.85,7.85,0,0,1,2.53-.42,8,8,0,0,1,4,1.08A88,88,0,0,0,216,128Z"/></svg>`
-
-function svgToDataUrl(svg: string): string {
-  return `data:image/svg+xml;base64,${btoa(svg)}`
-}
 
 /** Shared texture cache — loaded once, reused across overlays. */
 let monsterIconTexture: Texture | null = null
@@ -65,6 +57,8 @@ export class SpawnOverlay extends TileOverlay {
   private _iconsDirtyFull = true
   private _iconsDirtyChunks = new Set<string>()
   private _iconsReady = false
+  private _ghostContainer = new Container()
+  private _ghostPos: { x: number; y: number; z: number; radius: number } | null = null
 
   constructor(spawnManager: SpawnManager, type: 'monster' | 'npc', color: number, centerColor: number) {
     super()
@@ -76,12 +70,61 @@ export class SpawnOverlay extends TileOverlay {
 
     this.container.addChild(this._iconContainer)
 
+    this._ghostContainer.alpha = 0.5
+    this._ghostContainer.visible = false
+    this.container.addChild(this._ghostContainer)
+
     // Load icon textures asynchronously
     ensureIconTextures().then((ok) => {
       if (!ok) return
       this._iconsReady = true
       this.markDirty()
     })
+  }
+
+  setDragGhost(x: number, y: number, z: number, radius: number): void {
+    this._ghostPos = { x, y, z, radius }
+    this._rebuildGhost()
+  }
+
+  clearDragGhost(): void {
+    if (this._ghostPos) {
+      this._ghostPos = null
+      this._ghostContainer.removeChildren().forEach(c => c.destroy())
+      this._ghostContainer.visible = false
+    }
+  }
+
+  private _rebuildGhost(): void {
+    this._ghostContainer.removeChildren().forEach(c => c.destroy())
+    if (!this._ghostPos) {
+      this._ghostContainer.visible = false
+      return
+    }
+
+    const { x: gx, y: gy, radius } = this._ghostPos
+
+    // Draw zone tiles covering the spawn radius
+    const zoneGfx = new PixiGraphics()
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        zoneGfx.rect((gx + dx) * TILE_SIZE, (gy + dy) * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+        zoneGfx.fill({ color: this._color, alpha: ALPHA_NONE })
+      }
+    }
+    this._ghostContainer.addChild(zoneGfx)
+
+    // Center icon (only if textures are ready)
+    if (this._iconsReady) {
+      const texture = this._type === 'monster' ? monsterIconTexture : npcIconTexture
+      if (texture) {
+        const cx = gx * TILE_SIZE + TILE_CENTER
+        const cy = gy * TILE_SIZE + TILE_CENTER
+        this._ghostContainer.addChild(createIconBadge(cx, cy, texture, this._centerColor))
+      }
+    }
+
+    this._ghostContainer.visible = true
   }
 
   protected hasActiveSelection(): boolean {
@@ -167,31 +210,7 @@ export class SpawnOverlay extends TileOverlay {
       const cx = tile.x * TILE_SIZE + TILE_CENTER
       const cy = tile.y * TILE_SIZE + TILE_CENTER
 
-      const group = new Container()
-
-      // Drop shadow for depth
-      const shadow = new PixiGraphics()
-      shadow.circle(cx + 1, cy + 1, SHADOW_RADIUS)
-      shadow.fill({ color: 0x000000, alpha: 0.4 })
-      group.addChild(shadow)
-
-      // Dark filled badge with colored ring
-      const badge = new PixiGraphics()
-      badge.circle(cx, cy, BADGE_RADIUS)
-      badge.fill({ color: 0x12121a, alpha: 0.85 })
-      badge.stroke({ color: this._centerColor, alpha: 0.9, width: 1.5 })
-      group.addChild(badge)
-
-      // White icon for contrast
-      const sprite = new Sprite(texture)
-      sprite.width = ICON_SIZE
-      sprite.height = ICON_SIZE
-      sprite.x = cx - ICON_SIZE / 2
-      sprite.y = cy - ICON_SIZE / 2
-      sprite.tint = 0xeeeeee
-      sprite.alpha = 0.95
-      group.addChild(sprite)
-
+      const group = createIconBadge(cx, cy, texture, this._centerColor)
       this._iconContainer.addChild(group)
       this._iconSprites.set(key, group as unknown as Sprite)
     }
@@ -213,6 +232,7 @@ export class SpawnOverlay extends TileOverlay {
     for (const s of this._iconSprites.values()) s.destroy()
     this._iconSprites.clear()
     this._iconContainer.destroy()
+    this._ghostContainer.destroy({ children: true })
     super.destroy()
   }
 }

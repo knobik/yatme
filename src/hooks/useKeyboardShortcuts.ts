@@ -232,6 +232,9 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
       } else if (e.key === 'c' && !e.ctrlKey) {
         e.preventDefault()
         toolsRef.current.setActiveTool('creature')
+      } else if (e.key === 'w' && !e.ctrlKey) {
+        e.preventDefault()
+        toolsRef.current.setActiveTool('waypoint')
       } else if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey) {
         e.preventDefault()
         toggleSetting('showMonsters')

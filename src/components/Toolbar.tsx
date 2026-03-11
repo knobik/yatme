@@ -18,6 +18,7 @@ import {
   ArrowCounterClockwiseIcon, ArrowClockwiseIcon, SquareIcon, CircleIcon,
   HouseIcon,
   PawPrintIcon,
+  MapPinIcon,
 } from '@phosphor-icons/react'
 import type { EditorSettings, BooleanSettingKey } from '../lib/EditorSettings'
 
@@ -94,6 +95,7 @@ const TOOLS: { id: EditorTool; label: string; shortcut: string; icon: React.Reac
   { id: 'zone', label: 'Zone', shortcut: 'Z', icon: <FlagIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
   { id: 'house', label: 'House', shortcut: 'H', icon: <HouseIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
   { id: 'creature', label: 'Creature', shortcut: 'C', icon: <PawPrintIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
+  { id: 'waypoint', label: 'Waypoint', shortcut: 'W', icon: <MapPinIcon size={ICON_SIZE} weight={ICON_WEIGHT} /> },
 ]
 
 const DOOR_TYPES = [
@@ -234,9 +236,11 @@ export function Toolbar({
         { label: 'Zone Palette', shortcut: 'Z', checked: editorSettings.showZonePalette, onClick: () => onToggleSetting('showZonePalette') },
         { label: 'House Palette', shortcut: 'H', checked: editorSettings.showHousePalette, onClick: () => onToggleSetting('showHousePalette') },
         { label: 'Creature Palette', checked: editorSettings.showCreaturePalette, onClick: () => onToggleSetting('showCreaturePalette') },
+        { label: 'Waypoint Palette', checked: editorSettings.showWaypointPalette, onClick: () => onToggleSetting('showWaypointPalette') },
         { heading: 'Overlays' },
         { label: 'Show Zones', checked: editorSettings.showZoneOverlay, onClick: () => onToggleSetting('showZoneOverlay') },
         { label: 'Show Houses', checked: editorSettings.showHouseOverlay, onClick: () => onToggleSetting('showHouseOverlay') },
+        { label: 'Show Waypoints', checked: editorSettings.showWaypointOverlay, onClick: () => onToggleSetting('showWaypointOverlay') },
         { label: 'Show Lights', shortcut: 'L', checked: editorSettings.showLights, onClick: () => onToggleSetting('showLights') },
         { heading: 'Creatures' },
         { label: 'Show Monsters', shortcut: 'M', checked: editorSettings.showMonsters, onClick: () => onToggleSetting('showMonsters') },

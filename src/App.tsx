@@ -32,6 +32,7 @@ import { scrubHouseFromTiles } from './lib/houseCleanup'
 import { ZonePalette } from './components/ZonePalette'
 import { HousePalette } from './components/HousePalette'
 import { CreaturePalette } from './components/CreaturePalette'
+import { WaypointPalette } from './components/WaypointPalette'
 import type { CreatureDatabase } from './lib/creatures/CreatureDatabase'
 import type { CategoryType } from './lib/tilesets/TilesetTypes'
 import { emptySidecars, type MapSidecars } from './lib/sidecars'
@@ -54,6 +55,7 @@ const RENDERER_SYNC: Partial<Record<BooleanSettingKey, (r: MapRendererType, v: b
   showNpcSpawns: (r, v) => r.setShowNpcSpawnOverlay(v),
   showMonsters: (r, v) => r.setShowMonsters(v),
   showNpcs: (r, v) => r.setShowNpcs(v),
+  showWaypointOverlay: (r, v) => r.setShowWaypointOverlay(v),
 }
 
 /** Compute left offset for elements that need to dodge all left-side panels. */
@@ -78,6 +80,7 @@ function App() {
   // Inspector panel tile position — set via "Browse Tile" or click-to-inspect.
   const [selectedTilePos, setSelectedTilePos] = useState<{ x: number; y: number; z: number } | null>(null)
   const [tileVersion, setTileVersion] = useState(0)
+  const [, setWaypointVersion] = useState(0)
   const [itemRegistry, setItemRegistry] = useState<ItemRegistry | null>(null)
   const [appearancesData, setAppearancesData] = useState<AppearanceData | null>(null)
   const [initialSettings] = useState(() => loadSettings())
@@ -134,7 +137,7 @@ function App() {
     setTilesets, setMapFilename, setMapData, setSidecarsData,
     setRendererReady, setMutatorReady,
     setCamera, setSelectedTilePos, setContextMenu: (menu) => setContextMenu(menu),
-    setTileVersion, setPlacingHouseExit, placingHouseExitRef, setCreatureDb, toolsRef,
+    setTileVersion, setWaypointVersion, setPlacingHouseExit, placingHouseExitRef, setCreatureDb, toolsRef,
   })
 
   // ── Settings helpers ─────────────────────────────────────────────
@@ -255,6 +258,7 @@ function App() {
   useToolAutoToggle(tools.activeTool, 'zone', 'showZoneOverlay', 'showZonePalette', editorSettings, updateSetting)
   useToolAutoToggle(tools.activeTool, 'house', 'showHouseOverlay', 'showHousePalette', editorSettings, updateSetting)
   useToolAutoToggle(tools.activeTool, 'creature', 'showMonsterSpawns', 'showCreaturePalette', editorSettings, updateSetting)
+  useToolAutoToggle(tools.activeTool, 'waypoint', 'showWaypointOverlay', 'showWaypointPalette', editorSettings, updateSetting)
 
   useEffect(() => {
     if (rendererReady) {
@@ -272,6 +276,10 @@ function App() {
   useEffect(() => {
     rendererRef.current?.setActiveHouse(tools.selectedHouse?.id ?? null)
   }, [tools.selectedHouse, rendererRef])
+
+  useEffect(() => {
+    rendererRef.current?.setSelectedWaypoint(tools.selectedWaypoint)
+  }, [tools.selectedWaypoint, rendererRef])
 
   useEffect(() => {
     rendererRef.current?.setShowSelectionBorder(editorSettings.selectionBorder)
@@ -704,6 +712,25 @@ function App() {
           spawnRadius={tools.spawnRadius}
           onSpawnRadiusChange={tools.setSpawnRadius}
           onClose={() => updateSetting('showCreaturePalette', false)}
+        />
+      )}
+
+      {/* Waypoint palette — right side */}
+      {!loading && editorSettings.showWaypointPalette && mapData && mutatorReady && (
+        <WaypointPalette
+          style={{ right: 68 + (editorSettings.showZonePalette ? 268 : 0) + (editorSettings.showHousePalette ? 268 : 0) + (editorSettings.showCreaturePalette ? 268 : 0) }}
+          waypoints={mapData.waypoints}
+          mutator={mutatorReady}
+          selectedWaypoint={tools.selectedWaypoint}
+          onWaypointSelect={(name) => {
+            tools.setSelectedWaypoint(name || null)
+          }}
+          onNavigate={(x, y, z) => {
+            rendererRef.current?.setFloor(z)
+            rendererRef.current?.centerOn(x, y)
+            rendererRef.current?.pingTile(x, y, z)
+          }}
+          onClose={() => updateSetting('showWaypointPalette', false)}
         />
       )}
 

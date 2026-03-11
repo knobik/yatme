@@ -50,6 +50,7 @@ export interface UseEditorInitOptions {
   setSelectedTilePos: (pos: { x: number; y: number; z: number } | null) => void
   setContextMenu: (menu: ContextMenuState | null) => void
   setTileVersion: Dispatch<SetStateAction<number>>
+  setWaypointVersion: Dispatch<SetStateAction<number>>
 
   // House exit placement
   setPlacingHouseExit: (id: number | null) => void
@@ -89,6 +90,7 @@ export function useEditorInit(
     setSelectedTilePos,
     setContextMenu,
     setTileVersion,
+    setWaypointVersion,
     setPlacingHouseExit,
     placingHouseExitRef,
     setCreatureDb,
@@ -144,6 +146,12 @@ export function useEditorInit(
         setTileVersion(v => v + 1)
       }
 
+      const prevOnWaypointChanged = mutator.onWaypointChanged
+      mutator.onWaypointChanged = () => {
+        prevOnWaypointChanged?.()
+        setWaypointVersion(v => v + 1)
+      }
+
       // Wire renderer → React callbacks
       renderer.onCameraChange = (x, y, zoom, floor, floorViewMode, showTransparentUpper) => {
         setCamera({ x, y, zoom, floor, floorViewMode, showTransparentUpper })
@@ -184,6 +192,8 @@ export function useEditorInit(
           return
         }
         const currentTool = toolsRef.current.activeTool
+        // Don't switch away from waypoint tool on right-click — it handles its own right-click (delete)
+        if (currentTool === 'waypoint') return
         if (currentTool === 'draw' || currentTool === 'erase' || currentTool === 'creature') {
           toolsRef.current.setActiveTool('select')
         }
@@ -251,6 +261,7 @@ export function useEditorInit(
       renderer.setShowNpcSpawnOverlay(savedSettings.showNpcSpawns)
       renderer.setShowMonsters(savedSettings.showMonsters)
       renderer.setShowNpcs(savedSettings.showNpcs)
+      renderer.setShowWaypointOverlay(savedSettings.showWaypointOverlay)
 
       setLoadingProgress(1)
       setLoadingStatus('Ready')
