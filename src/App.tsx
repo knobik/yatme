@@ -331,17 +331,21 @@ function App() {
   const handleResetZoom = useCallback(() => { rendererRef.current?.resetZoom() }, [rendererRef])
 
   const handleSettingsChange = useCallback((next: EditorSettings) => {
-    setEditorSettings(next)
-    const r = rendererRef.current
-    if (r) {
-      for (const [key, sync] of Object.entries(RENDERER_SYNC)) {
-        sync(r, next[key as keyof EditorSettings] as boolean)
+    setEditorSettings(prev => {
+      const r = rendererRef.current
+      if (r) {
+        // Only sync boolean settings that actually changed
+        for (const [key, sync] of Object.entries(RENDERER_SYNC)) {
+          const k = key as keyof EditorSettings
+          if (prev[k] !== next[k]) sync(r, next[k] as boolean)
+        }
+        if (prev.minimapSize !== next.minimapSize) r.setMinimapSize(next.minimapSize)
+        if (prev.minimapExpandedSize !== next.minimapExpandedSize) r.setMinimapExpandedSize(next.minimapExpandedSize)
+        if (prev.minimapOpacity !== next.minimapOpacity) r.setMinimapOpacity(next.minimapOpacity)
       }
-      r.setMinimapSize(next.minimapSize)
-      r.setMinimapExpandedSize(next.minimapExpandedSize)
-      r.setMinimapOpacity(next.minimapOpacity)
-    }
-    saveSettings(next)
+      saveSettings(next)
+      return next
+    })
   }, [rendererRef])
 
   const handleMapPropertiesApply = useCallback((patch: MapPropertiesPatch) => {

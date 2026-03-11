@@ -16,6 +16,8 @@ const PADDING = 4
 const BORDER_WIDTH = 1
 const BG_COLOR = 0x12121a
 const BORDER_COLOR = 0x2a2a35
+const OOB_COLOR = 0xFF0e0e14 // out-of-bounds fill (ABGR: dark desaturated)
+const INBOUNDS_COLOR = 0xFF000000 // in-bounds empty (pure black)
 const VIEWPORT_COLOR = 0xd4a549
 const VIEWPORT_ALPHA = 0.8
 const MARGIN_RIGHT = 12
@@ -239,6 +241,7 @@ export class MinimapOverlay {
     this._imageData = null // force re-create
     this._source = null
     if (this._texture) {
+      this._bitmapSprite.texture = Texture.EMPTY
       this._texture.destroy(true)
       this._texture = null
     }
@@ -366,11 +369,40 @@ export class MinimapOverlay {
   updateViewport(camera: Camera, screenW: number, screenH: number): void {
     if (!this._visible || this._mapWidth === 0) return
 
-    // Auto-center the minimap view on the main camera position
+    // Lazy-follow: only re-center the minimap when the camera viewport
+    // would extend beyond the current bitmap area, so zooming in/out
+    // doesn't cause the minimap content to shift unnecessarily.
     if (!this._dragging) {
       const offset = camera.getFloorOffset(camera.floor)
-      this._viewCenterX = (camera.x + offset) / 32 + screenW / (camera.zoom * 32) / 2
-      this._viewCenterY = (camera.y + offset) / 32 + screenH / (camera.zoom * 32) / 2
+      const camCenterX = (camera.x + offset) / 32 + screenW / (camera.zoom * 32) / 2
+      const camCenterY = (camera.y + offset) / 32 + screenH / (camera.zoom * 32) / 2
+      const camHalfW = screenW / (camera.zoom * 32) / 2
+      const camHalfH = screenH / (camera.zoom * 32) / 2
+
+      const tpp = this._zoomLevels[this._zoomIdx]
+      const bitmapTilesW = this._canvas.width * tpp
+      const bitmapTilesH = this._canvas.height * tpp
+      const viewHalfW = bitmapTilesW / 2
+      const viewHalfH = bitmapTilesH / 2
+
+      // Check if entire camera viewport fits within current minimap view
+      const viewLeft = this._viewCenterX - viewHalfW
+      const viewRight = this._viewCenterX + viewHalfW
+      const viewTop = this._viewCenterY - viewHalfH
+      const viewBottom = this._viewCenterY + viewHalfH
+
+      const camLeft = camCenterX - camHalfW
+      const camRight = camCenterX + camHalfW
+      const camTop = camCenterY - camHalfH
+      const camBottom = camCenterY + camHalfH
+
+      // Re-center if camera viewport extends outside minimap bitmap area
+      if (camLeft < viewLeft || camRight > viewRight) {
+        this._viewCenterX = camCenterX
+      }
+      if (camTop < viewTop || camBottom > viewBottom) {
+        this._viewCenterY = camCenterY
+      }
     }
 
     const tpp = this._zoomLevels[this._zoomIdx]
@@ -424,6 +456,7 @@ export class MinimapOverlay {
 
     // Scale bitmap sprite to show only the effective area, centered in display
     this._bitmapSprite.x = PADDING + BORDER_WIDTH + mapOffX
+    this._bitmapSprite.y = PADDING + BORDER_WIDTH + mapOffY
     this._bitmapSprite.width = effDispW
     this._bitmapSprite.height = effDispH
 
@@ -448,9 +481,11 @@ export class MinimapOverlay {
     let effectiveH: number
 
     if (bmW * tpp >= this._mapWidth) {
-      // Map fits within bitmap width — align to map origin, use only needed pixels
-      viewMinX = this._mapMinX
-      effectiveW = Math.min(bmW, Math.ceil(this._mapWidth / tpp))
+      // Map fits within bitmap width — center map data within full bitmap
+      const usedPixels = Math.ceil(this._mapWidth / tpp)
+      const padPixels = Math.floor((bmW - usedPixels) / 2)
+      viewMinX = this._mapMinX - padPixels * tpp
+      effectiveW = bmW
     } else {
       // Normal pan — center and clamp
       const halfW = bmW * tpp / 2
@@ -460,8 +495,11 @@ export class MinimapOverlay {
     }
 
     if (bmH * tpp >= this._mapHeight) {
-      viewMinY = this._mapMinY
-      effectiveH = Math.min(bmH, Math.ceil(this._mapHeight / tpp))
+      // Map fits within bitmap height — center map data within full bitmap
+      const usedPixels = Math.ceil(this._mapHeight / tpp)
+      const padPixels = Math.floor((bmH - usedPixels) / 2)
+      viewMinY = this._mapMinY - padPixels * tpp
+      effectiveH = bmH
     } else {
       const halfH = bmH * tpp / 2
       const cy = Math.max(this._mapMinY + halfH, Math.min(this._mapMinY + this._mapHeight - halfH, this._viewCenterY))
@@ -546,7 +584,18 @@ export class MinimapOverlay {
     }
     const imageData = this._imageData
     const buf32 = new Uint32Array(imageData.data.buffer)
-    buf32.fill(0xFF000000) // black
+    buf32.fill(OOB_COLOR)
+
+    // Paint in-bounds area with map background color
+    const ibStartX = Math.max(0, Math.floor((this._mapMinX - viewMinX) / tpp))
+    const ibStartY = Math.max(0, Math.floor((this._mapMinY - viewMinY) / tpp))
+    const ibEndX = Math.min(w, Math.ceil((this._mapMinX + this._mapWidth - viewMinX) / tpp))
+    const ibEndY = Math.min(h, Math.ceil((this._mapMinY + this._mapHeight - viewMinY) / tpp))
+    for (let py = ibStartY; py < ibEndY; py++) {
+      const rowStart = py * w + ibStartX
+      const rowEnd = py * w + ibEndX
+      buf32.fill(INBOUNDS_COLOR, rowStart, rowEnd)
+    }
 
     for (let cy = chunkMinY; cy <= chunkMaxY; cy++) {
       for (let cx = chunkMinX; cx <= chunkMaxX; cx++) {

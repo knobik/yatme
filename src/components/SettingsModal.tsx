@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import {
   type EditorSettings,
@@ -178,14 +178,20 @@ function RangeSlider({ label, value, min, max, step, onChange, formatValue = Str
   label: string; value: number; min: number; max: number; step: number
   onChange: (v: number) => void; formatValue?: (v: number) => string
 }) {
+  const [localValue, setLocalValue] = useState<number | null>(null)
+  const display = localValue ?? value
+
   return (
     <div className="flex items-center justify-between gap-4">
       <span className="font-ui text-sm font-normal text-fg-muted">{label}</span>
       <div className="flex items-center gap-2">
-        <input type="range" min={min} max={max} step={step} value={value}
-          onChange={e => onChange(+e.target.value)}
+        <input type="range" min={min} max={max} step={step} value={display}
+          onPointerDown={() => setLocalValue(value)}
+          onChange={e => setLocalValue(+e.target.value)}
+          onPointerUp={() => { if (localValue !== null) { onChange(localValue); setLocalValue(null) } }}
+          onLostPointerCapture={() => { if (localValue !== null) { onChange(localValue); setLocalValue(null) } }}
           className="w-[100px] accent-accent" />
-        <span className="w-[36px] text-right font-mono text-xs text-fg">{formatValue(value)}</span>
+        <span className="w-[36px] text-right font-mono text-xs text-fg">{formatValue(display)}</span>
       </div>
     </div>
   )
