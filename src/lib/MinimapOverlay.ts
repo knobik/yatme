@@ -8,8 +8,10 @@ import type { OtbmTile } from './otbm'
 
 // ── Constants ────────────────────────────────────────────────────────
 
-const BM_WIDTH = 200
-const BM_HEIGHT = 150
+const DEFAULT_WIDTH = 200
+const DEFAULT_HEIGHT = 150
+const DEFAULT_EXPANDED_WIDTH = 400
+const DEFAULT_EXPANDED_HEIGHT = 300
 const PADDING = 4
 const BORDER_WIDTH = 1
 const BG_COLOR = 0x12121a
@@ -17,7 +19,7 @@ const BORDER_COLOR = 0x2a2a35
 const VIEWPORT_COLOR = 0xd4a549
 const VIEWPORT_ALPHA = 0.8
 const MARGIN_RIGHT = 12
-const MARGIN_BOTTOM = 68
+const MARGIN_BOTTOM = 12
 
 /** Base discrete zoom levels: tiles per minimap pixel. Lower = more zoomed in. */
 export const BASE_ZOOM_LEVELS = [1, 2, 4, 8, 16, 32, 64, 128, 256] as const
@@ -58,9 +60,14 @@ export class MinimapOverlay {
   // Cached view origin (recomputed once per rebuild, reused in updateViewport)
   private _cachedViewMinX = 0
   private _cachedViewMinY = 0
+  // Effective bitmap pixel dimensions (may be smaller than canvas when map doesn't fill an axis)
+  private _cachedEffectiveW = 0
+  private _cachedEffectiveH = 0
 
-  // Cache viewport rect to avoid redrawing every frame
+  // Cache viewport rect and background to avoid redrawing every frame
   private _lastVpKey = ''
+  private _lastBgW = 0
+  private _lastBgH = 0
 
   // Map bounds (tile coordinates)
   private _mapWidth = 0
@@ -76,6 +83,19 @@ export class MinimapOverlay {
 
   // Drag state
   private _dragging = false
+
+  // Dynamic sizing + hover animation
+  private _baseWidth = DEFAULT_WIDTH
+  private _baseHeight = DEFAULT_HEIGHT
+  private _expandedWidth = DEFAULT_EXPANDED_WIDTH
+  private _expandedHeight = DEFAULT_EXPANDED_HEIGHT
+  private _currentWidth = DEFAULT_WIDTH
+  private _currentHeight = DEFAULT_HEIGHT
+  private _targetWidth = DEFAULT_WIDTH
+  private _targetHeight = DEFAULT_HEIGHT
+  private _expandOnHover = true
+  private _hovered = false
+  private _animating = false
 
   // Per-chunk color cache: chunkKey -> Uint8Array(CHUNK_SIZE * CHUNK_SIZE) of automap color indices
   private _chunkColorCache = new Map<string, Uint8Array>()
@@ -95,8 +115,8 @@ export class MinimapOverlay {
     this._container.addChild(this._bg)
 
     this._canvas = document.createElement('canvas')
-    this._canvas.width = BM_WIDTH
-    this._canvas.height = BM_HEIGHT
+    this._canvas.width = this._baseWidth
+    this._canvas.height = this._baseHeight
     this._ctx = this._canvas.getContext('2d', { willReadFrequently: true })!
     this._bitmapSprite = new Sprite()
     this._bitmapSprite.zIndex = 1
@@ -120,6 +140,8 @@ export class MinimapOverlay {
     this._container.on('pointermove', this._onPointerMove, this)
     this._container.on('pointerup', this._onPointerUp, this)
     this._container.on('pointerupoutside', this._onPointerUp, this)
+    this._container.on('pointerenter', this._onPointerEnter, this)
+    this._container.on('pointerleave', this._onPointerLeave, this)
   }
 
   get container(): Container { return this._container }
@@ -133,6 +155,93 @@ export class MinimapOverlay {
 
   markDirty(): void {
     this._dirty = true
+  }
+
+  // ── Dynamic sizing setters ───────────────────────────────────────
+
+  setBaseSize(width: number): void {
+    this._baseWidth = width
+    this._baseHeight = Math.round(width * 0.75)
+    if (!this._hovered) {
+      this._targetWidth = this._baseWidth
+      this._targetHeight = this._baseHeight
+      this._currentWidth = this._baseWidth
+      this._currentHeight = this._baseHeight
+      this._resizeCanvas(this._baseWidth, this._baseHeight)
+      this._recomputeZoomLevels()
+      this._drawBackground()
+      this._dirty = true
+    }
+  }
+
+  setExpandedSize(width: number): void {
+    this._expandedWidth = width
+    this._expandedHeight = Math.round(width * 0.75)
+    if (this._hovered && this._expandOnHover) {
+      this._targetWidth = this._expandedWidth
+      this._targetHeight = this._expandedHeight
+      this._animating = true
+    }
+  }
+
+  setExpandOnHover(enabled: boolean): void {
+    this._expandOnHover = enabled
+    if (!enabled && this._hovered) {
+      // Snap to base size
+      this._targetWidth = this._baseWidth
+      this._targetHeight = this._baseHeight
+      this._currentWidth = this._baseWidth
+      this._currentHeight = this._baseHeight
+      this._resizeCanvas(this._baseWidth, this._baseHeight)
+      this._drawBackground()
+      this._animating = false
+      this._dirty = true
+    }
+  }
+
+  setOpacity(alpha: number): void {
+    this._container.alpha = alpha
+  }
+
+  get isAnimating(): boolean { return this._animating }
+
+  /** Lerp current size toward target. Call once per frame from MapRenderer.update(). */
+  updateAnimation(): void {
+    if (!this._animating) return
+
+    const factor = 0.18
+    this._currentWidth += (this._targetWidth - this._currentWidth) * factor
+    this._currentHeight += (this._targetHeight - this._currentHeight) * factor
+
+    // Snap when close
+    if (Math.abs(this._currentWidth - this._targetWidth) < 0.5 &&
+        Math.abs(this._currentHeight - this._targetHeight) < 0.5) {
+      this._currentWidth = this._targetWidth
+      this._currentHeight = this._targetHeight
+      this._animating = false
+
+      // Resize canvas to final size (e.g. back to base after collapse) and recompute zoom
+      const finalW = Math.round(this._targetWidth)
+      const finalH = Math.round(this._targetHeight)
+      if (this._canvas.width !== finalW || this._canvas.height !== finalH) {
+        this._resizeCanvas(finalW, finalH)
+        this._recomputeZoomLevels()
+        this._dirty = true
+      }
+    }
+
+    this._drawBackground()
+  }
+
+  private _resizeCanvas(w: number, h: number): void {
+    this._canvas.width = w
+    this._canvas.height = h
+    this._imageData = null // force re-create
+    this._source = null
+    if (this._texture) {
+      this._texture.destroy(true)
+      this._texture = null
+    }
   }
 
   /** Invalidate specific chunks so their colors are recomputed on next rebuild. */
@@ -149,8 +258,27 @@ export class MinimapOverlay {
 
     if (this._mapWidth <= 0 || this._mapHeight <= 0) return
 
-    // Compute the fit-all tpp (ceil so the entire map fits)
-    const fitAllTpp = Math.ceil(Math.max(this._mapWidth / BM_WIDTH, this._mapHeight / BM_HEIGHT, 1))
+    this._recomputeZoomLevels()
+
+    // Start at zoom level 3 (4 tpp), clamped to available range
+    this._zoomIdx = Math.min(2, this._zoomLevels.length - 1)
+
+    // Center on map center
+    this._viewCenterX = minX + this._mapWidth / 2
+    this._viewCenterY = minY + this._mapHeight / 2
+
+    this._dirty = true
+  }
+
+  /** Recompute zoom levels based on current canvas dimensions and map size.
+   *  Preserves the current tpp as closely as possible. */
+  private _recomputeZoomLevels(): void {
+    if (this._mapWidth <= 0 || this._mapHeight <= 0) return
+
+    const prevTpp = this._zoomLevels[this._zoomIdx] ?? 1
+    const bmW = this._canvas.width
+    const bmH = this._canvas.height
+    const fitAllTpp = Math.max(this._mapWidth / bmW, this._mapHeight / bmH, 1)
 
     // Build zoom levels: all base levels that are smaller than fitAll, plus fitAll at the end
     const levels: number[] = []
@@ -161,21 +289,21 @@ export class MinimapOverlay {
     levels.push(fitAllTpp)
     this._zoomLevels = levels
 
-    // Start at zoom level 3 (4 tpp), clamped to available range
-    this._zoomIdx = Math.min(2, levels.length - 1)
-
-    // Center on map center
-    this._viewCenterX = minX + this._mapWidth / 2
-    this._viewCenterY = minY + this._mapHeight / 2
-
-    this._dirty = true
+    // Find the closest zoom level to the previous tpp
+    let bestIdx = levels.length - 1
+    for (let i = 0; i < levels.length; i++) {
+      if (levels[i] >= prevTpp) { bestIdx = i; break }
+    }
+    this._zoomIdx = bestIdx
   }
 
   /** Check if a screen coordinate falls within the minimap bounds. */
   hitTest(screenX: number, screenY: number): boolean {
     if (!this._visible) return false
-    const totalW = BM_WIDTH + (PADDING + BORDER_WIDTH) * 2
-    const totalH = BM_HEIGHT + (PADDING + BORDER_WIDTH) * 2
+    const w = Math.round(this._currentWidth)
+    const h = Math.round(this._currentHeight)
+    const totalW = w + (PADDING + BORDER_WIDTH) * 2
+    const totalH = h + (PADDING + BORDER_WIDTH) * 2
     const lx = screenX - this._container.x
     const ly = screenY - this._container.y
     return lx >= 0 && lx < totalW && ly >= 0 && ly < totalH
@@ -215,15 +343,17 @@ export class MinimapOverlay {
     }
 
     const floorChanged = floor !== this._lastFloor
-    const { viewMinX, viewMinY } = this._getViewOrigin()
+    const { viewMinX, viewMinY, effectiveW, effectiveH } = this._getViewOrigin()
     const viewKey = `${this._zoomIdx},${viewMinX},${viewMinY}`
     const viewChanged = viewKey !== this._lastViewKey
 
     if (!this._dirty && !floorChanged && !viewChanged) return
 
-    // Cache view origin for updateViewport() to reuse
+    // Cache view origin and effective dims for updateViewport() to reuse
     this._cachedViewMinX = viewMinX
     this._cachedViewMinY = viewMinY
+    this._cachedEffectiveW = effectiveW
+    this._cachedEffectiveH = effectiveH
 
     this._lastFloor = floor
     this._lastViewKey = viewKey
@@ -246,6 +376,18 @@ export class MinimapOverlay {
     const tpp = this._zoomLevels[this._zoomIdx]
     const viewMinX = this._cachedViewMinX
     const viewMinY = this._cachedViewMinY
+    const effW = this._cachedEffectiveW
+    const effH = this._cachedEffectiveH
+
+    // Use screen-space dimensions for viewport rect and positioning
+    const dispW = Math.round(this._currentWidth)
+    const dispH = Math.round(this._currentHeight)
+
+    // Effective display dimensions (map may not fill the full minimap on one axis)
+    const effDispW = Math.round(effW * dispW / this._canvas.width)
+    const effDispH = Math.round(effH * dispH / this._canvas.height)
+    const mapOffX = Math.round((dispW - effDispW) / 2)
+    const mapOffY = Math.round((dispH - effDispH) / 2)
 
     // Compute main camera visible tile range
     const offset = camera.getFloorOffset(camera.floor)
@@ -254,19 +396,21 @@ export class MinimapOverlay {
     const tileRight = tileLeft + screenW / (camera.zoom * 32)
     const tileBottom = tileTop + screenH / (camera.zoom * 32)
 
-    // Convert to minimap pixel coords
-    const x = (tileLeft - viewMinX) / tpp
-    const y = (tileTop - viewMinY) / tpp
-    const w = (tileRight - tileLeft) / tpp
-    const h = (tileBottom - tileTop) / tpp
+    // Convert to minimap screen-space coords (scale from effective bitmap to effective display)
+    const scaleX = effDispW / effW
+    const scaleY = effDispH / effH
+    const x = mapOffX + ((tileLeft - viewMinX) / tpp) * scaleX
+    const y = mapOffY + ((tileTop - viewMinY) / tpp) * scaleY
+    const w = ((tileRight - tileLeft) / tpp) * scaleX
+    const h = ((tileBottom - tileTop) / tpp) * scaleY
 
-    // Clamp to bitmap area
+    // Clamp to effective display area
     const bx = PADDING + BORDER_WIDTH
     const by = PADDING + BORDER_WIDTH
-    const cx = Math.max(0, Math.min(x, BM_WIDTH))
-    const cy = Math.max(0, Math.min(y, BM_HEIGHT))
-    const cw = Math.max(1, Math.min(w, BM_WIDTH - cx))
-    const ch = Math.max(1, Math.min(h, BM_HEIGHT - cy))
+    const cx = Math.max(mapOffX, Math.min(x, mapOffX + effDispW))
+    const cy = Math.max(mapOffY, Math.min(y, mapOffY + effDispH))
+    const cw = Math.max(1, Math.min(w, mapOffX + effDispW - cx))
+    const ch = Math.max(1, Math.min(h, mapOffY + effDispH - cy))
 
     // Only redraw viewport rectangle if it changed
     const vpKey = `${Math.round(cx)},${Math.round(cy)},${Math.round(cw)},${Math.round(ch)}`
@@ -278,9 +422,14 @@ export class MinimapOverlay {
       this._viewportRect.stroke()
     }
 
+    // Scale bitmap sprite to show only the effective area, centered in display
+    this._bitmapSprite.x = PADDING + BORDER_WIDTH + mapOffX
+    this._bitmapSprite.width = effDispW
+    this._bitmapSprite.height = effDispH
+
     // Position container at bottom-right of screen
-    const totalW = BM_WIDTH + (PADDING + BORDER_WIDTH) * 2
-    const totalH = BM_HEIGHT + (PADDING + BORDER_WIDTH) * 2
+    const totalW = dispW + (PADDING + BORDER_WIDTH) * 2
+    const totalH = dispH + (PADDING + BORDER_WIDTH) * 2
     this._container.x = screenW - totalW - MARGIN_RIGHT
     this._container.y = screenH - totalH - MARGIN_BOTTOM
   }
@@ -288,30 +437,39 @@ export class MinimapOverlay {
   // ── View helpers ───────────────────────────────────────────────────
 
   /** Return the clamped top-left tile coordinate of the minimap view. */
-  private _getViewOrigin(): { viewMinX: number; viewMinY: number } {
+  private _getViewOrigin(): { viewMinX: number; viewMinY: number; effectiveW: number; effectiveH: number } {
     const tpp = this._zoomLevels[this._zoomIdx]
-    const halfW = BM_WIDTH * tpp / 2
-    const halfH = BM_HEIGHT * tpp / 2
+    const bmW = this._canvas.width
+    const bmH = this._canvas.height
 
-    let cx = this._viewCenterX
-    let cy = this._viewCenterY
+    let viewMinX: number
+    let viewMinY: number
+    let effectiveW: number
+    let effectiveH: number
 
-    // Clamp so view stays within map bounds
-    if (BM_WIDTH * tpp >= this._mapWidth) {
-      cx = this._mapMinX + this._mapWidth / 2
+    if (bmW * tpp >= this._mapWidth) {
+      // Map fits within bitmap width — align to map origin, use only needed pixels
+      viewMinX = this._mapMinX
+      effectiveW = Math.min(bmW, Math.ceil(this._mapWidth / tpp))
     } else {
-      cx = Math.max(this._mapMinX + halfW, Math.min(this._mapMinX + this._mapWidth - halfW, cx))
-    }
-    if (BM_HEIGHT * tpp >= this._mapHeight) {
-      cy = this._mapMinY + this._mapHeight / 2
-    } else {
-      cy = Math.max(this._mapMinY + halfH, Math.min(this._mapMinY + this._mapHeight - halfH, cy))
+      // Normal pan — center and clamp
+      const halfW = bmW * tpp / 2
+      const cx = Math.max(this._mapMinX + halfW, Math.min(this._mapMinX + this._mapWidth - halfW, this._viewCenterX))
+      viewMinX = Math.floor(cx - halfW)
+      effectiveW = bmW
     }
 
-    return {
-      viewMinX: Math.floor(cx - halfW),
-      viewMinY: Math.floor(cy - halfH),
+    if (bmH * tpp >= this._mapHeight) {
+      viewMinY = this._mapMinY
+      effectiveH = Math.min(bmH, Math.ceil(this._mapHeight / tpp))
+    } else {
+      const halfH = bmH * tpp / 2
+      const cy = Math.max(this._mapMinY + halfH, Math.min(this._mapMinY + this._mapHeight - halfH, this._viewCenterY))
+      viewMinY = Math.floor(cy - halfH)
+      effectiveH = bmH
     }
+
+    return { viewMinX, viewMinY, effectiveW, effectiveH }
   }
 
   // ── Bitmap generation ─────────────────────────────────────────────
@@ -324,8 +482,8 @@ export class MinimapOverlay {
     chunkIndex: Map<string, OtbmTile[]>,
     appearances: AppearanceData,
   ): void {
-    const w = BM_WIDTH
-    const h = BM_HEIGHT
+    const w = this._canvas.width
+    const h = this._canvas.height
     const tpp = this._zoomLevels[this._zoomIdx]
 
     const viewTilesW = w * tpp
@@ -337,11 +495,17 @@ export class MinimapOverlay {
       this._chunkColorCache.clear()
     }
 
+    // Clamp visible tile range to actual map bounds to avoid iterating empty space
+    const clampedMinX = Math.max(viewMinX, this._mapMinX)
+    const clampedMinY = Math.max(viewMinY, this._mapMinY)
+    const clampedMaxX = Math.min(viewMinX + viewTilesW - 1, this._mapMinX + this._mapWidth - 1)
+    const clampedMaxY = Math.min(viewMinY + viewTilesH - 1, this._mapMinY + this._mapHeight - 1)
+
     // Update dirty chunk colors in the cache
-    const chunkMinX = Math.floor(viewMinX / CHUNK_SIZE)
-    const chunkMinY = Math.floor(viewMinY / CHUNK_SIZE)
-    const chunkMaxX = Math.floor((viewMinX + viewTilesW - 1) / CHUNK_SIZE)
-    const chunkMaxY = Math.floor((viewMinY + viewTilesH - 1) / CHUNK_SIZE)
+    const chunkMinX = Math.floor(clampedMinX / CHUNK_SIZE)
+    const chunkMinY = Math.floor(clampedMinY / CHUNK_SIZE)
+    const chunkMaxX = Math.floor(clampedMaxX / CHUNK_SIZE)
+    const chunkMaxY = Math.floor(clampedMaxY / CHUNK_SIZE)
 
     for (let cy = chunkMinY; cy <= chunkMaxY; cy++) {
       for (let cx = chunkMinX; cx <= chunkMaxX; cx++) {
@@ -443,8 +607,13 @@ export class MinimapOverlay {
   // ── Background ────────────────────────────────────────────────────
 
   private _drawBackground(): void {
-    const totalW = BM_WIDTH + (PADDING + BORDER_WIDTH) * 2
-    const totalH = BM_HEIGHT + (PADDING + BORDER_WIDTH) * 2
+    const w = Math.round(this._currentWidth)
+    const h = Math.round(this._currentHeight)
+    if (w === this._lastBgW && h === this._lastBgH) return
+    this._lastBgW = w
+    this._lastBgH = h
+    const totalW = w + (PADDING + BORDER_WIDTH) * 2
+    const totalH = h + (PADDING + BORDER_WIDTH) * 2
 
     this._bg.clear()
     // Border
@@ -459,16 +628,32 @@ export class MinimapOverlay {
 
   // ── Pointer events (click-to-navigate + drag) ─────────────────────
 
-  /** Convert minimap-local pixel to world tile coordinate. */
-  private _pixelToTile(bmX: number, bmY: number): { tileX: number; tileY: number } | null {
-    if (bmX < 0 || bmX >= BM_WIDTH || bmY < 0 || bmY >= BM_HEIGHT) return null
+  /** Convert screen-local pixel (relative to bitmap area) to world tile coordinate. */
+  private _pixelToTile(screenX: number, screenY: number): { tileX: number; tileY: number } | null {
+    const dispW = Math.round(this._currentWidth)
+    const dispH = Math.round(this._currentHeight)
+    if (screenX < 0 || screenX >= dispW || screenY < 0 || screenY >= dispH) return null
 
     const tpp = this._zoomLevels[this._zoomIdx]
-    const { viewMinX, viewMinY } = this._getViewOrigin()
+    const { viewMinX, viewMinY, effectiveW, effectiveH } = this._getViewOrigin()
+
+    // Account for centering offset when map doesn't fill full minimap
+    const effDispW = Math.round(effectiveW * dispW / this._canvas.width)
+    const effDispH = Math.round(effectiveH * dispH / this._canvas.height)
+    const mapOffX = (dispW - effDispW) / 2
+    const mapOffY = (dispH - effDispH) / 2
+
+    // Convert from display-space (relative to effective area) to bitmap-space, then to tile-space
+    const localX = screenX - mapOffX
+    const localY = screenY - mapOffY
+    if (localX < 0 || localX >= effDispW || localY < 0 || localY >= effDispH) return null
+
+    const bitmapX = (localX / effDispW) * effectiveW
+    const bitmapY = (localY / effDispH) * effectiveH
 
     return {
-      tileX: Math.floor(viewMinX + bmX * tpp),
-      tileY: Math.floor(viewMinY + bmY * tpp),
+      tileX: Math.floor(viewMinX + bitmapX * tpp),
+      tileY: Math.floor(viewMinY + bitmapY * tpp),
     }
   }
 
@@ -477,7 +662,12 @@ export class MinimapOverlay {
     const bmX = globalX - this._container.x - PADDING - BORDER_WIDTH
     const bmY = globalY - this._container.y - PADDING - BORDER_WIDTH
     const result = this._pixelToTile(bmX, bmY)
-    if (result) this.onNavigate?.(result.tileX, result.tileY)
+    if (result) {
+      // Clamp to map bounds so clicking outside the map area doesn't navigate out of bounds
+      const tileX = Math.max(this._mapMinX, Math.min(this._mapMinX + this._mapWidth - 1, result.tileX))
+      const tileY = Math.max(this._mapMinY, Math.min(this._mapMinY + this._mapHeight - 1, result.tileY))
+      this.onNavigate?.(tileX, tileY)
+    }
   }
 
   private _onPointerDown(e: { stopPropagation(): void; global?: { x: number; y: number }; data?: { global: { x: number; y: number } } }): void {
@@ -497,6 +687,26 @@ export class MinimapOverlay {
     this._dragging = false
   }
 
+  private _onPointerEnter(): void {
+    this._hovered = true
+    if (!this._expandOnHover) return
+    this._targetWidth = this._expandedWidth
+    this._targetHeight = this._expandedHeight
+    this._animating = true
+    // Immediately resize canvas to expanded resolution and recompute zoom levels
+    this._resizeCanvas(this._expandedWidth, this._expandedHeight)
+    this._recomputeZoomLevels()
+    this._dirty = true
+  }
+
+  private _onPointerLeave(): void {
+    this._hovered = false
+    if (!this._expandOnHover || this._dragging) return
+    this._targetWidth = this._baseWidth
+    this._targetHeight = this._baseHeight
+    this._animating = true
+  }
+
   // ── Cleanup ───────────────────────────────────────────────────────
 
   destroy(): void {
@@ -504,6 +714,8 @@ export class MinimapOverlay {
     this._container.off('pointermove', this._onPointerMove, this)
     this._container.off('pointerup', this._onPointerUp, this)
     this._container.off('pointerupoutside', this._onPointerUp, this)
+    this._container.off('pointerenter', this._onPointerEnter, this)
+    this._container.off('pointerleave', this._onPointerLeave, this)
     if (this._texture) this._texture.destroy(true)
     this._bitmapSprite.destroy()
     this._viewportRect.destroy()

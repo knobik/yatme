@@ -104,6 +104,25 @@ export function SettingsModal({ settings, onChange, onClose }: SettingsModalProp
 
         <div className="h-px w-full bg-border-subtle" />
 
+        {/* Minimap section */}
+        <div className="flex flex-col gap-4">
+          <div className="font-display text-xs font-semibold tracking-wide uppercase text-fg-faint">Minimap</div>
+
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-ui text-sm font-normal text-fg-muted">Expand on Hover</span>
+            <Toggle checked={settings.minimapExpandOnHover} onChange={v => update({ minimapExpandOnHover: v })} />
+          </div>
+
+          <RangeSlider label="Normal Size" value={settings.minimapSize} min={100} max={400} step={10}
+            onChange={v => update({ minimapSize: v })} />
+          <RangeSlider label="Expanded Size" value={settings.minimapExpandedSize} min={200} max={800} step={10}
+            onChange={v => update({ minimapExpandedSize: v })} />
+          <RangeSlider label="Opacity" value={settings.minimapOpacity} min={0} max={1} step={0.05}
+            onChange={v => update({ minimapOpacity: v })} formatValue={v => v.toFixed(2)} />
+        </div>
+
+        <div className="h-px w-full bg-border-subtle" />
+
         {/* Eraser section */}
         <div className="flex flex-col gap-4">
           <div className="font-display text-xs font-semibold tracking-wide uppercase text-fg-faint">Eraser</div>
@@ -153,7 +172,24 @@ export function SettingsModal({ settings, onChange, onClose }: SettingsModalProp
   )
 }
 
-// ── Toggle component ────────────────────────────────────────────────
+// ── Shared setting components ────────────────────────────────────────
+
+function RangeSlider({ label, value, min, max, step, onChange, formatValue = String }: {
+  label: string; value: number; min: number; max: number; step: number
+  onChange: (v: number) => void; formatValue?: (v: number) => string
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="font-ui text-sm font-normal text-fg-muted">{label}</span>
+      <div className="flex items-center gap-2">
+        <input type="range" min={min} max={max} step={step} value={value}
+          onChange={e => onChange(+e.target.value)}
+          className="w-[100px] accent-accent" />
+        <span className="w-[36px] text-right font-mono text-xs text-fg">{formatValue(value)}</span>
+      </div>
+    </div>
+  )
+}
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (

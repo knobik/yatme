@@ -434,6 +434,22 @@ export class MapRenderer implements InputHost {
     this.minimap.setVisible(enabled)
   }
 
+  setMinimapSize(width: number): void {
+    this.minimap.setBaseSize(width)
+  }
+
+  setMinimapExpandedSize(width: number): void {
+    this.minimap.setExpandedSize(width)
+  }
+
+  setMinimapExpandOnHover(enabled: boolean): void {
+    this.minimap.setExpandOnHover(enabled)
+  }
+
+  setMinimapOpacity(alpha: number): void {
+    this.minimap.setOpacity(alpha)
+  }
+
   // ── Selection border ────────────────────────────────────────────
 
   get selectionBorder(): boolean { return this._showSelectionBorder }
@@ -627,6 +643,7 @@ export class MapRenderer implements InputHost {
     this.waypointOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
     this.waypointOverlay.rebuild(this.camera.floor, this._waypointManager, this.camera)
 
+    this.minimap.updateAnimation()
     this.minimap.rebuild(this.camera.floor, this.chunkManager.index, this.appearances)
     this.minimap.updateViewport(this.camera, this.app.screen.width, this.app.screen.height)
   }

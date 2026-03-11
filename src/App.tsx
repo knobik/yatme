@@ -57,6 +57,7 @@ const RENDERER_SYNC: Partial<Record<BooleanSettingKey, (r: MapRendererType, v: b
   showNpcs: (r, v) => r.setShowNpcs(v),
   showWaypointOverlay: (r, v) => r.setShowWaypointOverlay(v),
   showMinimap: (r, v) => r.setShowMinimap(v),
+  minimapExpandOnHover: (r, v) => r.setMinimapExpandOnHover(v),
 }
 
 /** Compute left offset for elements that need to dodge all left-side panels. */
@@ -336,6 +337,9 @@ function App() {
       for (const [key, sync] of Object.entries(RENDERER_SYNC)) {
         sync(r, next[key as keyof EditorSettings] as boolean)
       }
+      r.setMinimapSize(next.minimapSize)
+      r.setMinimapExpandedSize(next.minimapExpandedSize)
+      r.setMinimapOpacity(next.minimapOpacity)
     }
     saveSettings(next)
   }, [rendererRef])

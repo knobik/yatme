@@ -263,6 +263,10 @@ export function useEditorInit(
       renderer.setShowNpcs(savedSettings.showNpcs)
       renderer.setShowWaypointOverlay(savedSettings.showWaypointOverlay)
       renderer.setShowMinimap(savedSettings.showMinimap)
+      renderer.setMinimapSize(savedSettings.minimapSize)
+      renderer.setMinimapExpandedSize(savedSettings.minimapExpandedSize)
+      renderer.setMinimapExpandOnHover(savedSettings.minimapExpandOnHover)
+      renderer.setMinimapOpacity(savedSettings.minimapOpacity)
 
       setLoadingProgress(1)
       setLoadingStatus('Ready')

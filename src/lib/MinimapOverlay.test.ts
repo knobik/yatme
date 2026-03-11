@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { MinimapOverlay, BASE_ZOOM_LEVELS } from './MinimapOverlay'
+import { MinimapOverlay } from './MinimapOverlay'
 import type { AppearanceData } from './appearances'
 import type { OtbmTile } from './otbm'
 import { CHUNK_SIZE } from './constants'
@@ -296,8 +296,8 @@ describe('MinimapOverlay', () => {
     overlay.setMapBounds(0, 0, 50000, 50000)
     // Zoom all the way out to fit-all
     while (overlay.handleWheel(1)) { /* zoom out */ }
-    // fitAllTpp = ceil(50000/150) = 334
-    expect(overlay.tilesPerPixel).toBe(334)
+    // fitAllTpp = 50000/150 ≈ 333.33 (exact, no ceil)
+    expect(overlay.tilesPerPixel).toBeCloseTo(50000 / 150, 5)
     expect(overlay.handleWheel(1)).toBe(false)
   })
 
@@ -309,8 +309,10 @@ describe('MinimapOverlay', () => {
       // Zoom all the way out
       while (o.handleWheel(1)) { /* zoom out */ }
       const tpp = o.tilesPerPixel
-      expect(200 * tpp).toBeGreaterThanOrEqual(size)
-      expect(150 * tpp).toBeGreaterThanOrEqual(size)
+      // At least one axis fits exactly, the other is >= map size
+      const coversW = 200 * tpp >= size - 0.001
+      const coversH = 150 * tpp >= size - 0.001
+      expect(coversW && coversH).toBe(true)
     }
   })
 
@@ -335,12 +337,196 @@ describe('MinimapOverlay', () => {
     overlay.onNavigate = navigateSpy
     overlay.setMapBounds(100, 100, 300, 300)
 
-    // Map is 200x200. Auto-fit needs tpp=2 (200 > 150*1).
-    // Center = (200, 200). At tpp=2: viewTilesW=400, viewTilesH=300.
-    // viewMinX = 200 - 200 = 0, viewMinY = 200 - 150 = 50.
-    // _navigateFromEvent: bmX = globalX - padding(4) - border(1) = globalX - 5
-    // globalX=5, globalY=5 -> bmX=0, bmY=0 -> tile (0, 50)
+    // Map is 200x200. fitAllTpp = max(200/200, 200/150) = 4/3.
+    // effectiveW = ceil(200 / (4/3)) = 150, effectiveH = 150.
+    // effDispW = 150, effDispH = 150. mapOffX = 25, mapOffY = 0.
+    // viewMinX = 100, viewMinY = 100.
+    // Click at top-left of effective area: globalX = 5 + 25 = 30, globalY = 5
+    // bmX = 25, bmY = 0. localX = 25 - 25 = 0, localY = 0.
+    // bitmapX = 0, bitmapY = 0. tileX = 100, tileY = 100.
+    overlay._navigateFromEvent(30, 5)
+    expect(navigateSpy).toHaveBeenCalledWith(100, 100)
+  })
+
+  it('onNavigate clamps to map bounds at max zoom out', () => {
+    const navigateSpy = vi.fn()
+    overlay.onNavigate = navigateSpy
+    overlay.setMapBounds(100, 100, 300, 300)
+
+    // Click in the center of the minimap: globalX = 5 + 100, globalY = 5 + 75
+    // bmX = 100, bmY = 75. localX = 100 - 25 = 75, localY = 75.
+    // bitmapX = (75/150)*150 = 75, bitmapY = (75/150)*150 = 75.
+    // tileX = floor(100 + 75*(4/3)) = floor(200) = 200
+    // tileY = floor(100 + 75*(4/3)) = floor(200) = 200
+    overlay._navigateFromEvent(105, 80)
+    expect(navigateSpy).toHaveBeenCalledWith(200, 200)
+  })
+
+  // ── Dynamic sizing ──────────────────────────────────────────────────
+
+  it('setBaseSize changes dimensions and marks dirty', () => {
+    overlay.setMapBounds(0, 0, 1000, 1000)
+    const tiles: OtbmTile[] = [
+      { x: 50, y: 50, z: 7, flags: 0, items: [{ id: 1 }] },
+    ]
+    const appearances = makeAppearances(new Map([[1, 30]]))
+    const index = makeChunkIndex(tiles)
+
+    // Initial rebuild at default 200px
+    overlay.rebuild(7, index, appearances)
+    expect(mockCreateImageData).toHaveBeenLastCalledWith(200, 150)
+
+    // Change base size to 300px
+    vi.advanceTimersByTime(250)
+    overlay.setBaseSize(300)
+    overlay.rebuild(7, index, appearances)
+    expect(mockCreateImageData).toHaveBeenLastCalledWith(300, 225)
+  })
+
+  it('setExpandOnHover(false) prevents expansion on pointer enter', () => {
+    overlay.setExpandOnHover(false)
+    // Simulate pointer enter
+    ;(overlay.container as unknown as { emit: (evt: string) => void }).emit?.('pointerenter')
+    // Should not be animating
+    expect(overlay.isAnimating).toBe(false)
+  })
+
+  it('setOpacity sets container alpha', () => {
+    overlay.setOpacity(0.5)
+    expect((overlay.container as unknown as { alpha: number }).alpha).toBe(0.5)
+  })
+
+  it('updateAnimation lerps toward target and snaps when close', () => {
+    overlay.setMapBounds(0, 0, 1000, 1000)
+
+    // Manually trigger expand
+    overlay.setExpandOnHover(true)
+    // Access private fields via type assertion for test
+    const o = overlay as unknown as {
+      _targetWidth: number; _targetHeight: number;
+      _currentWidth: number; _currentHeight: number;
+      _animating: boolean; _expandedWidth: number; _expandedHeight: number;
+      _baseWidth: number; _baseHeight: number;
+    }
+    o._targetWidth = o._expandedWidth
+    o._targetHeight = o._expandedHeight
+    o._animating = true
+
+    // Run animation until it snaps
+    let iterations = 0
+    while (overlay.isAnimating && iterations < 200) {
+      overlay.updateAnimation()
+      iterations++
+    }
+
+    expect(overlay.isAnimating).toBe(false)
+    expect(o._currentWidth).toBe(o._expandedWidth)
+    expect(o._currentHeight).toBe(o._expandedHeight)
+  })
+
+  it('hover triggers expansion, leave triggers collapse', () => {
+    overlay.setMapBounds(0, 0, 1000, 1000)
+    overlay.setExpandOnHover(true)
+
+    const o = overlay as unknown as {
+      _hovered: boolean; _targetWidth: number; _baseWidth: number;
+      _expandedWidth: number; _animating: boolean;
+      _onPointerEnter: () => void; _onPointerLeave: () => void;
+    }
+
+    // Simulate hover
+    o._onPointerEnter.call(overlay)
+    expect(o._hovered).toBe(true)
+    expect(o._targetWidth).toBe(o._expandedWidth)
+    expect(o._animating).toBe(true)
+
+    // Run animation to completion
+    let iterations = 0
+    while (overlay.isAnimating && iterations < 200) {
+      overlay.updateAnimation()
+      iterations++
+    }
+
+    // Simulate leave
+    o._onPointerLeave.call(overlay)
+    expect(o._hovered).toBe(false)
+    expect(o._targetWidth).toBe(o._baseWidth)
+    expect(o._animating).toBe(true)
+  })
+
+  it('fit-all zoom tightens when expanded (larger canvas needs lower tpp)', () => {
+    overlay.setMapBounds(0, 0, 5000, 5000)
+    // At base 200px, zoom all the way out
+    while (overlay.handleWheel(1)) { /* zoom out */ }
+    const baseFitAllTpp = overlay.tilesPerPixel
+
+    // Expand to 400px
+    overlay.setExpandedSize(400)
+    const o = overlay as unknown as { _onPointerEnter: () => void }
+    o._onPointerEnter.call(overlay)
+    while (overlay.isAnimating) overlay.updateAnimation()
+
+    // Zoom all the way out again
+    while (overlay.handleWheel(1)) { /* zoom out */ }
+    const expandedFitAllTpp = overlay.tilesPerPixel
+
+    // Expanded fit-all should need fewer tiles per pixel (more zoomed in)
+    expect(expandedFitAllTpp).toBeLessThan(baseFitAllTpp)
+    // Verify the fit: expandedW * tpp >= mapWidth
+    expect(400 * expandedFitAllTpp).toBeGreaterThanOrEqual(5000)
+    expect(300 * expandedFitAllTpp).toBeGreaterThanOrEqual(5000)
+  })
+
+  it('zoom out at expanded size does not break view origin clamping', () => {
+    overlay.setMapBounds(0, 0, 5000, 5000)
+    overlay.setBaseSize(200)
+    overlay.setExpandedSize(400)
+
+    // Expand the minimap
+    const o = overlay as unknown as {
+      _onPointerEnter: () => void;
+      _currentWidth: number;
+      _canvas: { width: number };
+    }
+    o._onPointerEnter.call(overlay)
+    while (overlay.isAnimating) overlay.updateAnimation()
+
+    // Zoom all the way out
+    while (overlay.handleWheel(1)) { /* zoom out */ }
+
+    // Rebuild should not throw and bitmap should use canvas dimensions
+    const tiles: OtbmTile[] = [
+      { x: 2500, y: 2500, z: 7, flags: 0, items: [{ id: 1 }] },
+    ]
+    const appearances = makeAppearances(new Map([[1, 100]]))
+    const index = makeChunkIndex(tiles)
+
+    expect(() => overlay.rebuild(7, index, appearances)).not.toThrow()
+    // Canvas should be at expanded size
+    expect(o._canvas.width).toBe(400)
+  })
+
+  it('click-to-navigate works at expanded size', () => {
+    const navigateSpy = vi.fn()
+    overlay.onNavigate = navigateSpy
+    overlay.setMapBounds(0, 0, 2000, 2000)
+
+    // Expand the minimap
+    overlay.setBaseSize(200)
+    overlay.setExpandedSize(400)
+    const o = overlay as unknown as {
+      _currentWidth: number; _currentHeight: number;
+      _targetWidth: number; _targetHeight: number;
+      _expandedWidth: number; _expandedHeight: number;
+      _onPointerEnter: () => void;
+    }
+    o._onPointerEnter.call(overlay)
+    // Run animation to completion
+    while (overlay.isAnimating) overlay.updateAnimation()
+
+    // At expanded size (400x300), navigate from a point
+    // bmX = globalX - 5 (padding + border), bmY = globalY - 5
     overlay._navigateFromEvent(5, 5)
-    expect(navigateSpy).toHaveBeenCalledWith(0, 50)
+    expect(navigateSpy).toHaveBeenCalled()
   })
 })

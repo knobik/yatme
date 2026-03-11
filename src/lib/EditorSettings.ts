@@ -34,6 +34,10 @@ export interface EditorSettings {
 
   // Minimap
   showMinimap: boolean
+  minimapExpandOnHover: boolean
+  minimapSize: number
+  minimapExpandedSize: number
+  minimapOpacity: number
 
   // Eraser
   eraserLeaveUnique: boolean
@@ -63,6 +67,10 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   showWaypointOverlay: false,
   showWaypointPalette: false,
   showMinimap: true,
+  minimapExpandOnHover: true,
+  minimapSize: 200,
+  minimapExpandedSize: 400,
+  minimapOpacity: 1.0,
   eraserLeaveUnique: true,
   eraserKeepZones: false,
   eraserKeepMapFlags: false,
