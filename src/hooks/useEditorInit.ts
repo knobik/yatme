@@ -262,6 +262,7 @@ export function useEditorInit(
       renderer.setShowMonsters(savedSettings.showMonsters)
       renderer.setShowNpcs(savedSettings.showNpcs)
       renderer.setShowWaypointOverlay(savedSettings.showWaypointOverlay)
+      renderer.setShowMinimap(savedSettings.showMinimap)
 
       setLoadingProgress(1)
       setLoadingStatus('Ready')

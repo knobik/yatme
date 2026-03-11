@@ -20,3 +20,12 @@ export function hslToHex(h: number, s: number, l: number): number {
 export function goldenAngleHue(id: number, offset = 0): number {
   return (id * 137.508 + offset) % 360
 }
+
+/** RME 6x6x6 RGB cube (216 colors). Index 0 and >=216 -> black. */
+export function colorFromEightBit(color: number): [number, number, number] {
+  if (color <= 0 || color >= 216) return [0, 0, 0]
+  const r = Math.floor(color / 36) % 6 * 51
+  const g = Math.floor(color / 6) % 6 * 51
+  const b = color % 6 * 51
+  return [r, g, b]
+}

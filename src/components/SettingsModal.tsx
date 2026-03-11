@@ -69,14 +69,10 @@ export function SettingsModal({ settings, onChange, onClose }: SettingsModalProp
           </div>
 
           <div className="flex items-center justify-between gap-4">
-            <span className="font-ui text-sm font-normal text-fg-muted">Transparent Upper</span>
+            <span className="font-ui text-sm font-normal text-fg-muted">Transparent Upper Floors</span>
             <Toggle checked={settings.showTransparentUpper} onChange={v => update({ showTransparentUpper: v })} />
           </div>
 
-          <div className="flex items-center justify-between gap-4">
-            <span className="font-ui text-sm font-normal text-fg-muted">Show Lights</span>
-            <Toggle checked={settings.showLights} onChange={v => update({ showLights: v })} />
-          </div>
         </div>
 
         <div className="h-px w-full bg-border-subtle" />
@@ -88,11 +84,6 @@ export function SettingsModal({ settings, onChange, onClose }: SettingsModalProp
           <div className="flex items-center justify-between gap-4">
             <span className="font-ui text-sm font-normal text-fg-muted">Selection Border</span>
             <Toggle checked={settings.selectionBorder} onChange={v => update({ selectionBorder: v })} />
-          </div>
-
-          <div className="flex items-center justify-between gap-4">
-            <span className="font-ui text-sm font-normal text-fg-muted">Show Palette</span>
-            <Toggle checked={settings.showPalette} onChange={v => update({ showPalette: v })} />
           </div>
 
           <div className="flex items-center justify-between gap-4">

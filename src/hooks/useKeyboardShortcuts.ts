@@ -235,9 +235,12 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
       } else if (e.key === 'w' && !e.ctrlKey) {
         e.preventDefault()
         toolsRef.current.setActiveTool('waypoint')
-      } else if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey) {
+      } else if (e.key === 'm' && !e.ctrlKey && !e.shiftKey) {
         e.preventDefault()
         toggleSetting('showMonsters')
+      } else if (e.key === 'M' && e.shiftKey && !e.ctrlKey) {
+        e.preventDefault()
+        toggleSetting('showMinimap')
       } else if ((e.key === 'n' || e.key === 'N') && !e.ctrlKey) {
         e.preventDefault()
         toggleSetting('showNpcs')

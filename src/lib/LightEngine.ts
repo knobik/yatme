@@ -4,17 +4,7 @@ import type { Camera } from './Camera'
 import type { AppearanceData } from './appearances'
 import type { OtbmTile } from './otbm'
 import { chunkKeyStr } from './ChunkManager'
-
-// ── Color palette ───────────────────────────────────────────────────
-
-/** RME 6×6×6 RGB cube (216 colors). Index 0 and ≥216 → black. */
-function colorFromEightBit(color: number): [number, number, number] {
-  if (color <= 0 || color >= 216) return [0, 0, 0]
-  const r = Math.floor(color / 36) % 6 * 51
-  const g = Math.floor(color / 6) % 6 * 51
-  const b = color % 6 * 51
-  return [r, g, b]
-}
+import { colorFromEightBit } from './colorUtils'
 
 // ── Types ───────────────────────────────────────────────────────────
 

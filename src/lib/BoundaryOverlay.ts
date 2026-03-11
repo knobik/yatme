@@ -1,6 +1,5 @@
 import { Container, Graphics } from 'pixi.js'
 import { TILE_SIZE, CHUNK_SIZE } from './constants'
-import { MAP_MAX_WIDTH, MAP_MAX_HEIGHT } from './otbm'
 import type { Camera } from './Camera'
 
 const LINE_COLOR = 0xffffff
@@ -14,7 +13,8 @@ const SCREEN_BORDER_WIDTH = 2  // border width in screen pixels
 
 /**
  * Draws diagonal hatch lines ("no parking" pattern) on tiles outside the
- * valid map range (0–65 000), plus a border outline at the map edge.
+ * valid map range, plus a border outline at the map edge.
+ * Uses the map's own width/height properties as bounds.
  * Redraws only when the visible viewport changes.
  */
 export class BoundaryOverlay {
@@ -22,11 +22,23 @@ export class BoundaryOverlay {
   private _graphics: Graphics
   private _lastKey = ''
   private _lastFloorOffset = NaN
+  private _maxWidth: number
+  private _maxHeight: number
 
-  constructor() {
+  constructor(maxWidth: number, maxHeight: number) {
+    this._maxWidth = maxWidth
+    this._maxHeight = maxHeight
     this.container = new Container()
     this._graphics = new Graphics()
     this.container.addChild(this._graphics)
+  }
+
+  setMapBounds(maxWidth: number, maxHeight: number): void {
+    if (maxWidth !== this._maxWidth || maxHeight !== this._maxHeight) {
+      this._maxWidth = maxWidth
+      this._maxHeight = maxHeight
+      this._lastKey = '' // force redraw
+    }
   }
 
   updateContainerOffset(floorOffset: number): void {
@@ -47,7 +59,7 @@ export class BoundaryOverlay {
     const endTY = (range.endY + 1) * CHUNK_SIZE
 
     // Skip if nothing is out of bounds
-    if (startTX >= 0 && startTY >= 0 && endTX <= MAP_MAX_WIDTH && endTY <= MAP_MAX_HEIGHT) {
+    if (startTX >= 0 && startTY >= 0 && endTX <= this._maxWidth && endTY <= this._maxHeight) {
       if (this._lastKey !== '') {
         this._graphics.clear()
         this._lastKey = ''
@@ -56,7 +68,7 @@ export class BoundaryOverlay {
     }
 
     // Include zoom in dirty key — spacing changes with zoom
-    const key = `${startTX},${startTY},${endTX},${endTY},${camera.zoom}`
+    const key = `${startTX},${startTY},${endTX},${endTY},${camera.zoom},${this._maxWidth},${this._maxHeight}`
     if (key === this._lastKey) return
     this._lastKey = key
 
@@ -77,22 +89,22 @@ export class BoundaryOverlay {
         x2: Math.min(0, endTX), y2: endTY,
       })
     }
-    if (endTX > MAP_MAX_WIDTH) {
+    if (endTX > this._maxWidth) {
       regions.push({
-        x1: Math.max(MAP_MAX_WIDTH + 1, startTX), y1: startTY,
+        x1: Math.max(this._maxWidth + 1, startTX), y1: startTY,
         x2: endTX, y2: endTY,
       })
     }
     if (startTY < 0) {
       regions.push({
         x1: Math.max(0, startTX), y1: startTY,
-        x2: Math.min(MAP_MAX_WIDTH + 1, endTX), y2: Math.min(0, endTY),
+        x2: Math.min(this._maxWidth + 1, endTX), y2: Math.min(0, endTY),
       })
     }
-    if (endTY > MAP_MAX_HEIGHT) {
+    if (endTY > this._maxHeight) {
       regions.push({
-        x1: Math.max(0, startTX), y1: Math.max(MAP_MAX_HEIGHT + 1, startTY),
-        x2: Math.min(MAP_MAX_WIDTH + 1, endTX), y2: endTY,
+        x1: Math.max(0, startTX), y1: Math.max(this._maxHeight + 1, startTY),
+        x2: Math.min(this._maxWidth + 1, endTX), y2: endTY,
       })
     }
 
@@ -134,8 +146,8 @@ export class BoundaryOverlay {
     // Draw border outline along the map edge (only the segments visible in viewport)
     const mapLeft = 0
     const mapTop = 0
-    const mapRight = (MAP_MAX_WIDTH + 1) * TILE_SIZE
-    const mapBottom = (MAP_MAX_HEIGHT + 1) * TILE_SIZE
+    const mapRight = (this._maxWidth + 1) * TILE_SIZE
+    const mapBottom = (this._maxHeight + 1) * TILE_SIZE
 
     const vpLeft = startTX * TILE_SIZE
     const vpTop = startTY * TILE_SIZE
@@ -147,8 +159,8 @@ export class BoundaryOverlay {
       g.moveTo(mapLeft, Math.max(vpTop, mapTop))
       g.lineTo(mapLeft, Math.min(vpBottom, mapBottom))
     }
-    // Right edge (x=MAP_MAX_WIDTH+1)
-    if (endTX > MAP_MAX_WIDTH && startTX <= MAP_MAX_WIDTH) {
+    // Right edge (x=this._maxWidth+1)
+    if (endTX > this._maxWidth && startTX <= this._maxWidth) {
       g.moveTo(mapRight, Math.max(vpTop, mapTop))
       g.lineTo(mapRight, Math.min(vpBottom, mapBottom))
     }
@@ -157,8 +169,8 @@ export class BoundaryOverlay {
       g.moveTo(Math.max(vpLeft, mapLeft), mapTop)
       g.lineTo(Math.min(vpRight, mapRight), mapTop)
     }
-    // Bottom edge (y=MAP_MAX_HEIGHT+1)
-    if (endTY > MAP_MAX_HEIGHT && startTY <= MAP_MAX_HEIGHT) {
+    // Bottom edge (y=this._maxHeight+1)
+    if (endTY > this._maxHeight && startTY <= this._maxHeight) {
       g.moveTo(Math.max(vpLeft, mapLeft), mapBottom)
       g.lineTo(Math.min(vpRight, mapRight), mapBottom)
     }

@@ -12,6 +12,7 @@ import { WaypointManager } from './WaypointManager'
 import { SpawnManager } from './creatures/SpawnManager'
 import { FloorManager } from './FloorManager'
 import { LightEngine } from './LightEngine'
+import { MinimapOverlay } from './MinimapOverlay'
 import { setupMapInput, type InputHost } from './InputHandler'
 import { getItemSpriteId } from './SpriteResolver'
 import { getTextureSync, getTexture } from './TextureManager'
@@ -47,12 +48,14 @@ export class MapRenderer implements InputHost {
   private floorManager: FloorManager
   private chunkManager: ChunkManager
   private lightEngine: LightEngine
+  private minimap: MinimapOverlay
 
   // Settings
   private _showSelectionBorder = false
 
   // Lifecycle
   private _cleanupInput: (() => void) | null = null
+  private _cleanupMinimapWheel: (() => void) | null = null
   private _boundUpdate: () => void
   private _getFloorOffset: (z: number) => number
 
@@ -87,7 +90,7 @@ export class MapRenderer implements InputHost {
     this.selection = new SelectionOverlay()
     this.zoneOverlay = new ZoneOverlay()
     this.houseOverlay = new HouseOverlay()
-    this.boundaryOverlay = new BoundaryOverlay()
+    this.boundaryOverlay = new BoundaryOverlay(mapData.width, mapData.height)
     this.waypointOverlay = new WaypointOverlay()
     this._waypointManager = waypointManager ?? new WaypointManager([])
 
@@ -149,6 +152,34 @@ export class MapRenderer implements InputHost {
       this.lightEngine.container,
     )
 
+    // Minimap overlay (added to app.stage, not mapContainer — stays fixed on screen)
+    this.minimap = new MinimapOverlay()
+    this.app.stage.addChild(this.minimap.container)
+    this.minimap.onNavigate = (tileX, tileY) => {
+      this.camera.centerOn(tileX, tileY)
+      this.notifyCamera()
+    }
+
+    // Compute map bounds from actual tile data
+    this._computeMinimapBounds()
+
+    // Minimap wheel zoom (capture phase, before main input handler)
+    const canvas = this.app.canvas as HTMLCanvasElement
+    const onMinimapWheel = (e: WheelEvent) => {
+      const rect = canvas.getBoundingClientRect()
+      const sx = e.clientX - rect.left
+      const sy = e.clientY - rect.top
+      if (this.minimap.hitTest(sx, sy)) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (this.minimap.handleWheel(e.deltaY)) {
+          this.notifyCamera()
+        }
+      }
+    }
+    canvas.addEventListener('wheel', onMinimapWheel, { capture: true })
+    this._cleanupMinimapWheel = () => canvas.removeEventListener('wheel', onMinimapWheel, { capture: true })
+
     // Input
     this._cleanupInput = setupMapInput(
       this.app.canvas as HTMLCanvasElement,
@@ -180,6 +211,12 @@ export class MapRenderer implements InputHost {
     this.app.ticker.add(this._boundUpdate)
   }
 
+  // ── Minimap bounds computation ─────────────────────────────────
+
+  private _computeMinimapBounds(): void {
+    this.minimap.setMapBounds(0, 0, this.mapData.width, this.mapData.height)
+  }
+
   // ── Public API (delegates to Camera) ───────────────────────────
 
   get zoom(): number { return this.camera.zoom }
@@ -193,6 +230,7 @@ export class MapRenderer implements InputHost {
     if (!this.camera.setFloor(z)) return
     this.deselectTile()
     this.recycleAllChunks()
+    this.minimap.markDirty()
     this.zoneOverlay.markDirty()
     this.houseOverlay.markDirty()
     this.monsterSpawnOverlay.markDirty()
@@ -252,6 +290,7 @@ export class MapRenderer implements InputHost {
   invalidateChunks(keys: Set<string>): void {
     this.chunkManager.invalidateChunks(keys)
     this.lightEngine.markDirty()
+    this.minimap.invalidateChunks(keys)
     this.zoneOverlay.invalidateChunks(keys)
     this.houseOverlay.invalidateChunks(keys)
     this.monsterSpawnOverlay.invalidateChunks(keys)
@@ -315,6 +354,11 @@ export class MapRenderer implements InputHost {
 
   setShowNpcSpawnOverlay(enabled: boolean): void {
     this.npcSpawnOverlay.setVisible(enabled)
+  }
+
+  setMapBounds(width: number, height: number): void {
+    this.boundaryOverlay.setMapBounds(width, height)
+    this.minimap.setMapBounds(0, 0, width, height)
   }
 
   markMonsterSpawnOverlayDirty(): void {
@@ -382,6 +426,12 @@ export class MapRenderer implements InputHost {
 
   setShowLights(enabled: boolean): void {
     this.lightEngine.setEnabled(enabled)
+  }
+
+  // ── Minimap ────────────────────────────────────────────────────
+
+  setShowMinimap(enabled: boolean): void {
+    this.minimap.setVisible(enabled)
   }
 
   // ── Selection border ────────────────────────────────────────────
@@ -576,6 +626,9 @@ export class MapRenderer implements InputHost {
 
     this.waypointOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
     this.waypointOverlay.rebuild(this.camera.floor, this._waypointManager, this.camera)
+
+    this.minimap.rebuild(this.camera.floor, this.chunkManager.index, this.appearances)
+    this.minimap.updateViewport(this.camera, this.app.screen.width, this.app.screen.height)
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────
@@ -588,7 +641,9 @@ export class MapRenderer implements InputHost {
   destroy(): void {
     this.app.ticker.remove(this._boundUpdate)
     this._cleanupInput?.()
+    this._cleanupMinimapWheel?.()
     this.recycleAllChunks()
+    this.minimap.destroy()
     this.lightEngine.destroy()
     this.waypointOverlay.destroy()
     this.npcSpawnOverlay.destroy()

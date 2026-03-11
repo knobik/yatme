@@ -1,4 +1,4 @@
-import { Assets, Container, Graphics, BitmapText, Texture } from 'pixi.js'
+import { Assets, Container, Graphics, Text, Texture } from 'pixi.js'
 import { TILE_SIZE } from './constants'
 import type { WaypointManager } from './WaypointManager'
 import type { Camera } from './Camera'
@@ -8,7 +8,7 @@ export const MARKER_COLOR = 0x00c800
 /** CSS hex representation of the marker color for UI components. */
 export const MARKER_COLOR_CSS = '#00c800'
 const SELECTED_BORDER_COLOR = 0xd4a549
-const LABEL_FONT_SIZE = 12
+const LABEL_FONT_SIZE = 13
 
 // Phosphor MapPin icon (256x256 viewBox, fill white for tinting)
 const MAP_PIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" fill="white" viewBox="0 0 256 256"><path d="M128,64a40,40,0,1,0,40,40A40,40,0,0,0,128,64Zm0,64a24,24,0,1,1,24-24A24,24,0,0,1,128,128Zm0-112a88.1,88.1,0,0,0-88,88c0,75.3,80,132.17,83.41,134.55a8,8,0,0,0,9.18,0C136,236.17,216,179.3,216,104A88.1,88.1,0,0,0,128,16Zm0,206c-16.53-13-72-60.75-72-118a72,72,0,0,1,144,0C200,152.26,144.53,199,128,222Z"/></svg>`
@@ -157,12 +157,13 @@ export class WaypointOverlay {
 
       // Add label (constant screen size regardless of zoom)
       const invZoom = 1 / camera.zoom
-      const label = new BitmapText({
+      const label = new Text({
         text: wp.name,
         style: {
-          fontFamily: 'Arial',
+          fontFamily: 'Barlow, system-ui, -apple-system, sans-serif',
           fontSize: LABEL_FONT_SIZE,
           fill: 0xffffff,
+          letterSpacing: 1,
         },
       })
       label.anchor.set(0.5, 1)

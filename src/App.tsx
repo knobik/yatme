@@ -56,6 +56,7 @@ const RENDERER_SYNC: Partial<Record<BooleanSettingKey, (r: MapRendererType, v: b
   showMonsters: (r, v) => r.setShowMonsters(v),
   showNpcs: (r, v) => r.setShowNpcs(v),
   showWaypointOverlay: (r, v) => r.setShowWaypointOverlay(v),
+  showMinimap: (r, v) => r.setShowMinimap(v),
 }
 
 /** Compute left offset for elements that need to dodge all left-side panels. */
@@ -353,7 +354,8 @@ function App() {
         houseFile: patch.houseFile,
       }
     })
-  }, [])
+    rendererRef.current?.setMapBounds(patch.width, patch.height)
+  }, [rendererRef])
 
   const handleEditTownsApply = useCallback((towns: OtbmTown[]) => {
     setMapData(prev => prev ? { ...prev, towns } : prev)

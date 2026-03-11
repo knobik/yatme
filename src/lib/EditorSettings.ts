@@ -32,6 +32,9 @@ export interface EditorSettings {
   showWaypointOverlay: boolean
   showWaypointPalette: boolean
 
+  // Minimap
+  showMinimap: boolean
+
   // Eraser
   eraserLeaveUnique: boolean
   eraserKeepZones: boolean
@@ -59,6 +62,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   autoCreateSpawn: true,
   showWaypointOverlay: false,
   showWaypointPalette: false,
+  showMinimap: true,
   eraserLeaveUnique: true,
   eraserKeepZones: false,
   eraserKeepMapFlags: false,
