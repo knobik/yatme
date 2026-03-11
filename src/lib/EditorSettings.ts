@@ -28,6 +28,10 @@ export interface EditorSettings {
   showNpcSpawns: boolean
   autoCreateSpawn: boolean
 
+  // Waypoints
+  showWaypointOverlay: boolean
+  showWaypointPalette: boolean
+
   // Eraser
   eraserLeaveUnique: boolean
   eraserKeepZones: boolean
@@ -53,6 +57,8 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   showNpcs: true,
   showNpcSpawns: true,
   autoCreateSpawn: true,
+  showWaypointOverlay: false,
+  showWaypointPalette: false,
   eraserLeaveUnique: true,
   eraserKeepZones: false,
   eraserKeepMapFlags: false,

@@ -64,7 +64,7 @@ export function setupMapInput(
       activeButton = 1
       canvas.setPointerCapture(e.pointerId)
     } else if (e.button === 2) {
-      // Right mouse: select like left-click, then track for context menu
+      // Right mouse: fire tool callback (e.g. waypoint delete), then track for context menu
       dragging = true
       dragDist = 0
       dragStartX = e.clientX
@@ -72,6 +72,11 @@ export function setupMapInput(
       activeButton = 2
       canvas.setPointerCapture(e.pointerId)
 
+      if (host.onTilePointerDown) {
+        const rect = canvas.getBoundingClientRect()
+        const pos = camera.getTileAt(e.clientX - rect.left, e.clientY - rect.top)
+        host.onTilePointerDown(pos, e)
+      }
     } else if (e.button === 0) {
       // Left mouse: tool callbacks or pan fallback
       dragging = true

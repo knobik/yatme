@@ -1,4 +1,4 @@
-import { type OtbmMap, type OtbmTile, type OtbmItem, deepCloneItem, isPositionValid, tileKey } from './otbm'
+import { type OtbmMap, type OtbmTile, type OtbmItem, type OtbmWaypoint, deepCloneItem, isPositionValid, tileKey } from './otbm'
 import type { TileCreature } from './creatures/types'
 import type { AppearanceData } from './appearances'
 import type { MapSidecars } from './sidecars'
@@ -16,6 +16,7 @@ import { computeBorders } from './brushes/BorderSystem'
 import { doWalls, getWallAlignment } from './brushes/WallSystem'
 import { findDoorForAlignment, switchDoor } from './brushes/DoorSystem'
 import { doCarpets, doTables } from './brushes/CarpetSystem'
+import type { WaypointManager } from './WaypointManager'
 const MAX_UNDO = 200
 
 const OFFSETS_8: ReadonlyArray<[number, number]> = [
@@ -68,6 +69,10 @@ type MutationAction =
   | { type: 'updateMonster'; x: number; y: number; z: number; oldCreature: TileCreature; newCreature: TileCreature; index: number }
   | { type: 'setNpc'; x: number; y: number; z: number; oldNpc: TileCreature | undefined; newNpc: TileCreature | undefined }
   | { type: 'setSpawnZone'; x: number; y: number; z: number; spawnType: 'monster' | 'npc'; oldRadius: number | undefined; newRadius: number | undefined }
+  | { type: 'addWaypoint'; x: number; y: number; z: number; waypoint: OtbmWaypoint }
+  | { type: 'removeWaypoint'; x: number; y: number; z: number; waypoint: OtbmWaypoint }
+  | { type: 'renameWaypoint'; x: number; y: number; z: number; oldName: string; newName: string }
+  | { type: 'moveWaypoint'; x: number; y: number; z: number; name: string; oldX: number; oldY: number; oldZ: number; newX: number; newY: number; newZ: number }
 
 interface MutationBatch {
   description: string
@@ -85,6 +90,7 @@ export class MapMutator {
   private _sidecars: MapSidecars | null = null
   private _spawnManager: SpawnManager | null = null
   private _creatureDb: CreatureDatabase | null = null
+  private _waypointManager: WaypointManager | null = null
 
   // Current batch being built (between beginBatch/commitBatch)
   private currentBatch: MutationBatch | null = null
@@ -93,6 +99,7 @@ export class MapMutator {
   onChunksInvalidated?: (keys: Set<string>) => void
   onUndoRedoChanged?: (canUndo: boolean, canRedo: boolean) => void
   onTileChanged?: (x: number, y: number, z: number) => void
+  onWaypointChanged?: () => void
 
   constructor(mapData: OtbmMap, appearances: AppearanceData) {
     this.mapData = mapData
@@ -141,6 +148,14 @@ export class MapMutator {
 
   get creatureDb(): CreatureDatabase | null {
     return this._creatureDb
+  }
+
+  set waypointManager(manager: WaypointManager | null) {
+    this._waypointManager = manager
+  }
+
+  get waypointManager(): WaypointManager | null {
+    return this._waypointManager
   }
 
   // --- Batch management ---
@@ -420,6 +435,32 @@ export class MapMutator {
         }
         break
       }
+      case 'addWaypoint': {
+        this._waypointManager?.remove(action.waypoint.name)
+        this.removeWaypointFromMapData(action.waypoint.name)
+        this.onWaypointChanged?.()
+        break
+      }
+      case 'removeWaypoint': {
+        this._waypointManager?.add({ ...action.waypoint })
+        this.mapData.waypoints.push({ ...action.waypoint })
+        this.onWaypointChanged?.()
+        break
+      }
+      case 'renameWaypoint': {
+        this._waypointManager?.rename(action.newName, action.oldName)
+        const wp = this.mapData.waypoints.find(w => w.name === action.newName)
+        if (wp) wp.name = action.oldName
+        this.onWaypointChanged?.()
+        break
+      }
+      case 'moveWaypoint': {
+        this._waypointManager?.move(action.name, action.oldX, action.oldY, action.oldZ)
+        const wp = this.mapData.waypoints.find(w => w.name === action.name)
+        if (wp) { wp.x = action.oldX; wp.y = action.oldY; wp.z = action.oldZ }
+        this.onWaypointChanged?.()
+        break
+      }
     }
   }
 
@@ -498,6 +539,32 @@ export class MapMutator {
         if (tile) {
           this.applySpawnZone(tile, action.spawnType, action.oldRadius, action.newRadius)
         }
+        break
+      }
+      case 'addWaypoint': {
+        this._waypointManager?.add({ ...action.waypoint })
+        this.mapData.waypoints.push({ ...action.waypoint })
+        this.onWaypointChanged?.()
+        break
+      }
+      case 'removeWaypoint': {
+        this._waypointManager?.remove(action.waypoint.name)
+        this.removeWaypointFromMapData(action.waypoint.name)
+        this.onWaypointChanged?.()
+        break
+      }
+      case 'renameWaypoint': {
+        this._waypointManager?.rename(action.oldName, action.newName)
+        const wp = this.mapData.waypoints.find(w => w.name === action.oldName)
+        if (wp) wp.name = action.newName
+        this.onWaypointChanged?.()
+        break
+      }
+      case 'moveWaypoint': {
+        this._waypointManager?.move(action.name, action.newX, action.newY, action.newZ)
+        const wp = this.mapData.waypoints.find(w => w.name === action.name)
+        if (wp) { wp.x = action.newX; wp.y = action.newY; wp.z = action.newZ }
+        this.onWaypointChanged?.()
         break
       }
     }
@@ -750,6 +817,71 @@ export class MapMutator {
       this.recordAction({ type: 'setSpawnZone', x, y, z, spawnType: type, oldRadius, newRadius })
       this.onTileChanged?.(x, y, z)
     })
+  }
+
+  // --- Waypoint mutations ---
+
+  addWaypoint(name: string, x: number, y: number, z: number): void {
+    if (!this._waypointManager) return
+    const waypoint: OtbmWaypoint = { name, x, y, z }
+    this.autoBatch('Add waypoint', () => {
+      this._waypointManager!.add(waypoint)
+      this.mapData.waypoints.push({ ...waypoint })
+      this.recordWaypointAction({ type: 'addWaypoint', x, y, z, waypoint: { ...waypoint } })
+      this.onWaypointChanged?.()
+    })
+  }
+
+  removeWaypoint(name: string): void {
+    if (!this._waypointManager) return
+    const wp = this._waypointManager.getByName(name)
+    if (!wp) return
+    this.autoBatch('Remove waypoint', () => {
+      const removed = this._waypointManager!.remove(name)
+      if (!removed) return
+      this.removeWaypointFromMapData(name)
+      this.recordWaypointAction({ type: 'removeWaypoint', x: removed.x, y: removed.y, z: removed.z, waypoint: { ...removed } })
+      this.onWaypointChanged?.()
+    })
+  }
+
+  renameWaypoint(oldName: string, newName: string): void {
+    if (!this._waypointManager || oldName === newName) return
+    const wp = this._waypointManager.getByName(oldName)
+    if (!wp) return
+    this.autoBatch('Rename waypoint', () => {
+      this._waypointManager!.rename(oldName, newName)
+      const mapWp = this.mapData.waypoints.find(w => w.name === oldName)
+      if (mapWp) mapWp.name = newName
+      this.recordWaypointAction({ type: 'renameWaypoint', x: wp.x, y: wp.y, z: wp.z, oldName, newName })
+      this.onWaypointChanged?.()
+    })
+  }
+
+  moveWaypoint(name: string, newX: number, newY: number, newZ: number): void {
+    if (!this._waypointManager) return
+    const wp = this._waypointManager.getByName(name)
+    if (!wp) return
+    const oldX = wp.x, oldY = wp.y, oldZ = wp.z
+    if (oldX === newX && oldY === newY && oldZ === newZ) return
+    this.autoBatch('Move waypoint', () => {
+      this._waypointManager!.move(name, newX, newY, newZ)
+      const mapWp = this.mapData.waypoints.find(w => w.name === name)
+      if (mapWp) { mapWp.x = newX; mapWp.y = newY; mapWp.z = newZ }
+      this.recordWaypointAction({ type: 'moveWaypoint', x: newX, y: newY, z: newZ, name, oldX, oldY, oldZ, newX, newY, newZ })
+      this.onWaypointChanged?.()
+    })
+  }
+
+  private recordWaypointAction(action: MutationAction): void {
+    if (!this.currentBatch) throw new Error('No active batch')
+    this.currentBatch.actions.push(action)
+    // Waypoints don't invalidate tile chunks — overlay refresh is via onWaypointChanged
+  }
+
+  private removeWaypointFromMapData(name: string): void {
+    const idx = this.mapData.waypoints.findIndex(w => w.name === name)
+    if (idx >= 0) this.mapData.waypoints.splice(idx, 1)
   }
 
   // --- Ground brush painting ---

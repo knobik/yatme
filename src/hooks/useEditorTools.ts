@@ -19,6 +19,7 @@ import { createFillHandlers } from './tools/fillTool'
 import { createZoneHandlers } from './tools/zoneTool'
 import { createHouseHandlers } from './tools/houseTool'
 import { createCreatureHandlers } from './tools/creatureTool'
+import { createWaypointHandlers } from './tools/waypointTool'
 import { createHoverHandler } from './tools/hoverHandler'
 
 // Re-export types for consumers
@@ -64,6 +65,8 @@ export interface EditorToolsState {
   spawnRadius: number
   setSpawnRadius: (radius: number) => void
   selectedCreature: SelectedCreatureInfo | null
+  selectedWaypoint: string | null
+  setSelectedWaypoint: (name: string | null) => void
   cursorPos: { x: number; y: number; z: number } | null
 }
 
@@ -92,6 +95,7 @@ export function useEditorTools(
   const [creatureWeight, setCreatureWeight] = useState(100)
   const [spawnRadius, setSpawnRadius] = useState(1)
   const [selectedCreature, setSelectedCreature] = useState<SelectedCreatureInfo | null>(null)
+  const [selectedWaypoint, setSelectedWaypoint] = useState<string | null>(null)
 
   // ── Refs (avoid stale closures in pointer handlers) ──────────────
   const activeToolRef = useLatestRef(activeTool)
@@ -123,6 +127,8 @@ export function useEditorTools(
   const hoverPosRef = useRef<TilePos | null>(null)
   const selectedCreatureRef = useRef<SelectedCreatureInfo | null>(null)
   const isCreatureDragRef = useRef(false)
+  const isWaypointDragRef = useRef(false)
+  const dragWaypointNameRef = useRef<string | null>(null)
   const [cursorPos, setCursorPos] = useState<TilePos | null>(null)
 
   // ── Compose sub-hooks ────────────────────────────────────────────
@@ -166,7 +172,10 @@ export function useEditorTools(
       selectedCreatureRef,
       setSelectedCreature,
       isCreatureDragRef,
+      isWaypointDragRef,
+      dragWaypointNameRef,
       settingsRef,
+      onWaypointSelected: setSelectedWaypoint,
     }
 
     const draw = createDrawHandlers(ctx)
@@ -176,6 +185,7 @@ export function useEditorTools(
     const zone = createZoneHandlers(ctx)
     const house = createHouseHandlers(ctx)
     const creature = createCreatureHandlers(ctx)
+    const waypoint = createWaypointHandlers(ctx)
     const select = createSelectHandlers(ctx)
     const hover = createHoverHandler(ctx)
 
@@ -194,6 +204,7 @@ export function useEditorTools(
         case 'zone': zone.onDown(pos, event); break
         case 'house': house.onDown(pos, event); break
         case 'creature': creature.onDown(pos, event); break
+        case 'waypoint': waypoint.onDown(pos, event); break
         case 'select': select.onDown(pos, event); break
       }
     }
@@ -207,6 +218,7 @@ export function useEditorTools(
         case 'zone': zone.onMove(pos); break
         case 'house': house.onMove(pos); break
         case 'creature': creature.onMove(pos); break
+        case 'waypoint': waypoint.onMove(pos); break
         case 'select': select.onMove(pos); break
       }
     }
@@ -225,6 +237,8 @@ export function useEditorTools(
         house.onUp()
       } else if (tool === 'creature') {
         creature.onUp()
+      } else if (tool === 'waypoint') {
+        waypoint.onUp(pos)
       } else if (tool === 'select') {
         select.onUp(pos)
       }
@@ -289,6 +303,7 @@ export function useEditorTools(
       case 'zone': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
       case 'house': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
       case 'creature': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
+      case 'waypoint': renderer.setCursorStyle('crosshair'); renderer.clearGhostPreview(); break
     }
   }, [renderer, activeTool])
 
@@ -351,6 +366,8 @@ export function useEditorTools(
     spawnRadius,
     setSpawnRadius,
     selectedCreature,
+    selectedWaypoint,
+    setSelectedWaypoint,
     cursorPos,
   }
 }

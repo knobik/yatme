@@ -7,6 +7,8 @@ import { ZoneOverlay } from './ZoneOverlay'
 import { HouseOverlay } from './HouseOverlay'
 import { BoundaryOverlay } from './BoundaryOverlay'
 import { SpawnOverlay } from './creatures/SpawnOverlay'
+import { WaypointOverlay } from './WaypointOverlay'
+import { WaypointManager } from './WaypointManager'
 import { SpawnManager } from './creatures/SpawnManager'
 import { FloorManager } from './FloorManager'
 import { LightEngine } from './LightEngine'
@@ -40,6 +42,8 @@ export class MapRenderer implements InputHost {
   private monsterSpawnOverlay: SpawnOverlay
   private npcSpawnOverlay: SpawnOverlay
   private boundaryOverlay: BoundaryOverlay
+  private waypointOverlay: WaypointOverlay
+  private _waypointManager: WaypointManager
   private floorManager: FloorManager
   private chunkManager: ChunkManager
   private lightEngine: LightEngine
@@ -69,7 +73,7 @@ export class MapRenderer implements InputHost {
   /** Set by drag sources (Inspector/Palette) so dragover can show a ghost preview. */
   dragPreviewItemId: number | null = null
 
-  constructor(app: Application, appearances: AppearanceData, mapData: OtbmMap, spawnManager?: SpawnManager | null) {
+  constructor(app: Application, appearances: AppearanceData, mapData: OtbmMap, spawnManager?: SpawnManager | null, waypointManager?: WaypointManager | null) {
     this.app = app
     this.mapData = mapData
     this.appearances = appearances
@@ -84,6 +88,8 @@ export class MapRenderer implements InputHost {
     this.zoneOverlay = new ZoneOverlay()
     this.houseOverlay = new HouseOverlay()
     this.boundaryOverlay = new BoundaryOverlay()
+    this.waypointOverlay = new WaypointOverlay()
+    this._waypointManager = waypointManager ?? new WaypointManager([])
 
     // Spawn overlays
     const sm = spawnManager ?? new SpawnManager()
@@ -120,6 +126,9 @@ export class MapRenderer implements InputHost {
     this.mapContainer.addChild(this.monsterSpawnOverlay.container)
     this.mapContainer.addChild(this.npcSpawnOverlay.container)
 
+    // Waypoint overlay (between spawn overlays and selection overlay)
+    this.mapContainer.addChild(this.waypointOverlay.container)
+
     // Selection overlay (added to mapContainer; FloorManager keeps it on top)
     this.mapContainer.addChild(this.selection.container)
 
@@ -135,6 +144,7 @@ export class MapRenderer implements InputHost {
       this.houseOverlay.container,
       this.monsterSpawnOverlay.container,
       this.npcSpawnOverlay.container,
+      this.waypointOverlay.container,
       this.selection.container,
       this.lightEngine.container,
     )
@@ -187,6 +197,7 @@ export class MapRenderer implements InputHost {
     this.houseOverlay.markDirty()
     this.monsterSpawnOverlay.markDirty()
     this.npcSpawnOverlay.markDirty()
+    this.waypointOverlay.markDirty()
     this.notifyCamera()
   }
 
@@ -324,6 +335,42 @@ export class MapRenderer implements InputHost {
     this.tileRenderer.showNpcs = v
     this.recycleAllChunks()
     this.notifyCamera()
+  }
+
+  // ── Waypoint overlay ──────────────────────────────────────────
+
+  get waypointManager(): WaypointManager { return this._waypointManager }
+
+  markWaypointOverlayDirty(): void {
+    this.waypointOverlay.markDirty()
+  }
+
+  get showWaypointOverlay(): boolean { return this.waypointOverlay.visible }
+
+  setShowWaypointOverlay(enabled: boolean): void {
+    this.waypointOverlay.setVisible(enabled)
+  }
+
+  setSelectedWaypoint(name: string | null): void {
+    this.waypointOverlay.setSelectedWaypoint(name)
+  }
+
+  setWaypointDragGhost(x: number, y: number, z: number): void {
+    this.waypointOverlay.setDragGhost(x, y, z)
+  }
+
+  clearWaypointDragGhost(): void {
+    this.waypointOverlay.clearDragGhost()
+  }
+
+  setSpawnDragGhost(spawnType: 'monster' | 'npc', x: number, y: number, z: number, radius: number): void {
+    const overlay = spawnType === 'monster' ? this.monsterSpawnOverlay : this.npcSpawnOverlay
+    overlay.setDragGhost(x, y, z, radius)
+  }
+
+  clearSpawnDragGhost(spawnType: 'monster' | 'npc'): void {
+    const overlay = spawnType === 'monster' ? this.monsterSpawnOverlay : this.npcSpawnOverlay
+    overlay.clearDragGhost()
   }
 
   setCreatureDatabase(db: CreatureDatabase): void {
@@ -526,6 +573,9 @@ export class MapRenderer implements InputHost {
 
     this.npcSpawnOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
     this.npcSpawnOverlay.rebuild(this.camera.floor, this.chunkManager.index)
+
+    this.waypointOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
+    this.waypointOverlay.rebuild(this.camera.floor, this._waypointManager, this.camera)
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────
@@ -540,6 +590,7 @@ export class MapRenderer implements InputHost {
     this._cleanupInput?.()
     this.recycleAllChunks()
     this.lightEngine.destroy()
+    this.waypointOverlay.destroy()
     this.npcSpawnOverlay.destroy()
     this.monsterSpawnOverlay.destroy()
     this.houseOverlay.destroy()

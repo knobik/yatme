@@ -8,6 +8,7 @@ import type { SpawnManager } from './creatures/SpawnManager'
 import type { CreatureDatabase } from './creatures/CreatureDatabase'
 import { MapRenderer } from './MapRenderer'
 import { MapMutator } from './MapMutator'
+import { WaypointManager } from './WaypointManager'
 
 export interface EditorInstances {
   renderer: MapRenderer
@@ -27,7 +28,8 @@ export function setupEditor(
   spawnManager: SpawnManager | null = null,
   creatureDb: CreatureDatabase | null = null,
 ): EditorInstances {
-  const renderer = new MapRenderer(app, appearances, mapData, spawnManager)
+  const waypointManager = new WaypointManager(mapData.waypoints)
+  const renderer = new MapRenderer(app, appearances, mapData, spawnManager, waypointManager)
   if (creatureDb) {
     renderer.setCreatureDatabase(creatureDb)
   }
@@ -37,9 +39,14 @@ export function setupEditor(
   mutator.sidecars = sidecars
   mutator.spawnManager = spawnManager
   mutator.creatureDb = creatureDb
+  mutator.waypointManager = waypointManager
 
   mutator.onChunksInvalidated = (keys) => {
     renderer.invalidateChunks(keys)
+  }
+
+  mutator.onWaypointChanged = () => {
+    renderer.markWaypointOverlayDirty()
   }
 
   return { renderer, mutator }
