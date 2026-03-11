@@ -92,6 +92,43 @@ On first startup, sprite sheets are automatically converted from `.bmp.lzma` to 
 | `UID`    | `1000`  | Container user ID |
 | `GID`    | `1000`  | Container group ID |
 
+### Alternative: `docker run`
+
+If you prefer not to use Docker Compose, run the container directly.
+
+First, create the named volume for the sprite cache:
+
+```bash
+docker volume create sprites-png
+```
+
+Then start the container:
+
+```bash
+docker run -d \
+  --name yatme \
+  -p 8080:8080 \
+  -v ./assets:/app/sprites:ro \
+  -v ./maps:/app/maps \
+  -v sprites-png:/app/sprites-png \
+  knobik/yatme:latest
+```
+
+To run as a specific user (matching your host UID/GID):
+
+```bash
+docker run -d \
+  --name yatme \
+  -u "$(id -u):$(id -g)" \
+  -p 8080:8080 \
+  -v ./assets:/app/sprites:ro \
+  -v ./maps:/app/maps \
+  -v sprites-png:/app/sprites-png \
+  knobik/yatme:latest
+```
+
+See the [Volumes](#volumes) and [Configuration](#configuration) tables above for details on each mount.
+
 ---
 
 ## Local Development

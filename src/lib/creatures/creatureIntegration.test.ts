@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { SpawnManager } from './SpawnManager'
 import { MapMutator } from '../MapMutator'
 import { CreatureDatabase } from './CreatureDatabase'
