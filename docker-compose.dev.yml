@@ -1,0 +1,35 @@
+# Development override — run with:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+services:
+  editor:
+    build:
+      context: .
+      target: deps           # stop after npm ci — skip the production build
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    entrypoint: []
+    command: sh -c "npm run server:dev & npm run dev -- --host 0.0.0.0"
+    environment:
+      - VITE_STORAGE=server
+      - PORT=8080
+      - MAP_DIR=/app/maps
+      - ASSETS_DIR=/app/tibia/sprites
+    volumes:
+      # Mount source for hot-reload (edits on host → instant Vite HMR)
+      - ./src:/app/src
+      - ./server:/app/server
+      - ./data:/app/data
+      - ./scripts:/app/scripts
+      - ./index.html:/app/index.html
+      - ./vite.config.ts:/app/vite.config.ts
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./tsconfig.app.json:/app/tsconfig.app.json
+      - ./tsconfig.node.json:/app/tsconfig.node.json
+      - ./tsconfig.test.json:/app/tsconfig.test.json
+      - ./tsconfig.server.json:/app/tsconfig.server.json
+      # Tibia assets and maps
+      - ./tibia:/app/tibia:ro
+      - ./maps:/app/maps
+    ports:
+      - "${PORT:-5173}:5173"

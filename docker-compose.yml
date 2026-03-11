@@ -2,8 +2,11 @@
 # For production/self-hosting setup, see the README.
 services:
   editor:
-    build: .
-    user: "${UID:-1000}:${GID:-1000}"
+    build:
+      context: .
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
     ports:
       - "${PORT:-8080}:8080"
     volumes:

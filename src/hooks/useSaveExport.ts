@@ -89,19 +89,21 @@ export function useSaveExport({
       }
 
       // Rebuild spawn data from current tile state
+      let currentSidecars = sidecarsData
       if (spawnManager) {
         const monsterResult = collectMonsterSpawns(md, spawnManager)
         const npcResult = collectNpcSpawns(md, spawnManager)
-        setSidecarsData(prev => ({ ...prev, monsterSpawns: monsterResult.spawns, npcSpawns: npcResult.spawns }))
+        currentSidecars = { ...currentSidecars, monsterSpawns: monsterResult.spawns, npcSpawns: npcResult.spawns }
+        setSidecarsData(currentSidecars)
         for (const o of monsterResult.orphans) console.warn(`[Save] Orphan creature skipped: ${o}`)
         for (const o of npcResult.orphans) console.warn(`[Save] Orphan creature skipped: ${o}`)
       }
 
       // Auto-generate sidecar filenames if creatures exist but filenames aren't set
-      if (sidecarsData.monsterSpawns.length > 0 && !md.spawnFile) {
+      if (currentSidecars.monsterSpawns.length > 0 && !md.spawnFile) {
         md.spawnFile = sidecarName('monster')
       }
-      if (sidecarsData.npcSpawns.length > 0 && !md.npcFile) {
+      if (currentSidecars.npcSpawns.length > 0 && !md.npcFile) {
         md.npcFile = sidecarName('npc')
       }
 
@@ -113,7 +115,7 @@ export function useSaveExport({
           setSaveProgress(pct)
         }
       })
-      const sidecars = serializeSidecars(sidecarsData, md)
+      const sidecars = serializeSidecars(currentSidecars, md)
       const hasUploadPhase = 'uploadWithProgress' in provider
       if (hasUploadPhase) {
         setSavePhase('upload')
