@@ -252,6 +252,8 @@ export function Toolbar({
         { label: 'Show Monster Spawns', shortcut: 'Ctrl+M', checked: editorSettings.showMonsterSpawns, onClick: () => onToggleSetting('showMonsterSpawns') },
         { label: 'Show NPCs', shortcut: 'N', checked: editorSettings.showNpcs, onClick: () => onToggleSetting('showNpcs') },
         { label: 'Show NPC Spawns', shortcut: 'Ctrl+N', checked: editorSettings.showNpcSpawns, onClick: () => onToggleSetting('showNpcSpawns') },
+        { heading: 'Debug' },
+        { label: 'Performance Stats', checked: editorSettings.showStats, onClick: () => onToggleSetting('showStats') },
         { heading: 'Zoom' },
         { label: 'Zoom In', shortcut: 'Ctrl+=', onClick: onZoomIn },
         { label: 'Zoom Out', shortcut: 'Ctrl+-', onClick: onZoomOut },

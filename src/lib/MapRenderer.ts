@@ -25,6 +25,7 @@ import type { CopyBuffer } from './CopyBuffer'
 import { CreatureSpriteResolver } from './creatures/CreatureSpriteResolver'
 import type { CreatureDatabase } from './creatures/CreatureDatabase'
 import type { ZoneSelection } from '../hooks/tools/types'
+import Stats from 'stats.js'
 
 export { type FloorViewMode } from './constants'
 
@@ -56,6 +57,7 @@ export class MapRenderer implements InputHost {
 
   // Settings
   private _showSelectionBorder = false
+  private _stats: Stats | null = null
 
   // Lifecycle
   private _cleanupInput: (() => void) | null = null
@@ -484,6 +486,23 @@ export class MapRenderer implements InputHost {
     this.clientBoxOverlay.setVisible(enabled)
   }
 
+  // ── Performance stats ────────────────────────────────────────────
+
+  setShowStats(enabled: boolean): void {
+    if (enabled && !this._stats) {
+      const stats = new Stats()
+      stats.dom.style.position = 'fixed'
+      stats.dom.style.top = '5px'
+      stats.dom.style.left = '5px'
+      stats.dom.style.zIndex = '1000'
+      document.body.appendChild(stats.dom)
+      this._stats = stats
+    } else if (!enabled && this._stats) {
+      this._stats.dom.remove()
+      this._stats = null
+    }
+  }
+
   // ── Selection border ────────────────────────────────────────────
 
   get selectionBorder(): boolean { return this._showSelectionBorder }
@@ -638,6 +657,7 @@ export class MapRenderer implements InputHost {
   // ── Update loop ────────────────────────────────────────────────
 
   private update(): void {
+    this._stats?.begin()
     this.mapContainer.position.set(
       Math.round(-this.camera.x * this.camera.zoom),
       Math.round(-this.camera.y * this.camera.zoom),
@@ -687,6 +707,7 @@ export class MapRenderer implements InputHost {
     this.minimap.updateAnimation()
     this.minimap.rebuild(this.camera.floor, this.chunkManager.index, this.appearances)
     this.minimap.updateViewport(this.camera, this.app.screen.width, this.app.screen.height)
+    this._stats?.end()
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────
@@ -700,6 +721,8 @@ export class MapRenderer implements InputHost {
     this.app.ticker.remove(this._boundUpdate)
     this._cleanupInput?.()
     this._cleanupMinimapWheel?.()
+    this._stats?.dom.remove()
+    this._stats = null
     this.recycleAllChunks()
     this.minimap.destroy()
     this.lightEngine.destroy()

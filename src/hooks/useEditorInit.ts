@@ -270,6 +270,7 @@ export function useEditorInit(
       renderer.setShowGrid(savedSettings.showGrid)
       renderer.setShowClientBox(savedSettings.showClientBox)
       renderer.setShowAnimations(savedSettings.showAnimations)
+      renderer.setShowStats(savedSettings.showStats)
 
       setLoadingProgress(1)
       setLoadingStatus('Ready')

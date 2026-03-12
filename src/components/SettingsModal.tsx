@@ -155,6 +155,18 @@ export function SettingsModal({ settings, onChange, onClose }: SettingsModalProp
 
         <div className="h-px w-full bg-border-subtle" />
 
+        {/* Debug section */}
+        <div className="flex flex-col gap-4">
+          <div className="font-display text-xs font-semibold tracking-wide uppercase text-fg-faint">Debug</div>
+
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-ui text-sm font-normal text-fg-muted">Performance Stats</span>
+            <Toggle checked={settings.showStats} onChange={v => update({ showStats: v })} />
+          </div>
+        </div>
+
+        <div className="h-px w-full bg-border-subtle" />
+
         {/* Data section */}
         <div className="flex flex-col gap-4">
           <div className="font-display text-xs font-semibold tracking-wide uppercase text-fg-faint">Data</div>

@@ -50,6 +50,9 @@ export interface EditorSettings {
   eraserLeaveUnique: boolean
   eraserKeepZones: boolean
   eraserKeepMapFlags: boolean
+
+  // Debug
+  showStats: boolean
 }
 
 export const DEFAULT_SETTINGS: EditorSettings = {
@@ -84,6 +87,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   eraserLeaveUnique: true,
   eraserKeepZones: false,
   eraserKeepMapFlags: false,
+  showStats: false,
 }
 
 /** Union of all boolean keys in EditorSettings — used to type-check toggle callbacks. */

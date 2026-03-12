@@ -61,6 +61,7 @@ const RENDERER_SYNC: Partial<Record<BooleanSettingKey, (r: MapRendererType, v: b
   showGrid: (r, v) => r.setShowGrid(v),
   showClientBox: (r, v) => r.setShowClientBox(v),
   showAnimations: (r, v) => r.setShowAnimations(v),
+  showStats: (r, v) => r.setShowStats(v),
 }
 
 /** Compute left offset for elements that need to dodge all left-side panels. */
