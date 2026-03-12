@@ -57,6 +57,7 @@ export class SpawnOverlay extends TileOverlay {
   private _iconsDirtyFull = true
   private _iconsDirtyChunks = new Set<string>()
   private _iconsReady = false
+  private _emptyIconChunks = new Set<string>()
   private _ghostContainer = new Container()
   private _ghostPos: { x: number; y: number; z: number; radius: number } | null = null
 
@@ -146,13 +147,23 @@ export class SpawnOverlay extends TileOverlay {
     this.fillRect(g, tile.x, tile.y, this._color, alpha)
   }
 
-  rebuild(floor: number, chunkIndex: Map<string, OtbmTile[]>): void {
-    super.rebuild(floor, chunkIndex)
+  rebuild(
+    floor: number,
+    chunkIndex: Map<string, OtbmTile[]>,
+    floorKeys?: Set<string>,
+    visibleKeys?: Set<string>,
+  ): void {
+    super.rebuild(floor, chunkIndex, floorKeys, visibleKeys)
     if (!this.visible || !this._iconsReady) return
-    this.rebuildIcons(floor, chunkIndex)
+    this.rebuildIcons(floor, chunkIndex, floorKeys, visibleKeys)
   }
 
-  private rebuildIcons(floor: number, chunkIndex: Map<string, OtbmTile[]>): void {
+  private rebuildIcons(
+    floor: number,
+    chunkIndex: Map<string, OtbmTile[]>,
+    floorKeys?: Set<string>,
+    visibleKeys?: Set<string>,
+  ): void {
     // Floor changed — need full icon rebuild
     if (floor !== this._lastIconFloor) {
       this._iconsDirtyFull = true
@@ -165,14 +176,23 @@ export class SpawnOverlay extends TileOverlay {
     if (this._iconsDirtyFull) {
       this._iconsDirtyFull = false
       this._iconsDirtyChunks.clear()
+      this._emptyIconChunks.clear()
       // Full rebuild: destroy all and recreate
       for (const s of this._iconSprites.values()) s.destroy()
       this._iconSprites.clear()
       this._iconContainer.removeChildren()
 
-      for (const [key, tiles] of chunkIndex) {
-        if (floorFromChunkKey(key) !== floor) continue
-        this.rebuildIconsForChunk(tiles, floor, texture)
+      if (floorKeys) {
+        for (const key of floorKeys) {
+          if (visibleKeys && !visibleKeys.has(key)) continue
+          const tiles = chunkIndex.get(key)
+          if (tiles) this.rebuildIconsForChunk(tiles, floor, texture)
+        }
+      } else {
+        for (const [key, tiles] of chunkIndex) {
+          if (floorFromChunkKey(key) !== floor) continue
+          this.rebuildIconsForChunk(tiles, floor, texture)
+        }
       }
       return
     }
@@ -199,6 +219,27 @@ export class SpawnOverlay extends TileOverlay {
       }
     }
 
+    // Expand icons to newly-visible chunks
+    if (floorKeys && visibleKeys) {
+      for (const key of visibleKeys) {
+        if (this._emptyIconChunks.has(key)) continue
+        if (!floorKeys.has(key)) continue
+        const tiles = chunkIndex.get(key)
+        if (!tiles) { this._emptyIconChunks.add(key); continue }
+        let found = false
+        for (const tile of tiles) {
+          if (tile.z !== floor) continue
+          const tk = tileKey(tile.x, tile.y, tile.z)
+          if (!this._centers.has(tk)) continue
+          if (this._iconSprites.has(tk)) continue
+          // Missing icon for a visible center — rebuild chunk icons
+          this.rebuildIconsForChunk(tiles, floor, texture)
+          found = true
+          break
+        }
+        if (!found) this._emptyIconChunks.add(key)
+      }
+    }
   }
 
   private rebuildIconsForChunk(tiles: OtbmTile[], floor: number, texture: Texture): void {
@@ -220,12 +261,14 @@ export class SpawnOverlay extends TileOverlay {
     super.invalidateChunks(keys)
     for (const key of keys) {
       this._iconsDirtyChunks.add(key)
+      this._emptyIconChunks.delete(key)
     }
   }
 
   markDirty(): void {
     super.markDirty()
     this._iconsDirtyFull = true
+    this._emptyIconChunks.clear()
   }
 
   destroy(): void {

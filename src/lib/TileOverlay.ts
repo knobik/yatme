@@ -30,6 +30,8 @@ export abstract class TileOverlay {
 
   // chunk key -> Graphics for that chunk
   private _chunkGraphics = new Map<string, Graphics>()
+  // Chunks checked but found to have no overlay tiles (avoids re-checking every frame)
+  private _emptyChunks = new Set<string>()
 
   constructor() {
     this.container = new Container()
@@ -49,12 +51,14 @@ export abstract class TileOverlay {
   /** Mark all chunks dirty — triggers a full rebuild. */
   markDirty(): void {
     this._fullDirty = true
+    this._emptyChunks.clear()
   }
 
   /** Mark only specific chunks dirty (by chunk key "cx,cy,z"). */
   invalidateChunks(keys: Iterable<string>): void {
     for (const key of keys) {
       this._dirtyChunks.add(key)
+      this._emptyChunks.delete(key)
     }
   }
 
@@ -68,7 +72,12 @@ export abstract class TileOverlay {
     this._offsetTracker.updateContainerOffset(this.container, floorOffset)
   }
 
-  rebuild(floor: number, chunkIndex: Map<string, OtbmTile[]>): void {
+  rebuild(
+    floor: number,
+    chunkIndex: Map<string, OtbmTile[]>,
+    floorKeys?: Set<string>,
+    visibleKeys?: Set<string>,
+  ): void {
     if (!this._visible) return
 
     // Floor changed — need full rebuild
@@ -80,14 +89,21 @@ export abstract class TileOverlay {
     if (this._fullDirty) {
       this._fullDirty = false
       this._dirtyChunks.clear()
-      this.rebuildAll(chunkIndex, floor)
-      return
-    }
-
-    if (this._dirtyChunks.size > 0) {
+      this.rebuildAll(chunkIndex, floor, floorKeys, visibleKeys)
+    } else if (this._dirtyChunks.size > 0) {
       const dirty = this._dirtyChunks
       this._dirtyChunks = new Set()
       this.rebuildChunks(dirty, chunkIndex, floor)
+    }
+
+    // Expand to newly-visible chunks (handles camera panning after a viewport-culled rebuildAll)
+    if (floorKeys && visibleKeys) {
+      for (const key of visibleKeys) {
+        if (this._chunkGraphics.has(key) || this._emptyChunks.has(key)) continue
+        if (!floorKeys.has(key)) continue
+        const tiles = chunkIndex.get(key)
+        if (tiles) this.rebuildSingleChunk(key, tiles)
+      }
     }
   }
 
@@ -119,14 +135,30 @@ export abstract class TileOverlay {
   // ── Private ───────────────────────────────────────────────────
 
   /** Full rebuild: clear all chunk Graphics, redraw from chunkIndex. */
-  private rebuildAll(chunkIndex: Map<string, OtbmTile[]>, floor: number): void {
+  private rebuildAll(
+    chunkIndex: Map<string, OtbmTile[]>,
+    floor: number,
+    floorKeys?: Set<string>,
+    visibleKeys?: Set<string>,
+  ): void {
     for (const g of this._chunkGraphics.values()) g.destroy()
     this._chunkGraphics.clear()
+    this._emptyChunks.clear()
     this._baseContainer.removeChildren()
 
-    for (const [key, tiles] of chunkIndex) {
-      if (floorFromChunkKey(key) !== floor) continue
-      this.rebuildSingleChunk(key, tiles)
+    if (floorKeys) {
+      // Fast path: iterate only keys on this floor
+      for (const key of floorKeys) {
+        if (visibleKeys && !visibleKeys.has(key)) continue  // viewport cull
+        const tiles = chunkIndex.get(key)
+        if (tiles) this.rebuildSingleChunk(key, tiles)
+      }
+    } else {
+      // Fallback: original behavior
+      for (const [key, tiles] of chunkIndex) {
+        if (floorFromChunkKey(key) !== floor) continue
+        this.rebuildSingleChunk(key, tiles)
+      }
     }
   }
 
@@ -178,6 +210,8 @@ export abstract class TileOverlay {
     if (g) {
       this._chunkGraphics.set(key, g)
       this._baseContainer.addChild(g)
+    } else {
+      this._emptyChunks.add(key)
     }
   }
 

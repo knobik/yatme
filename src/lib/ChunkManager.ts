@@ -33,9 +33,10 @@ export function floorFromChunkKey(key: string): number {
 export function buildChunkIndex(
   tiles: Map<string, OtbmTile>,
   appearances: AppearanceData,
-): { index: Map<string, OtbmTile[]>, animatedKeys: Set<string> } {
+): { index: Map<string, OtbmTile[]>, animatedKeys: Set<string>, floorIndex: Map<number, Set<string>> } {
   const index = new Map<string, OtbmTile[]>()
   const animatedKeys = new Set<string>()
+  const floorIndex = new Map<number, Set<string>>()
 
   for (const tile of tiles.values()) {
     const cx = Math.floor(tile.x / CHUNK_SIZE)
@@ -45,6 +46,13 @@ export function buildChunkIndex(
     if (!arr) {
       arr = []
       index.set(key, arr)
+      // Add to floor index
+      let floorSet = floorIndex.get(tile.z)
+      if (!floorSet) {
+        floorSet = new Set()
+        floorIndex.set(tile.z, floorSet)
+      }
+      floorSet.add(key)
     }
     arr.push(tile)
 
@@ -57,7 +65,7 @@ export function buildChunkIndex(
   for (const arr of index.values()) {
     arr.sort((a, b) => a.y - b.y || a.x - b.x)
   }
-  return { index, animatedKeys }
+  return { index, animatedKeys, floorIndex }
 }
 
 // ── Container cleanup ────────────────────────────────────────────────
@@ -160,6 +168,7 @@ export class ChunkManager {
 
   // Chunk index & active state
   private chunkIndex: Map<string, OtbmTile[]>
+  private _floorIndex: Map<number, Set<string>>
   private activeChunks = new Map<string, Container>()
   private chunkCache = new ChunkCache(CHUNK_CACHE_SIZE)
 
@@ -193,6 +202,7 @@ export class ChunkManager {
     deps: ChunkManagerDeps,
     chunkIndex: Map<string, OtbmTile[]>,
     animatedKeys: Set<string>,
+    floorIndex: Map<number, Set<string>>,
   ) {
     this.appearances = deps.appearances
     this.tileRenderer = deps.tileRenderer
@@ -200,6 +210,7 @@ export class ChunkManager {
     this.getFloorContainer = deps.getFloorContainer
 
     this.chunkIndex = chunkIndex
+    this._floorIndex = floorIndex
     this._animatedChunkKeys = animatedKeys
     this._animStartTime = performance.now()
     this.chunkCache.onEvict = (key) => {
@@ -211,6 +222,16 @@ export class ChunkManager {
   /** Expose chunk index for external consumers (e.g. LightEngine). */
   get index(): Map<string, OtbmTile[]> {
     return this.chunkIndex
+  }
+
+  /** Floor-keyed index: z -> set of chunk keys on that floor. */
+  get floorIndex(): Map<number, Set<string>> {
+    return this._floorIndex
+  }
+
+  /** Set of chunk keys currently visible in the viewport. */
+  get visibleKeys(): Set<string> {
+    return this._allVisibleKeys
   }
 
   /** Called once per frame — handles visibility, build/restore, eviction, animation, prefetch. */
@@ -389,6 +410,13 @@ export class ChunkManager {
     if (!arr) {
       arr = []
       this.chunkIndex.set(key, arr)
+      // Add to floor index
+      let floorSet = this._floorIndex.get(tile.z)
+      if (!floorSet) {
+        floorSet = new Set()
+        this._floorIndex.set(tile.z, floorSet)
+      }
+      floorSet.add(key)
     }
     const existing = arr.findIndex(t => t.x === tile.x && t.y === tile.y)
     if (existing >= 0) {

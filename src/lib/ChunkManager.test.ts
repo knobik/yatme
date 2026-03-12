@@ -71,6 +71,33 @@ describe('buildChunkIndex', () => {
     const { index } = buildChunkIndex(new Map(), makeAppearanceData([]))
     expect(index.size).toBe(0)
   })
+
+  it('builds floorIndex grouping chunk keys by z', () => {
+    const tiles = new Map([
+      ['0,0,7', makeTile(0, 0, 7)],
+      ['32,0,7', makeTile(32, 0, 7)],
+      ['0,0,5', makeTile(0, 0, 5)],
+    ])
+    const appearances = makeAppearanceData([])
+    const { floorIndex } = buildChunkIndex(tiles, appearances)
+
+    // Floor 7 should have two chunk keys (0,0,7 and 1,0,7)
+    expect(floorIndex.get(7)?.size).toBe(2)
+    expect(floorIndex.get(7)?.has('0,0,7')).toBe(true)
+    expect(floorIndex.get(7)?.has('1,0,7')).toBe(true)
+
+    // Floor 5 should have one chunk key
+    expect(floorIndex.get(5)?.size).toBe(1)
+    expect(floorIndex.get(5)?.has('0,0,5')).toBe(true)
+
+    // Floor 0 should not exist
+    expect(floorIndex.has(0)).toBe(false)
+  })
+
+  it('returns empty floorIndex for empty tiles', () => {
+    const { floorIndex } = buildChunkIndex(new Map(), makeAppearanceData([]))
+    expect(floorIndex.size).toBe(0)
+  })
 })
 
 import type { Container } from 'pixi.js'
