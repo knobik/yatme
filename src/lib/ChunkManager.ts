@@ -30,6 +30,16 @@ export function floorFromChunkKey(key: string): number {
 
 // ── Chunk index ─────────────────────────────────────────────────────
 
+/** Add a chunk key to a floor-keyed index (z -> set of chunk keys). */
+function addToFloorIndex(floorIndex: Map<number, Set<string>>, z: number, key: string): void {
+  let floorSet = floorIndex.get(z)
+  if (!floorSet) {
+    floorSet = new Set()
+    floorIndex.set(z, floorSet)
+  }
+  floorSet.add(key)
+}
+
 export function buildChunkIndex(
   tiles: Map<string, OtbmTile>,
   appearances: AppearanceData,
@@ -46,13 +56,7 @@ export function buildChunkIndex(
     if (!arr) {
       arr = []
       index.set(key, arr)
-      // Add to floor index
-      let floorSet = floorIndex.get(tile.z)
-      if (!floorSet) {
-        floorSet = new Set()
-        floorIndex.set(tile.z, floorSet)
-      }
-      floorSet.add(key)
+      addToFloorIndex(floorIndex, tile.z, key)
     }
     arr.push(tile)
 
@@ -410,13 +414,7 @@ export class ChunkManager {
     if (!arr) {
       arr = []
       this.chunkIndex.set(key, arr)
-      // Add to floor index
-      let floorSet = this._floorIndex.get(tile.z)
-      if (!floorSet) {
-        floorSet = new Set()
-        this._floorIndex.set(tile.z, floorSet)
-      }
-      floorSet.add(key)
+      addToFloorIndex(this._floorIndex, tile.z, key)
     }
     const existing = arr.findIndex(t => t.x === tile.x && t.y === tile.y)
     if (existing >= 0) {
