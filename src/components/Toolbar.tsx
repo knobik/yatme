@@ -237,6 +237,8 @@ export function Toolbar({
         { label: 'House Palette', shortcut: 'H', checked: editorSettings.showHousePalette, onClick: () => onToggleSetting('showHousePalette') },
         { label: 'Creature Palette', checked: editorSettings.showCreaturePalette, onClick: () => onToggleSetting('showCreaturePalette') },
         { label: 'Waypoint Palette', checked: editorSettings.showWaypointPalette, onClick: () => onToggleSetting('showWaypointPalette') },
+        { heading: 'Rendering' },
+        { label: 'Show Animations', checked: editorSettings.showAnimations, onClick: () => onToggleSetting('showAnimations') },
         { heading: 'Overlays' },
         { label: 'Show Zones', checked: editorSettings.showZoneOverlay, onClick: () => onToggleSetting('showZoneOverlay') },
         { label: 'Show Houses', checked: editorSettings.showHouseOverlay, onClick: () => onToggleSetting('showHouseOverlay') },

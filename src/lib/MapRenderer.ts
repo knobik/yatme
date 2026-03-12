@@ -457,6 +457,14 @@ export class MapRenderer implements InputHost {
     this.minimap.setOpacity(alpha)
   }
 
+  // ── Animations ──────────────────────────────────────────────────
+
+  setShowAnimations(enabled: boolean): void {
+    this.chunkManager.showAnimations = enabled
+    this.recycleAllChunks()
+    this.notifyCamera()
+  }
+
   // ── Client box overlay ──────────────────────────────────────────
 
   setShowClientBox(enabled: boolean): void {

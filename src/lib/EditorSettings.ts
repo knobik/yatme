@@ -8,6 +8,7 @@ export interface EditorSettings {
   floorViewMode: FloorViewMode
   showTransparentUpper: boolean
   showLights: boolean
+  showAnimations: boolean
 
   // Editor
   selectionBorder: boolean
@@ -52,6 +53,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   floorViewMode: 'single',
   showTransparentUpper: false,
   showLights: false,
+  showAnimations: true,
   selectionBorder: false,
   showPalette: true,
   clickToInspect: false,

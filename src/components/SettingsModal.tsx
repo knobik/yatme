@@ -73,6 +73,11 @@ export function SettingsModal({ settings, onChange, onClose }: SettingsModalProp
             <Toggle checked={settings.showTransparentUpper} onChange={v => update({ showTransparentUpper: v })} />
           </div>
 
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-ui text-sm font-normal text-fg-muted">Show Animations</span>
+            <Toggle checked={settings.showAnimations} onChange={v => update({ showAnimations: v })} />
+          </div>
+
         </div>
 
         <div className="h-px w-full bg-border-subtle" />
@@ -99,6 +104,11 @@ export function SettingsModal({ settings, onChange, onClose }: SettingsModalProp
           <div className="flex items-center justify-between gap-4">
             <span className="font-ui text-sm font-normal text-fg-muted">Merge Paste</span>
             <Toggle checked={settings.mergePaste} onChange={v => update({ mergePaste: v })} />
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-ui text-sm font-normal text-fg-muted">Auto Create Spawn</span>
+            <Toggle checked={settings.autoCreateSpawn} onChange={v => update({ autoCreateSpawn: v })} />
           </div>
         </div>
 

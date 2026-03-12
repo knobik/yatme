@@ -186,6 +186,9 @@ export class ChunkManager {
   // Highlight breathing animation
   private _chunkHighlightSprites = new Map<string, Sprite[]>()
 
+  /** When false, animations freeze on frame 0. */
+  showAnimations = true
+
   constructor(
     deps: ChunkManagerDeps,
     chunkIndex: Map<string, OtbmTile[]>,
@@ -212,7 +215,11 @@ export class ChunkManager {
 
   /** Called once per frame — handles visibility, build/restore, eviction, animation, prefetch. */
   update(visibleFloors: number[]): void {
-    this._animElapsed = performance.now() - this._animStartTime
+    if (this.showAnimations) {
+      this._animElapsed = performance.now() - this._animStartTime
+    } else {
+      this._animElapsed = 0
+    }
 
     const rangeKey = this.camera.computeRangeKey(visibleFloors)
     const rangeChanged = rangeKey !== this._lastRangeKey
@@ -314,7 +321,9 @@ export class ChunkManager {
     }
     this._priorityKeys.clear()
 
-    this.updateAnimatedSprites()
+    if (this.showAnimations) {
+      this.updateAnimatedSprites()
+    }
     this.updateHighlightBreathing()
 
     if (rangeChanged) {
