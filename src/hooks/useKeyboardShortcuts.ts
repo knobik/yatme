@@ -241,6 +241,9 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
       } else if (e.key === 'M' && e.shiftKey && !e.ctrlKey) {
         e.preventDefault()
         toggleSetting('showMinimap')
+      } else if (e.key === 'G' && e.shiftKey && !e.ctrlKey) {
+        e.preventDefault()
+        toggleSetting('showGrid')
       } else if ((e.key === 'n' || e.key === 'N') && !e.ctrlKey) {
         e.preventDefault()
         toggleSetting('showNpcs')

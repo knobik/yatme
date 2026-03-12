@@ -6,6 +6,7 @@ import { SelectionOverlay } from './SelectionOverlay'
 import { ZoneOverlay } from './ZoneOverlay'
 import { HouseOverlay } from './HouseOverlay'
 import { BoundaryOverlay } from './BoundaryOverlay'
+import { GridOverlay } from './GridOverlay'
 import { ClientBoxOverlay } from './ClientBoxOverlay'
 import { SpawnOverlay } from './creatures/SpawnOverlay'
 import { WaypointOverlay } from './WaypointOverlay'
@@ -44,6 +45,7 @@ export class MapRenderer implements InputHost {
   private monsterSpawnOverlay: SpawnOverlay
   private npcSpawnOverlay: SpawnOverlay
   private boundaryOverlay: BoundaryOverlay
+  private gridOverlay: GridOverlay
   private clientBoxOverlay: ClientBoxOverlay
   private waypointOverlay: WaypointOverlay
   private _waypointManager: WaypointManager
@@ -93,6 +95,7 @@ export class MapRenderer implements InputHost {
     this.zoneOverlay = new ZoneOverlay()
     this.houseOverlay = new HouseOverlay()
     this.boundaryOverlay = new BoundaryOverlay(mapData.width, mapData.height)
+    this.gridOverlay = new GridOverlay()
     this.clientBoxOverlay = new ClientBoxOverlay()
     this.waypointOverlay = new WaypointOverlay()
     this._waypointManager = waypointManager ?? new WaypointManager([])
@@ -122,6 +125,9 @@ export class MapRenderer implements InputHost {
     // Boundary overlay (hatch pattern on out-of-bounds tiles)
     this.mapContainer.addChild(this.boundaryOverlay.container)
 
+    // Grid overlay (tile boundary lines — subtle background)
+    this.mapContainer.addChild(this.gridOverlay.container)
+
     // Zone overlay (between tile layers and selection overlay)
     this.mapContainer.addChild(this.zoneOverlay.container)
 
@@ -149,6 +155,7 @@ export class MapRenderer implements InputHost {
     this.floorManager = new FloorManager(
       this.mapContainer,
       this.boundaryOverlay.container,
+      this.gridOverlay.container,
       this.zoneOverlay.container,
       this.houseOverlay.container,
       this.monsterSpawnOverlay.container,
@@ -465,6 +472,12 @@ export class MapRenderer implements InputHost {
     this.notifyCamera()
   }
 
+  // ── Grid overlay ────────────────────────────────────────────────
+
+  setShowGrid(enabled: boolean): void {
+    this.gridOverlay.setVisible(enabled)
+  }
+
   // ── Client box overlay ──────────────────────────────────────────
 
   setShowClientBox(enabled: boolean): void {
@@ -646,6 +659,9 @@ export class MapRenderer implements InputHost {
     this.boundaryOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
     this.boundaryOverlay.update(this.camera)
 
+    this.gridOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
+    this.gridOverlay.update(this.camera)
+
     this.selection.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
     this.selection.updatePing()
 
@@ -693,6 +709,7 @@ export class MapRenderer implements InputHost {
     this.houseOverlay.destroy()
     this.zoneOverlay.destroy()
     this.clientBoxOverlay.destroy()
+    this.gridOverlay.destroy()
     this.boundaryOverlay.destroy()
     this.selection.destroy()
     this.floorManager.destroy()

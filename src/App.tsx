@@ -58,6 +58,7 @@ const RENDERER_SYNC: Partial<Record<BooleanSettingKey, (r: MapRendererType, v: b
   showWaypointOverlay: (r, v) => r.setShowWaypointOverlay(v),
   showMinimap: (r, v) => r.setShowMinimap(v),
   minimapExpandOnHover: (r, v) => r.setMinimapExpandOnHover(v),
+  showGrid: (r, v) => r.setShowGrid(v),
   showClientBox: (r, v) => r.setShowClientBox(v),
   showAnimations: (r, v) => r.setShowAnimations(v),
 }
