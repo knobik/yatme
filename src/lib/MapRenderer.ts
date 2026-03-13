@@ -108,7 +108,7 @@ export class MapRenderer implements InputHost {
     this.npcSpawnOverlay = new SpawnOverlay(sm, 'npc', 0x2288CC, 0x44BBFF)
 
     // Chunk manager
-    const { index, animatedKeys } = buildChunkIndex(mapData.tiles, appearances)
+    const { index, animatedKeys, floorIndex } = buildChunkIndex(mapData.tiles, appearances)
     this.chunkManager = new ChunkManager(
       {
         appearances,
@@ -118,6 +118,7 @@ export class MapRenderer implements InputHost {
       },
       index,
       animatedKeys,
+      floorIndex,
     )
 
     // Stage
@@ -685,17 +686,20 @@ export class MapRenderer implements InputHost {
     this.selection.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
     this.selection.updatePing()
 
+    const floorKeys = this.chunkManager.floorIndex.get(this.camera.floor)
+    const visibleKeys = this.chunkManager.visibleKeys
+
     this.zoneOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
-    this.zoneOverlay.rebuild(this.camera.floor, this.chunkManager.index)
+    this.zoneOverlay.rebuild(this.camera.floor, this.chunkManager.index, floorKeys, visibleKeys)
 
     this.houseOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
-    this.houseOverlay.rebuild(this.camera.floor, this.chunkManager.index)
+    this.houseOverlay.rebuild(this.camera.floor, this.chunkManager.index, floorKeys, visibleKeys)
 
     this.monsterSpawnOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
-    this.monsterSpawnOverlay.rebuild(this.camera.floor, this.chunkManager.index)
+    this.monsterSpawnOverlay.rebuild(this.camera.floor, this.chunkManager.index, floorKeys, visibleKeys)
 
     this.npcSpawnOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
-    this.npcSpawnOverlay.rebuild(this.camera.floor, this.chunkManager.index)
+    this.npcSpawnOverlay.rebuild(this.camera.floor, this.chunkManager.index, floorKeys, visibleKeys)
 
     this.waypointOverlay.updateContainerOffset(this.camera.getFloorOffset(this.camera.floor))
     this.waypointOverlay.rebuild(this.camera.floor, this._waypointManager, this.camera)

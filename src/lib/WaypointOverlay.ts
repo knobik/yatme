@@ -1,5 +1,5 @@
 import { Assets, Container, Graphics, Text, Texture } from 'pixi.js'
-import { TILE_SIZE } from './constants'
+import { TILE_SIZE, CHUNK_SIZE } from './constants'
 import type { WaypointManager } from './WaypointManager'
 import type { Camera } from './Camera'
 import { TILE_CENTER, svgToDataUrl, createIconBadge, FloorOffsetTracker } from './overlayUtils'
@@ -116,8 +116,16 @@ export class WaypointOverlay {
     if (!this._visible) return
 
     // Build dirty key — uses generation counter instead of size for proper mutation tracking
+    // Compute visible tile bounds from camera viewport
+    const floorOffset = camera.getFloorOffset(floor)
+    const range = camera.getVisibleRangeForFloor(floorOffset)
+    const minTX = range.startX * CHUNK_SIZE
+    const minTY = range.startY * CHUNK_SIZE
+    const maxTX = (range.endX + 1) * CHUNK_SIZE
+    const maxTY = (range.endY + 1) * CHUNK_SIZE
+
     const ghostKey = this._ghostPos ? `${this._ghostPos.x},${this._ghostPos.y},${this._ghostPos.z}` : ''
-    const key = `${floor}|${this._selectedWaypoint}|${this._generation}|${camera.zoom.toFixed(3)}|${ghostKey}`
+    const key = `${floor}|${this._selectedWaypoint}|${this._generation}|${camera.zoom.toFixed(3)}|${ghostKey}|${range.startX},${range.startY},${range.endX},${range.endY}`
     if (!this._dirty && key === this._lastKey && floor === this._lastFloor) return
 
     this._dirty = false
@@ -134,6 +142,8 @@ export class WaypointOverlay {
     const floorWaypoints = waypointManager.getByFloor(floor)
 
     for (const wp of floorWaypoints) {
+      // Viewport culling — skip waypoints outside visible range
+      if (wp.x < minTX || wp.x >= maxTX || wp.y < minTY || wp.y >= maxTY) continue
       const px = wp.x * TILE_SIZE
       const py = wp.y * TILE_SIZE
       const isSelected = wp.name === this._selectedWaypoint
